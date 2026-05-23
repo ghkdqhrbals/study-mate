@@ -227,6 +227,21 @@ private struct SecretsSettingsSection: View {
             Text(appState.hasUnsavedSettingsChanges ? strings.unsavedAPIKeyHelp : strings.apiKeyStorageHelp)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text(strings.openAIModel)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                TextField(StudySettings.defaultOpenAIModel, text: $appState.settings.openAIModel)
+                    .textFieldStyle(.roundedBorder)
+
+                Text(strings.openAIModelHelp)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 }

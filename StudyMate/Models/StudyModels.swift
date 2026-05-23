@@ -109,10 +109,13 @@ extension AppLanguage {
 }
 
 struct StudySettings: Codable, Equatable {
+    static let defaultOpenAIModel = "gpt-5.4"
+
     var topic: String
     var difficulty: Difficulty
     var appLanguage: AppLanguage
     var language: StudyLanguage
+    var openAIModel: String
     var customPrompt: String
     var intervalMinutes: Int
     var maxHistoryCount: Int
@@ -122,6 +125,7 @@ struct StudySettings: Codable, Equatable {
         difficulty: Difficulty,
         appLanguage: AppLanguage = .korean,
         language: StudyLanguage = .korean,
+        openAIModel: String = StudySettings.defaultOpenAIModel,
         customPrompt: String,
         intervalMinutes: Int,
         maxHistoryCount: Int = 100
@@ -130,6 +134,7 @@ struct StudySettings: Codable, Equatable {
         self.difficulty = difficulty
         self.appLanguage = appLanguage
         self.language = language
+        self.openAIModel = openAIModel
         self.customPrompt = customPrompt
         self.intervalMinutes = intervalMinutes
         self.maxHistoryCount = maxHistoryCount
@@ -140,6 +145,7 @@ struct StudySettings: Codable, Equatable {
         case difficulty
         case appLanguage
         case language
+        case openAIModel
         case customPrompt
         case intervalMinutes
         case maxHistoryCount
@@ -151,6 +157,7 @@ struct StudySettings: Codable, Equatable {
         difficulty = try container.decode(Difficulty.self, forKey: .difficulty)
         appLanguage = try container.decodeIfPresent(AppLanguage.self, forKey: .appLanguage) ?? .korean
         language = try container.decodeIfPresent(StudyLanguage.self, forKey: .language) ?? .korean
+        openAIModel = try container.decodeIfPresent(String.self, forKey: .openAIModel) ?? Self.defaultOpenAIModel
         customPrompt = try container.decode(String.self, forKey: .customPrompt)
         intervalMinutes = try container.decode(Int.self, forKey: .intervalMinutes)
         maxHistoryCount = try container.decodeIfPresent(Int.self, forKey: .maxHistoryCount) ?? 100
@@ -169,6 +176,11 @@ struct StudySettings: Codable, Equatable {
 
     var sanitizedMaxHistoryCount: Int {
         min(max(maxHistoryCount, 10), 500)
+    }
+
+    var sanitizedOpenAIModel: String {
+        let trimmedModel = openAIModel.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmedModel.isEmpty ? Self.defaultOpenAIModel : trimmedModel
     }
 }
 
@@ -330,6 +342,10 @@ struct AppStrings {
     var apiKeyCheck: String { text("API 키를 확인하세요.", "Check the API key.") }
     var apiKeyEmptyDetailed: String { text("API 키가 비어 있습니다. Settings > Secrets에서 OpenAI API 키를 입력하세요.", "API key is empty. Enter an OpenAI API key in Settings > Secrets.") }
     var apiKeyInvalidDetailed: String { text("API 키가 잘못되었습니다. Settings > Secrets에서 OpenAI API 키를 확인하세요.", "API key is invalid. Check your OpenAI API key in Settings > Secrets.") }
+    var openAIModel: String { text("모델", "Model") }
+    var openAIModelHelp: String {
+        text("질문 생성과 채점에 사용할 OpenAI 모델 ID입니다. 비워두면 \(StudySettings.defaultOpenAIModel)을 사용합니다.", "OpenAI model ID for question generation and grading. Empty values use \(StudySettings.defaultOpenAIModel).")
+    }
     var unsavedAPIKeyHelp: String {
         text("변경사항이 있습니다. 저장해도 API 키 검증 실패 시 값은 유지됩니다.", "You have unsaved changes. Values are kept even if API key validation fails.")
     }

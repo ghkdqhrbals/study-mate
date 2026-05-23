@@ -36,6 +36,7 @@ final class SettingsStore {
             difficulty: settings.difficulty,
             appLanguage: settings.appLanguage,
             language: settings.appLanguage.studyLanguage,
+            openAIModel: settings.sanitizedOpenAIModel,
             customPrompt: settings.customPrompt,
             intervalMinutes: settings.sanitizedIntervalMinutes,
             maxHistoryCount: settings.sanitizedMaxHistoryCount
@@ -48,6 +49,7 @@ final class SettingsStore {
             difficulty: settings.difficulty,
             appLanguage: settings.appLanguage,
             language: settings.appLanguage.studyLanguage,
+            openAIModel: settings.sanitizedOpenAIModel,
             customPrompt: settings.customPrompt,
             intervalMinutes: settings.sanitizedIntervalMinutes,
             maxHistoryCount: settings.sanitizedMaxHistoryCount

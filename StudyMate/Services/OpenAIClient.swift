@@ -28,7 +28,6 @@ enum OpenAIClientError: LocalizedError, Equatable {
 
 @MainActor
 final class OpenAIClient {
-    private let model = "gpt-5.4"
     private let endpoint = URL(string: "https://api.openai.com/v1/responses")
     private let modelsEndpoint = URL(string: "https://api.openai.com/v1/models")
     private let session: URLSession
@@ -84,6 +83,7 @@ final class OpenAIClient {
 
         let output = try await sendStructuredRequest(
             apiKey: apiKey,
+            model: settings.sanitizedOpenAIModel,
             instructions: "You are an AI teacher that creates varied study questions in \(settings.language.promptLabel). Never repeat recent questions.",
             input: prompt,
             previousResponseID: previousResponseID,
@@ -173,6 +173,7 @@ final class OpenAIClient {
 
         let output = try await sendStructuredRequest(
             apiKey: apiKey,
+            model: settings.sanitizedOpenAIModel,
             instructions: "You are a strict but helpful AI teacher. Write feedback in \(settings.language.promptLabel).",
             input: prompt,
             previousResponseID: nil,
@@ -232,6 +233,7 @@ final class OpenAIClient {
 
     private func sendStructuredRequest(
         apiKey: String,
+        model: String,
         instructions: String,
         input: String,
         previousResponseID: String?,
@@ -248,7 +250,7 @@ final class OpenAIClient {
         }
 
         var body: [String: Any] = [
-            "model": model,
+            "model": model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? StudySettings.defaultOpenAIModel : model.trimmingCharacters(in: .whitespacesAndNewlines),
             "instructions": instructions,
             "input": input,
             "text": [

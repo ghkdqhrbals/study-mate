@@ -15,6 +15,7 @@ final class StudyMateTests: XCTestCase {
             difficulty: .advanced,
             appLanguage: .english,
             language: .english,
+            openAIModel: "gpt-test",
             customPrompt: "면접처럼 질문해줘.",
             intervalMinutes: 7
         )
@@ -46,6 +47,7 @@ final class StudyMateTests: XCTestCase {
 
         XCTAssertEqual(store.loadSettings().appLanguage, .korean)
         XCTAssertEqual(store.loadSettings().language, .korean)
+        XCTAssertEqual(store.loadSettings().openAIModel, StudySettings.defaultOpenAIModel)
     }
 
     func testAppLanguageControlsStudyLanguageOnSave() {
@@ -70,6 +72,48 @@ final class StudyMateTests: XCTestCase {
         let loadedSettings = store.loadSettings()
         XCTAssertEqual(loadedSettings.appLanguage, .english)
         XCTAssertEqual(loadedSettings.language, .english)
+    }
+
+    func testOpenAIModelIsTrimmedWhenSaved() {
+        let suiteName = "StudyMateTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = SettingsStore(defaults: defaults)
+        let settings = StudySettings(
+            topic: "Swift",
+            difficulty: .beginner,
+            openAIModel: "  gpt-custom  ",
+            customPrompt: "짧게",
+            intervalMinutes: 15
+        )
+
+        store.saveSettings(settings)
+
+        XCTAssertEqual(store.loadSettings().openAIModel, "gpt-custom")
+    }
+
+    func testEmptyOpenAIModelDefaultsWhenSaved() {
+        let suiteName = "StudyMateTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = SettingsStore(defaults: defaults)
+        let settings = StudySettings(
+            topic: "Swift",
+            difficulty: .beginner,
+            openAIModel: "   ",
+            customPrompt: "짧게",
+            intervalMinutes: 15
+        )
+
+        store.saveSettings(settings)
+
+        XCTAssertEqual(store.loadSettings().openAIModel, StudySettings.defaultOpenAIModel)
     }
 
     func testSettingsIntervalIsClampedWhenLoaded() {

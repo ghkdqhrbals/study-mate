@@ -131,6 +131,7 @@ final class AppState: ObservableObject {
 
     func saveSettings() {
         settings.language = settings.appLanguage.studyLanguage
+        settings.openAIModel = settings.sanitizedOpenAIModel
         settings.intervalMinutes = settings.sanitizedIntervalMinutes
         settings.maxHistoryCount = settings.sanitizedMaxHistoryCount
         settingsStore.saveSettings(settings)
@@ -340,6 +341,7 @@ final class AppState: ObservableObject {
             difficulty: record.difficulty,
             appLanguage: settings.appLanguage,
             language: settings.appLanguage.studyLanguage,
+            openAIModel: settings.sanitizedOpenAIModel,
             customPrompt: settings.customPrompt,
             intervalMinutes: settings.sanitizedIntervalMinutes,
             maxHistoryCount: settings.sanitizedMaxHistoryCount
@@ -478,6 +480,7 @@ final class AppState: ObservableObject {
             difficulty: settings.difficulty,
             appLanguage: settings.appLanguage,
             language: settings.appLanguage.studyLanguage,
+            openAIModel: settings.sanitizedOpenAIModel,
             customPrompt: settings.customPrompt,
             intervalMinutes: settings.sanitizedIntervalMinutes,
             maxHistoryCount: settings.sanitizedMaxHistoryCount

@@ -5,8 +5,8 @@ macOS menu bar AI teacher app built with SwiftUI.
 ## Features
 
 - Menu bar app using `MenuBarExtra`
-- App language, study topic, difficulty, AI response language, prompt, and question interval settings
-- OpenAI Responses API integration with `gpt-5.4`
+- App/study language, study topic, difficulty, prompt, question interval, and OpenAI model settings
+- OpenAI Responses API integration with configurable model ID
 - OpenAI API key storage in app settings
 - Scheduled question generation while the app is running
 - macOS notifications for generated questions
