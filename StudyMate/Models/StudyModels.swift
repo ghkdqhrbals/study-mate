@@ -53,13 +53,14 @@ enum Difficulty: String, CaseIterable, Codable, Identifiable {
 enum StudyLanguage: String, CaseIterable, Codable, Identifiable {
     case korean
     case english
-    case japanese
-    case chineseSimplified
-    case spanish
-    case french
-    case german
 
     var id: String { rawValue }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let rawValue = try container.decode(String.self)
+        self = StudyLanguage(rawValue: rawValue) ?? .korean
+    }
 
     var displayName: String {
         switch self {
@@ -67,16 +68,6 @@ enum StudyLanguage: String, CaseIterable, Codable, Identifiable {
             "한국어"
         case .english:
             "English"
-        case .japanese:
-            "日本語"
-        case .chineseSimplified:
-            "中文"
-        case .spanish:
-            "Español"
-        case .french:
-            "Français"
-        case .german:
-            "Deutsch"
         }
     }
 
@@ -86,16 +77,6 @@ enum StudyLanguage: String, CaseIterable, Codable, Identifiable {
             "Korean"
         case .english:
             "English"
-        case .japanese:
-            "Japanese"
-        case .chineseSimplified:
-            "Simplified Chinese"
-        case .spanish:
-            "Spanish"
-        case .french:
-            "French"
-        case .german:
-            "German"
         }
     }
 }
@@ -112,6 +93,17 @@ enum AppLanguage: String, CaseIterable, Codable, Identifiable {
             "한국어"
         case .english:
             "English"
+        }
+    }
+}
+
+extension AppLanguage {
+    var studyLanguage: StudyLanguage {
+        switch self {
+        case .korean:
+            .korean
+        case .english:
+            .english
         }
     }
 }
@@ -344,7 +336,6 @@ struct AppStrings {
 
     var studySettings: String { text("학습 설정", "Study Settings") }
     var appLanguage: String { text("앱 언어", "App language") }
-    var answerLanguage: String { text("AI 답변 언어", "AI response language") }
     var studyTopic: String { text("공부할 주제", "Study topic") }
     var difficulty: String { text("난이도", "Difficulty") }
     func questionInterval(minutes: Int) -> String { text("질문 간격: \(minutes)분", "Question interval: \(minutes) min") }

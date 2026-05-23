@@ -48,6 +48,30 @@ final class StudyMateTests: XCTestCase {
         XCTAssertEqual(store.loadSettings().language, .korean)
     }
 
+    func testAppLanguageControlsStudyLanguageOnSave() {
+        let suiteName = "StudyMateTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = SettingsStore(defaults: defaults)
+        let settings = StudySettings(
+            topic: "Swift",
+            difficulty: .beginner,
+            appLanguage: .english,
+            language: .korean,
+            customPrompt: "Short question",
+            intervalMinutes: 15
+        )
+
+        store.saveSettings(settings)
+
+        let loadedSettings = store.loadSettings()
+        XCTAssertEqual(loadedSettings.appLanguage, .english)
+        XCTAssertEqual(loadedSettings.language, .english)
+    }
+
     func testSettingsIntervalIsClampedWhenLoaded() {
         let suiteName = "StudyMateTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

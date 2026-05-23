@@ -35,7 +35,7 @@ final class SettingsStore {
             topic: settings.topic,
             difficulty: settings.difficulty,
             appLanguage: settings.appLanguage,
-            language: settings.language,
+            language: settings.appLanguage.studyLanguage,
             customPrompt: settings.customPrompt,
             intervalMinutes: settings.sanitizedIntervalMinutes,
             maxHistoryCount: settings.sanitizedMaxHistoryCount
@@ -47,7 +47,7 @@ final class SettingsStore {
             topic: settings.topic,
             difficulty: settings.difficulty,
             appLanguage: settings.appLanguage,
-            language: settings.language,
+            language: settings.appLanguage.studyLanguage,
             customPrompt: settings.customPrompt,
             intervalMinutes: settings.sanitizedIntervalMinutes,
             maxHistoryCount: settings.sanitizedMaxHistoryCount

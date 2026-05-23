@@ -130,6 +130,7 @@ final class AppState: ObservableObject {
     }
 
     func saveSettings() {
+        settings.language = settings.appLanguage.studyLanguage
         settings.intervalMinutes = settings.sanitizedIntervalMinutes
         settings.maxHistoryCount = settings.sanitizedMaxHistoryCount
         settingsStore.saveSettings(settings)
@@ -185,8 +186,14 @@ final class AppState: ObservableObject {
         restartTimer()
     }
 
-    func setAppLanguage(_ language: AppLanguage) {
+    func updateAppLanguage(_ language: AppLanguage) {
         settings.appLanguage = language
+        settings.language = language.studyLanguage
+        StudyNotificationDelegate.shared.register(language: language)
+    }
+
+    func setAppLanguage(_ language: AppLanguage) {
+        updateAppLanguage(language)
         settingsStore.saveSettings(settings)
         savedSettings = normalizedSettings(settings)
         studyRecords = settingsStore.loadStudyRecords()
@@ -332,7 +339,7 @@ final class AppState: ObservableObject {
             topic: record.topic.isEmpty ? settings.topic : record.topic,
             difficulty: record.difficulty,
             appLanguage: settings.appLanguage,
-            language: settings.language,
+            language: settings.appLanguage.studyLanguage,
             customPrompt: settings.customPrompt,
             intervalMinutes: settings.sanitizedIntervalMinutes,
             maxHistoryCount: settings.sanitizedMaxHistoryCount
@@ -470,7 +477,7 @@ final class AppState: ObservableObject {
             topic: settings.topic,
             difficulty: settings.difficulty,
             appLanguage: settings.appLanguage,
-            language: settings.language,
+            language: settings.appLanguage.studyLanguage,
             customPrompt: settings.customPrompt,
             intervalMinutes: settings.sanitizedIntervalMinutes,
             maxHistoryCount: settings.sanitizedMaxHistoryCount

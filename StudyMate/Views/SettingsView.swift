@@ -191,7 +191,13 @@ private struct StudySettingsSection: View {
         let strings = appState.strings
 
         SettingsPanel(title: strings.studySettings) {
-            Picker(strings.appLanguage, selection: $appState.settings.appLanguage) {
+            Picker(
+                strings.appLanguage,
+                selection: Binding(
+                    get: { appState.settings.appLanguage },
+                    set: { appState.updateAppLanguage($0) }
+                )
+            ) {
                 ForEach(AppLanguage.allCases) { language in
                     Text(language.displayName).tag(language)
                 }
@@ -204,13 +210,6 @@ private struct StudySettingsSection: View {
             Picker(strings.difficulty, selection: $appState.settings.difficulty) {
                 ForEach(Difficulty.allCases) { difficulty in
                     Text(difficulty.displayName(language: appState.settings.appLanguage)).tag(difficulty)
-                }
-            }
-            .pickerStyle(.menu)
-
-            Picker(strings.answerLanguage, selection: $appState.settings.language) {
-                ForEach(StudyLanguage.allCases) { language in
-                    Text(language.displayName).tag(language)
                 }
             }
             .pickerStyle(.menu)
