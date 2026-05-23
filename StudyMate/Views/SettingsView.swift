@@ -94,7 +94,8 @@ struct SettingsView: View {
                     .disabled(appState.isValidatingAPIKey)
                 }
                 .padding(.horizontal, 20)
-                .padding(.vertical, 12)
+                .padding(.top, 12)
+                .padding(.bottom, 20)
             }
         }
         .onChange(of: appState.isDebuggingEnabled) {
@@ -235,8 +236,13 @@ private struct SecretsSettingsSection: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                TextField(StudySettings.defaultOpenAIModel, text: $appState.settings.openAIModel)
-                    .textFieldStyle(.roundedBorder)
+                Picker(strings.openAIModel, selection: $appState.settings.openAIModel) {
+                    ForEach(OpenAIModelOption.all) { option in
+                        Text(option.displayName).tag(option.id)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
 
                 Text(strings.openAIModelHelp)
                     .font(.caption)

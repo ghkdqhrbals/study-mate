@@ -15,7 +15,7 @@ final class StudyMateTests: XCTestCase {
             difficulty: .advanced,
             appLanguage: .english,
             language: .english,
-            openAIModel: "gpt-test",
+            openAIModel: "gpt-5.4-mini",
             customPrompt: "면접처럼 질문해줘.",
             intervalMinutes: 7
         )
@@ -74,7 +74,7 @@ final class StudyMateTests: XCTestCase {
         XCTAssertEqual(loadedSettings.language, .english)
     }
 
-    func testOpenAIModelIsTrimmedWhenSaved() {
+    func testUnsupportedOpenAIModelDefaultsWhenSaved() {
         let suiteName = "StudyMateTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer {
@@ -92,7 +92,28 @@ final class StudyMateTests: XCTestCase {
 
         store.saveSettings(settings)
 
-        XCTAssertEqual(store.loadSettings().openAIModel, "gpt-custom")
+        XCTAssertEqual(store.loadSettings().openAIModel, StudySettings.defaultOpenAIModel)
+    }
+
+    func testSupportedOpenAIModelIsSaved() {
+        let suiteName = "StudyMateTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = SettingsStore(defaults: defaults)
+        let settings = StudySettings(
+            topic: "Swift",
+            difficulty: .beginner,
+            openAIModel: "gpt-5.5",
+            customPrompt: "짧게",
+            intervalMinutes: 15
+        )
+
+        store.saveSettings(settings)
+
+        XCTAssertEqual(store.loadSettings().openAIModel, "gpt-5.5")
     }
 
     func testEmptyOpenAIModelDefaultsWhenSaved() {

@@ -180,7 +180,30 @@ struct StudySettings: Codable, Equatable {
 
     var sanitizedOpenAIModel: String {
         let trimmedModel = openAIModel.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmedModel.isEmpty ? Self.defaultOpenAIModel : trimmedModel
+        guard OpenAIModelOption.supportedIDs.contains(trimmedModel) else {
+            return Self.defaultOpenAIModel
+        }
+
+        return trimmedModel
+    }
+}
+
+struct OpenAIModelOption: Identifiable, Equatable {
+    var id: String
+    var displayName: String
+
+    static let all: [OpenAIModelOption] = [
+        OpenAIModelOption(id: "gpt-5.5", displayName: "GPT-5.5"),
+        OpenAIModelOption(id: "gpt-5.4", displayName: "GPT-5.4"),
+        OpenAIModelOption(id: "gpt-5.4-mini", displayName: "GPT-5.4 mini"),
+        OpenAIModelOption(id: "gpt-5.4-nano", displayName: "GPT-5.4 nano"),
+        OpenAIModelOption(id: "gpt-5-mini", displayName: "GPT-5 mini"),
+        OpenAIModelOption(id: "gpt-5-nano", displayName: "GPT-5 nano"),
+        OpenAIModelOption(id: "gpt-4.1", displayName: "GPT-4.1")
+    ]
+
+    static var supportedIDs: Set<String> {
+        Set(all.map(\.id))
     }
 }
 
@@ -344,7 +367,7 @@ struct AppStrings {
     var apiKeyInvalidDetailed: String { text("API 키가 잘못되었습니다. Settings > Secrets에서 OpenAI API 키를 확인하세요.", "API key is invalid. Check your OpenAI API key in Settings > Secrets.") }
     var openAIModel: String { text("모델", "Model") }
     var openAIModelHelp: String {
-        text("질문 생성과 채점에 사용할 OpenAI 모델 ID입니다. 비워두면 \(StudySettings.defaultOpenAIModel)을 사용합니다.", "OpenAI model ID for question generation and grading. Empty values use \(StudySettings.defaultOpenAIModel).")
+        text("질문 생성과 채점에 사용할 OpenAI 모델입니다.", "OpenAI model for question generation and grading.")
     }
     var unsavedAPIKeyHelp: String {
         text("변경사항이 있습니다. 저장해도 API 키 검증 실패 시 값은 유지됩니다.", "You have unsaved changes. Values are kept even if API key validation fails.")
