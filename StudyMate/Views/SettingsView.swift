@@ -12,33 +12,33 @@ struct SettingsView: View {
         let strings = appState.strings
 
         HStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 6) {
-                ForEach(visibleCategories) { category in
-                    Button {
-                        selection = category
-                    } label: {
-                        HStack(spacing: 8) {
-                            Text(category.title(strings: strings))
-                            Spacer(minLength: 0)
+            VStack(spacing: 0) {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(visibleCategories) { category in
+                        Button {
+                            selection = category
+                        } label: {
+                            HStack(spacing: 8) {
+                                Text(category.title(strings: strings))
+                                Spacer(minLength: 0)
+                            }
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(Color.primary)
+                            .padding(.horizontal, 12)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .frame(height: 32)
+                            .background(selection == category ? Color.secondary.opacity(0.14) : Color.clear)
+                            .contentShape(Rectangle())
                         }
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(Color.primary)
-                        .padding(.horizontal, 10)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .frame(height: 30)
-                        .background(selection == category ? Color.secondary.opacity(0.14) : Color.clear)
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
-                        .contentShape(Rectangle())
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
+                .padding(.top, 12)
 
                 Spacer()
             }
             .frame(width: 136)
-            .padding(.top, 16)
-            .padding(.horizontal, 10)
-            .background(Color(nsColor: .windowBackgroundColor))
+            .background(Color(nsColor: .controlBackgroundColor))
 
             Divider()
 

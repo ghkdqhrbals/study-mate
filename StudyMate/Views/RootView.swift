@@ -9,6 +9,7 @@ struct RootView: View {
 
         TabView(selection: $selectedTab) {
             StudyView()
+                .contentPadding()
                 .tabItem {
                     Label(strings.tabStudy, systemImage: "book.fill")
                 }
@@ -21,20 +22,27 @@ struct RootView: View {
                 .tag(1)
 
             HistoryView()
+                .contentPadding()
                 .tabItem {
                     Label(strings.tabRecords, systemImage: "clock.arrow.circlepath")
                 }
                 .tag(2)
 
             StatisticsView()
+                .contentPadding()
                 .tabItem {
                     Label(strings.tabStatistics, systemImage: "chart.xyaxis.line")
                 }
                 .tag(3)
         }
-        .padding(.horizontal, 12)
-        .padding(.top, 18)
-        .padding(.bottom, 16)
         .frame(maxHeight: .infinity)
+    }
+}
+
+private extension View {
+    func contentPadding() -> some View {
+        padding(.horizontal, 12)
+            .padding(.top, 18)
+            .padding(.bottom, 16)
     }
 }
