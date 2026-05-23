@@ -1,11 +1,16 @@
 <svg width="224" height="224" viewBox="0 0 224 224" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect width="224" height="224" rx="48" fill="#4C8BF5"/>
-  <path d="M56 72C56 64.268 62.268 58 70 58H103C111.284 58 118 64.716 118 73V164C118 169.523 113.523 174 108 174H70C62.268 174 56 167.732 56 160V72Z" fill="white" fill-opacity="0.95"/>
-  <path d="M168 72C168 64.268 161.732 58 154 58H121C112.716 58 106 64.716 106 73V164C106 169.523 110.477 174 116 174H154C161.732 174 168 167.732 168 160V72Z" fill="white" fill-opacity="0.84"/>
-  <path d="M74 88H98" stroke="#4C8BF5" stroke-width="8" stroke-linecap="round"/>
-  <path d="M126 88H150" stroke="#4C8BF5" stroke-width="8" stroke-linecap="round"/>
-  <path d="M74 112H98" stroke="#4C8BF5" stroke-width="8" stroke-linecap="round" opacity="0.72"/>
-  <path d="M126 112H150" stroke="#4C8BF5" stroke-width="8" stroke-linecap="round" opacity="0.72"/>
-  <circle cx="159" cy="158" r="28" fill="#171817"/>
-  <path d="M150 158L157 165L170 151" stroke="white" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect width="224" height="224" rx="48" fill="#F7F7F4"/>
+  <rect x="1" y="1" width="222" height="222" rx="47" stroke="#1F2328" stroke-opacity="0.12" stroke-width="2"/>
+  <path d="M52 68C52 58.059 60.059 50 70 50H106C115.941 50 124 58.059 124 68V174H70C60.059 174 52 165.941 52 156V68Z" fill="#4C8BF5"/>
+  <path d="M100 68C100 58.059 108.059 50 118 50H154C163.941 50 172 58.059 172 68V156C172 165.941 163.941 174 154 174H100V68Z" fill="#2F6FE4"/>
+  <path d="M124 69V174" stroke="#F7F7F4" stroke-opacity="0.82" stroke-width="8" stroke-linecap="round"/>
+  <path d="M75 88H101" stroke="#F7F7F4" stroke-width="9" stroke-linecap="round"/>
+  <path d="M75 113H101" stroke="#F7F7F4" stroke-opacity="0.72" stroke-width="9" stroke-linecap="round"/>
+  <path d="M75 138H95" stroke="#F7F7F4" stroke-opacity="0.5" stroke-width="9" stroke-linecap="round"/>
+  <path d="M136 88H149" stroke="#F7F7F4" stroke-width="9" stroke-linecap="round"/>
+  <path d="M136 113H149" stroke="#F7F7F4" stroke-opacity="0.72" stroke-width="9" stroke-linecap="round"/>
+  <circle cx="164" cy="164" r="32" fill="#1F2328"/>
+  <path d="M152 165C161 150 172 150 176 165" stroke="#F7F7F4" stroke-width="8" stroke-linecap="round"/>
+  <circle cx="158" cy="155" r="4" fill="#F7F7F4"/>
+  <circle cx="170" cy="155" r="4" fill="#F7F7F4"/>
 </svg>
