@@ -13,6 +13,7 @@ final class StudyMateTests: XCTestCase {
         let settings = StudySettings(
             topic: "자료구조",
             difficulty: .advanced,
+            appLanguage: .english,
             language: .english,
             customPrompt: "면접처럼 질문해줘.",
             intervalMinutes: 7
@@ -43,6 +44,7 @@ final class StudyMateTests: XCTestCase {
 
         let store = SettingsStore(defaults: defaults)
 
+        XCTAssertEqual(store.loadSettings().appLanguage, .korean)
         XCTAssertEqual(store.loadSettings().language, .korean)
     }
 

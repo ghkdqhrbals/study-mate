@@ -32,40 +32,42 @@ struct StatisticsView: View {
     }
 
     var body: some View {
+        let strings = appState.strings
+
         Group {
             if scores.isEmpty {
                 VStack(alignment: .leading, spacing: 14) {
-                    Text("통계")
+                    Text(strings.stats)
                         .font(.headline)
 
                     ContentUnavailableView(
-                        "점수 없음",
+                        strings.noScores,
                         systemImage: "chart.xyaxis.line",
-                        description: Text("답변을 채점하면 점수 그래프가 표시됩니다.")
+                        description: Text(strings.noScoresDescription)
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 8) {
-                        Text("통계")
+                        Text(strings.stats)
                             .font(.headline)
                             .padding(.bottom, 6)
 
                         HStack(spacing: 10) {
-                            StatBox(title: "응답", value: "\(scores.count)")
-                            StatBox(title: "평균", value: "\(averageScore)")
-                            StatBox(title: "최고", value: "\(scores.max() ?? 0)")
+                            StatBox(title: strings.responses, value: "\(scores.count)")
+                            StatBox(title: strings.average, value: "\(averageScore)")
+                            StatBox(title: strings.best, value: "\(scores.max() ?? 0)")
                         }
 
-                        DifficultyStatsSection(stats: difficultyStats)
+                        DifficultyStatsSection(stats: difficultyStats, strings: strings)
                             .padding(.top, 4)
 
                         ScoreLineChart(scores: scores)
                             .frame(height: 160)
                             .padding(.vertical, 8)
 
-                        Text("문제별 점수")
+                        Text(strings.scoreByQuestion)
                             .font(.subheadline)
                             .fontWeight(.semibold)
                             .padding(.top, 4)
@@ -135,9 +137,9 @@ struct StudyRecordDetailView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(displayedRecord.topic.isEmpty ? "문제" : displayedRecord.topic)
+                    Text(displayedRecord.topic.isEmpty ? appState.strings.problem : displayedRecord.topic)
                         .font(.headline)
-                    Text(displayedRecord.difficulty.displayName)
+                    Text(displayedRecord.difficulty.displayName(language: appState.settings.appLanguage))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -155,22 +157,22 @@ struct StudyRecordDetailView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
-                    DetailSection(title: "질문", text: displayedRecord.question.question)
+                    DetailSection(title: appState.strings.question, text: displayedRecord.question.question)
 
                     if let hint = displayedRecord.question.expectedAnswerHint, !hint.isEmpty {
-                        DetailSection(title: "힌트", text: hint)
+                        DetailSection(title: appState.strings.hint, text: hint)
                     }
 
                     if let answer = displayedRecord.answer, !answer.isEmpty {
-                        DetailSection(title: "답변", text: answer)
+                        DetailSection(title: appState.strings.answer, text: answer)
                     }
 
                     if let result = displayedRecord.gradingResult {
-                        DetailSection(title: "피드백", text: result.feedback)
-                        DetailSection(title: "해설", text: result.explanation)
+                        DetailSection(title: appState.strings.feedback, text: result.feedback)
+                        DetailSection(title: appState.strings.explanation, text: result.explanation)
                     } else {
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("답변")
+                            Text(appState.strings.answer)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
 
@@ -191,7 +193,7 @@ struct StudyRecordDetailView: View {
                                     ProgressView()
                                         .controlSize(.small)
                                 } else {
-                                    Label("채점 받기", systemImage: "checkmark.seal")
+                                    Label(appState.strings.gradeAnswer, systemImage: "checkmark.seal")
                                 }
                             }
                             .disabled(appState.isGradingAnswer || draftAnswer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -238,10 +240,11 @@ private struct DifficultyStat: Identifiable {
 
 private struct DifficultyStatsSection: View {
     var stats: [DifficultyStat]
+    var strings: AppStrings
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("난이도별 통계")
+            Text(strings.statsByDifficulty)
                 .font(.subheadline)
                 .fontWeight(.semibold)
 
@@ -255,19 +258,19 @@ private struct DifficultyStatsSection: View {
                 ForEach(stats) { stat in
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
-                            Text(stat.difficulty.displayName)
+                            Text(stat.difficulty.displayName(language: strings.language))
                                 .font(.subheadline)
                                 .fontWeight(.semibold)
                             Spacer()
-                            Text("\(stat.count)개")
+                            Text(strings.itemCount(stat.count))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
 
                         HStack(spacing: 10) {
-                            MiniMetric(title: "평균", value: "\(stat.average)")
-                            MiniMetric(title: "최고", value: "\(stat.best)")
-                            MiniMetric(title: "정답", value: "\(stat.correctRate)%")
+                            MiniMetric(title: strings.average, value: "\(stat.average)")
+                            MiniMetric(title: strings.best, value: "\(stat.best)")
+                            MiniMetric(title: strings.correctRate, value: "\(stat.correctRate)%")
                         }
                     }
                     .padding(10)

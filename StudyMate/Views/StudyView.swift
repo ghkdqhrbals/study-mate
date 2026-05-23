@@ -4,12 +4,14 @@ struct StudyView: View {
     @EnvironmentObject private var appState: AppState
 
     var body: some View {
+        let strings = appState.strings
+
         VStack(alignment: .leading, spacing: 14) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(appState.settings.topic)
                         .font(.headline)
-                    Text("\(appState.settings.difficulty.displayName) · \(appState.settings.language.displayName) · \(appState.settings.sanitizedIntervalMinutes)분 간격")
+                    Text("\(appState.settings.difficulty.displayName(language: appState.settings.appLanguage)) · \(appState.settings.language.displayName) · \(strings.minuteLabel(appState.settings.sanitizedIntervalMinutes))")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -25,7 +27,7 @@ struct StudyView: View {
                         ProgressView()
                             .controlSize(.small)
                     } else {
-                        Label("새 질문", systemImage: "sparkles")
+                        Label(strings.newQuestion, systemImage: "sparkles")
                     }
                 }
                 .disabled(appState.isGeneratingQuestion)
@@ -36,7 +38,7 @@ struct StudyView: View {
             Group {
                 if let question = appState.currentQuestion {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("질문")
+                        Text(strings.question)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         Text(question.question)
@@ -56,16 +58,16 @@ struct StudyView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 8))
                 } else {
                     ContentUnavailableView(
-                        "질문 없음",
+                        strings.noQuestion,
                         systemImage: "questionmark.bubble",
-                        description: Text("설정을 저장한 뒤 새 질문을 생성하세요.")
+                        description: Text(strings.noQuestionDescription)
                     )
                     .frame(maxWidth: .infinity, minHeight: 140)
                 }
             }
 
             VStack(alignment: .leading, spacing: 8) {
-                Text("답변")
+                Text(strings.answer)
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -91,7 +93,7 @@ struct StudyView: View {
                     ProgressView()
                         .controlSize(.small)
                 } else {
-                    Label("채점 받기", systemImage: "checkmark.seal")
+                    Label(strings.gradeAnswer, systemImage: "checkmark.seal")
                 }
             }
             .disabled(appState.currentQuestion == nil || appState.isGradingAnswer)
@@ -99,7 +101,7 @@ struct StudyView: View {
             if let result = appState.gradingResult {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
-                        Label(result.gradeTitle, systemImage: result.gradeIconName)
+                        Label(result.gradeTitle(strings: strings), systemImage: result.gradeIconName)
                             .foregroundStyle(result.gradeColor)
                         Spacer()
                         Text("\(result.score)/100")
@@ -124,16 +126,16 @@ struct StudyView: View {
 }
 
 private extension GradingResult {
-    var gradeTitle: String {
+    func gradeTitle(strings: AppStrings) -> String {
         switch score {
         case 90...100:
-            "정답"
+            strings.correct
         case 70..<90:
-            "정답에 가까움"
+            strings.nearlyCorrect
         case 40..<70:
-            "부분 정답"
+            strings.partialCorrect
         default:
-            "보완 필요"
+            strings.needsImprovement
         }
     }
 

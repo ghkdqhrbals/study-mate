@@ -5,28 +5,30 @@ struct RootView: View {
     @State private var selectedTab = 0
 
     var body: some View {
+        let strings = appState.strings
+
         TabView(selection: $selectedTab) {
             StudyView()
                 .tabItem {
-                    Label("학습", systemImage: "book.fill")
+                    Label(strings.tabStudy, systemImage: "book.fill")
                 }
                 .tag(0)
 
             SettingsView()
                 .tabItem {
-                    Label("설정", systemImage: "gearshape.fill")
+                    Label(strings.tabSettings, systemImage: "gearshape.fill")
                 }
                 .tag(1)
 
             HistoryView()
                 .tabItem {
-                    Label("기록", systemImage: "clock.arrow.circlepath")
+                    Label(strings.tabRecords, systemImage: "clock.arrow.circlepath")
                 }
                 .tag(2)
 
             StatisticsView()
                 .tabItem {
-                    Label("통계", systemImage: "chart.xyaxis.line")
+                    Label(strings.tabStatistics, systemImage: "chart.xyaxis.line")
                 }
                 .tag(3)
         }

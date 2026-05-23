@@ -26,8 +26,12 @@ final class AppState: ObservableObject {
     private var savedSettings: StudySettings
     private var savedAPIKey: String
 
+    var strings: AppStrings {
+        AppStrings(language: settings.appLanguage)
+    }
+
     var statusTitle: String {
-        "StudyMate is \(isRunning ? "running" : "stopped")"
+        strings.statusTitle(isRunning: isRunning)
     }
 
     var hasUnsavedSettingsChanges: Bool {
@@ -41,10 +45,10 @@ final class AppState: ObservableObject {
         }
 
         if apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return "API 키를 입력하세요."
+            return strings.apiKeyEmpty
         }
 
-        return errorMessage ?? "API 키를 확인하세요."
+        return errorMessage ?? strings.apiKeyCheck
     }
 
     var pendingQuestionCount: Int {
@@ -94,7 +98,7 @@ final class AppState: ObservableObject {
         }
 
         didStart = true
-        _ = await notificationService.requestAuthorizationIfNeeded()
+        _ = await notificationService.requestAuthorizationIfNeeded(language: settings.appLanguage)
         await validateAPIKeyOnStartup()
         restartTimer()
     }
@@ -103,7 +107,7 @@ final class AppState: ObservableObject {
         let trimmedAPIKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedAPIKey.isEmpty else {
             hasAPIKeyError = true
-            errorMessage = "API 키가 비어 있습니다. Settings > Secrets에서 OpenAI API 키를 입력하세요."
+            errorMessage = strings.apiKeyEmptyDetailed
             log(.warning, "시작 시 API 키 검증을 건너뛰었습니다. API 키가 비어 있습니다.")
             return
         }
@@ -136,7 +140,7 @@ final class AppState: ObservableObject {
         if apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             hasAPIKeyError = true
         }
-        errorMessage = hasAPIKeyError ? "API 키가 비어 있습니다. Settings > Secrets에서 OpenAI API 키를 입력하세요." : nil
+        errorMessage = hasAPIKeyError ? strings.apiKeyEmptyDetailed : nil
         statusMessage = "설정을 저장했습니다."
         log(.info, "설정을 저장했습니다. interval=\(settings.sanitizedIntervalMinutes), maxHistory=\(settings.sanitizedMaxHistoryCount)")
 
@@ -174,10 +178,21 @@ final class AppState: ObservableObject {
     func setTimerInterval(_ minutes: Int) {
         settings.intervalMinutes = min(max(minutes, 1), 240)
         settingsStore.saveSettings(settings)
+        savedSettings = normalizedSettings(settings)
         studyRecords = settingsStore.loadStudyRecords()
         statusMessage = "질문 간격을 \(settings.intervalMinutes)분으로 설정했습니다."
         log(.info, "질문 간격을 \(settings.intervalMinutes)분으로 변경했습니다.")
         restartTimer()
+    }
+
+    func setAppLanguage(_ language: AppLanguage) {
+        settings.appLanguage = language
+        settingsStore.saveSettings(settings)
+        savedSettings = normalizedSettings(settings)
+        studyRecords = settingsStore.loadStudyRecords()
+        StudyNotificationDelegate.shared.register(language: language)
+        statusMessage = language == .korean ? "앱 언어를 한국어로 설정했습니다." : "App language set to English."
+        log(.info, "앱 언어를 \(language.rawValue)로 변경했습니다.")
     }
 
     func generateQuestion(manual: Bool = true) async {
@@ -216,7 +231,11 @@ final class AppState: ObservableObject {
             hasAPIKeyError = false
             statusMessage = "새 질문이 준비됐습니다."
             log(.info, "질문을 생성했습니다: \(question.question)")
-            await notificationService.showQuestionNotification(question: question)
+            await notificationService.showQuestionNotification(
+                question: question,
+                title: strings.notificationTitle,
+                language: settings.appLanguage
+            )
         } catch {
             handleOpenAIError(error)
             statusMessage = nil
@@ -312,6 +331,7 @@ final class AppState: ObservableObject {
         let gradingSettings = StudySettings(
             topic: record.topic.isEmpty ? settings.topic : record.topic,
             difficulty: record.difficulty,
+            appLanguage: settings.appLanguage,
             language: settings.language,
             customPrompt: settings.customPrompt,
             intervalMinutes: settings.sanitizedIntervalMinutes,
@@ -429,8 +449,8 @@ final class AppState: ObservableObject {
         if Self.isAPIKeyError(error) {
             hasAPIKeyError = true
             errorMessage = apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                ? "API 키가 비어 있습니다. Settings > Secrets에서 OpenAI API 키를 입력하세요."
-                : "API 키가 잘못되었습니다. Settings > Secrets에서 OpenAI API 키를 확인하세요."
+                ? strings.apiKeyEmptyDetailed
+                : strings.apiKeyInvalidDetailed
             log(.error, errorMessage ?? "OpenAI API 키 오류가 발생했습니다.")
         } else {
             hasAPIKeyError = true
@@ -449,6 +469,7 @@ final class AppState: ObservableObject {
         StudySettings(
             topic: settings.topic,
             difficulty: settings.difficulty,
+            appLanguage: settings.appLanguage,
             language: settings.language,
             customPrompt: settings.customPrompt,
             intervalMinutes: settings.sanitizedIntervalMinutes,

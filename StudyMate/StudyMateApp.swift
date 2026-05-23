@@ -39,10 +39,12 @@ private struct MenuBarMenuView: View {
     private let timerOptions = [1, 5, 10, 15, 30, 45, 60, 120]
 
     var body: some View {
-        StatusMenuRow(isRunning: appState.isRunning, title: appState.statusTitle)
+        let strings = appState.strings
+
+        StatusMenuRow(isRunning: appState.isRunning, title: strings.statusTitle(isRunning: appState.isRunning))
 
         if appState.hasAPIKeyError {
-            Text("⚠ API 키가 잘못되었습니다")
+            Text("⚠ \(strings.invalidAPIKey)")
                 .foregroundStyle(.orange)
         }
 
@@ -51,7 +53,7 @@ private struct MenuBarMenuView: View {
         Button {
             StudyWindowPresenter.shared.show(appState: appState)
         } label: {
-            Label("Open Study...", systemImage: "book")
+            Label(strings.openStudy, systemImage: "book")
         }
         .keyboardShortcut("o", modifiers: .command)
 
@@ -64,19 +66,34 @@ private struct MenuBarMenuView: View {
             ])
             AppWindowFocus.bringWindowToFront(named: "About StudyMate")
         } label: {
-            Label("About StudyMate", systemImage: "info.circle")
+            Label(strings.aboutStudyMate, systemImage: "info.circle")
         }
 
-        Menu("Timer: \(appState.settings.sanitizedIntervalMinutes) min") {
+        Menu(strings.timerTitle(minutes: appState.settings.sanitizedIntervalMinutes)) {
             ForEach(timerOptions, id: \.self) { minutes in
                 Button {
                     appState.setTimerInterval(minutes)
                     NSApp.activate(ignoringOtherApps: true)
                 } label: {
                     if appState.settings.sanitizedIntervalMinutes == minutes {
-                        Label("\(minutes) min", systemImage: "checkmark")
+                        Label(strings.minuteLabel(minutes), systemImage: "checkmark")
                     } else {
-                        Text("\(minutes) min")
+                        Text(strings.minuteLabel(minutes))
+                    }
+                }
+            }
+        }
+
+        Menu("\(strings.languageMenu): \(appState.settings.appLanguage.displayName)") {
+            ForEach(AppLanguage.allCases) { language in
+                Button {
+                    appState.setAppLanguage(language)
+                    NSApp.activate(ignoringOtherApps: true)
+                } label: {
+                    if appState.settings.appLanguage == language {
+                        Label(language.displayName, systemImage: "checkmark")
+                    } else {
+                        Text(language.displayName)
                     }
                 }
             }
@@ -88,14 +105,14 @@ private struct MenuBarMenuView: View {
             appState.setRunning(!appState.isRunning)
             NSApp.activate(ignoringOtherApps: true)
         } label: {
-            Text(appState.isRunning ? "⏸ Pause" : "▶ Resume")
+            Text(appState.isRunning ? strings.pause : strings.resume)
         }
         .keyboardShortcut("p", modifiers: .command)
 
         Button {
             NSApp.terminate(nil)
         } label: {
-            Text("⏻ Quit StudyMate")
+            Text(strings.quit)
         }
         .keyboardShortcut("q", modifiers: .command)
     }

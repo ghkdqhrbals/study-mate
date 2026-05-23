@@ -28,9 +28,11 @@ struct HistoryView: View {
     }
 
     var body: some View {
+        let strings = appState.strings
+
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("기록")
+                Text(strings.records)
                     .font(.headline)
 
                 Spacer()
@@ -39,16 +41,16 @@ struct HistoryView: View {
                     appState.clearStudyRecords()
                     page = 0
                 } label: {
-                    Label("삭제", systemImage: "trash")
+                    Label(strings.clear, systemImage: "trash")
                 }
                 .disabled(appState.studyRecords.isEmpty)
             }
 
             if appState.studyRecords.isEmpty {
                 ContentUnavailableView(
-                    "기록 없음",
+                    strings.noRecords,
                     systemImage: "clock.arrow.circlepath",
-                    description: Text("질문을 생성하고 답변을 채점하면 기록이 쌓입니다.")
+                    description: Text(strings.noRecordsDescription)
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
@@ -59,7 +61,7 @@ struct HistoryView: View {
                                 Button {
                                     selectedRecord = record
                                 } label: {
-                                    HistoryRow(record: record)
+                                    HistoryRow(record: record, strings: strings)
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                 }
                                 .buttonStyle(.plain)
@@ -75,7 +77,7 @@ struct HistoryView: View {
                                     Image(systemName: "trash")
                                 }
                                 .buttonStyle(.borderless)
-                                .help("기록 삭제")
+                                .help(strings.deleteRecordHelp)
                             }
                         }
                     }
@@ -146,12 +148,13 @@ struct HistoryView: View {
 
 private struct HistoryRow: View {
     var record: StudyRecord
+    var strings: AppStrings
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(record.topic.isEmpty ? "학습" : record.topic)
+                    Text(record.topic.isEmpty ? strings.studyFallback : record.topic)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Text(record.question.createdAt, formatter: Self.dateFormatter)
@@ -166,7 +169,7 @@ private struct HistoryRow: View {
                         .font(.headline)
                         .foregroundStyle(scoreColor(result.score))
                 } else {
-                    Text("미채점")
+                    Text(strings.ungraded)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -177,7 +180,7 @@ private struct HistoryRow: View {
                 .textSelection(.enabled)
 
             if let answer = record.answer, !answer.isEmpty {
-                Text("답변: \(answer)")
+                Text(strings.answerPrefix(answer))
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)

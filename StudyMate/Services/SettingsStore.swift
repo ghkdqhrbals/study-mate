@@ -34,6 +34,7 @@ final class SettingsStore {
         return StudySettings(
             topic: settings.topic,
             difficulty: settings.difficulty,
+            appLanguage: settings.appLanguage,
             language: settings.language,
             customPrompt: settings.customPrompt,
             intervalMinutes: settings.sanitizedIntervalMinutes,
@@ -45,6 +46,7 @@ final class SettingsStore {
         let sanitizedSettings = StudySettings(
             topic: settings.topic,
             difficulty: settings.difficulty,
+            appLanguage: settings.appLanguage,
             language: settings.language,
             customPrompt: settings.customPrompt,
             intervalMinutes: settings.sanitizedIntervalMinutes,

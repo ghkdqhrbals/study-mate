@@ -12,9 +12,9 @@ enum StudyNotificationAction {
 
 @MainActor
 final class NotificationService {
-    func requestAuthorizationIfNeeded() async -> Bool {
+    func requestAuthorizationIfNeeded(language: AppLanguage) async -> Bool {
         let center = UNUserNotificationCenter.current()
-        StudyNotificationDelegate.shared.register()
+        StudyNotificationDelegate.shared.register(language: language)
         let settings = await center.notificationSettings()
 
         switch settings.authorizationStatus {
@@ -35,13 +35,13 @@ final class NotificationService {
         }
     }
 
-    func showQuestionNotification(question: QuestionItem) async {
-        guard await requestAuthorizationIfNeeded() else {
+    func showQuestionNotification(question: QuestionItem, title: String, language: AppLanguage) async {
+        guard await requestAuthorizationIfNeeded(language: language) else {
             return
         }
 
         let content = UNMutableNotificationContent()
-        content.title = "AI 선생님 질문"
+        content.title = title
         content.body = question.question
         content.sound = .default
         content.categoryIdentifier = StudyNotificationAction.category
@@ -65,30 +65,31 @@ final class StudyNotificationDelegate: NSObject, UNUserNotificationCenterDelegat
     @MainActor
     func configure(appState: AppState) {
         self.appState = appState
-        register()
+        register(language: appState.settings.appLanguage)
     }
 
-    func register() {
+    func register(language: AppLanguage = .korean) {
+        let strings = AppStrings(language: language)
         let center = UNUserNotificationCenter.current()
         center.delegate = self
 
         let replyAction = UNTextInputNotificationAction(
             identifier: StudyNotificationAction.reply,
-            title: "답장",
+            title: strings.reply,
             options: [.foreground],
-            textInputButtonTitle: "보내기",
-            textInputPlaceholder: "답변 입력"
+            textInputButtonTitle: strings.send,
+            textInputPlaceholder: strings.answerPlaceholder
         )
 
         let otherAnswerAction = UNNotificationAction(
             identifier: StudyNotificationAction.otherAnswer,
-            title: "다른 응답",
+            title: strings.otherAnswer,
             options: [.foreground]
         )
 
         let ignoreAction = UNNotificationAction(
             identifier: StudyNotificationAction.ignore,
-            title: "무시",
+            title: strings.ignore,
             options: []
         )
 
