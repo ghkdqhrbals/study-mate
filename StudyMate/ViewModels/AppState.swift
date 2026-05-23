@@ -312,6 +312,7 @@ final class AppState: ObservableObject {
         let gradingSettings = StudySettings(
             topic: record.topic.isEmpty ? settings.topic : record.topic,
             difficulty: record.difficulty,
+            language: settings.language,
             customPrompt: settings.customPrompt,
             intervalMinutes: settings.sanitizedIntervalMinutes,
             maxHistoryCount: settings.sanitizedMaxHistoryCount
@@ -448,6 +449,7 @@ final class AppState: ObservableObject {
         StudySettings(
             topic: settings.topic,
             difficulty: settings.difficulty,
+            language: settings.language,
             customPrompt: settings.customPrompt,
             intervalMinutes: settings.sanitizedIntervalMinutes,
             maxHistoryCount: settings.sanitizedMaxHistoryCount

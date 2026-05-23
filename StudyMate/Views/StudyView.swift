@@ -9,7 +9,7 @@ struct StudyView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(appState.settings.topic)
                         .font(.headline)
-                    Text("\(appState.settings.difficulty.displayName) · \(appState.settings.sanitizedIntervalMinutes)분 간격")
+                    Text("\(appState.settings.difficulty.displayName) · \(appState.settings.language.displayName) · \(appState.settings.sanitizedIntervalMinutes)분 간격")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

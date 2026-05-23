@@ -50,9 +50,60 @@ enum Difficulty: String, CaseIterable, Codable, Identifiable {
     }
 }
 
+enum StudyLanguage: String, CaseIterable, Codable, Identifiable {
+    case korean
+    case english
+    case japanese
+    case chineseSimplified
+    case spanish
+    case french
+    case german
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .korean:
+            "한국어"
+        case .english:
+            "English"
+        case .japanese:
+            "日本語"
+        case .chineseSimplified:
+            "中文"
+        case .spanish:
+            "Español"
+        case .french:
+            "Français"
+        case .german:
+            "Deutsch"
+        }
+    }
+
+    var promptLabel: String {
+        switch self {
+        case .korean:
+            "Korean"
+        case .english:
+            "English"
+        case .japanese:
+            "Japanese"
+        case .chineseSimplified:
+            "Simplified Chinese"
+        case .spanish:
+            "Spanish"
+        case .french:
+            "French"
+        case .german:
+            "German"
+        }
+    }
+}
+
 struct StudySettings: Codable, Equatable {
     var topic: String
     var difficulty: Difficulty
+    var language: StudyLanguage
     var customPrompt: String
     var intervalMinutes: Int
     var maxHistoryCount: Int
@@ -60,12 +111,14 @@ struct StudySettings: Codable, Equatable {
     init(
         topic: String,
         difficulty: Difficulty,
+        language: StudyLanguage = .korean,
         customPrompt: String,
         intervalMinutes: Int,
         maxHistoryCount: Int = 100
     ) {
         self.topic = topic
         self.difficulty = difficulty
+        self.language = language
         self.customPrompt = customPrompt
         self.intervalMinutes = intervalMinutes
         self.maxHistoryCount = maxHistoryCount
@@ -74,6 +127,7 @@ struct StudySettings: Codable, Equatable {
     private enum CodingKeys: String, CodingKey {
         case topic
         case difficulty
+        case language
         case customPrompt
         case intervalMinutes
         case maxHistoryCount
@@ -83,6 +137,7 @@ struct StudySettings: Codable, Equatable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         topic = try container.decode(String.self, forKey: .topic)
         difficulty = try container.decode(Difficulty.self, forKey: .difficulty)
+        language = try container.decodeIfPresent(StudyLanguage.self, forKey: .language) ?? .korean
         customPrompt = try container.decode(String.self, forKey: .customPrompt)
         intervalMinutes = try container.decode(Int.self, forKey: .intervalMinutes)
         maxHistoryCount = try container.decodeIfPresent(Int.self, forKey: .maxHistoryCount) ?? 100
@@ -91,7 +146,7 @@ struct StudySettings: Codable, Equatable {
     static let `default` = StudySettings(
         topic: "Swift",
         difficulty: .beginner,
-        customPrompt: "짧고 명확한 한국어로 질문하세요. 사용자가 답하기 좋은 한 문제만 내세요.",
+        customPrompt: "짧고 명확하게 질문하세요. 사용자가 답하기 좋은 한 문제만 내세요.",
         intervalMinutes: 15
     )
 

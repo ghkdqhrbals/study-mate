@@ -210,6 +210,13 @@ private struct StudySettingsSection: View {
             }
             .pickerStyle(.menu)
 
+            Picker("언어", selection: $appState.settings.language) {
+                ForEach(StudyLanguage.allCases) { language in
+                    Text(language.displayName).tag(language)
+                }
+            }
+            .pickerStyle(.menu)
+
             Stepper(
                 value: $appState.settings.intervalMinutes,
                 in: 1...240,
@@ -449,7 +456,7 @@ private enum RecommendedPrompt: String, CaseIterable, Identifiable {
     var text: String {
         switch self {
         case .concept:
-            "핵심 개념을 정확히 이해했는지 확인하는 짧은 한국어 질문을 내세요. 한 번에 하나의 개념만 다루세요."
+            "핵심 개념을 정확히 이해했는지 확인하는 짧은 질문을 내세요. 한 번에 하나의 개념만 다루세요."
         case .interview:
             "기술 면접처럼 질문하세요. 단순 정의보다 이유, trade-off, 실제 적용 상황을 설명하게 만드세요."
         case .practical:

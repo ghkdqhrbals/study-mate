@@ -13,6 +13,7 @@ final class StudyMateTests: XCTestCase {
         let settings = StudySettings(
             topic: "자료구조",
             difficulty: .advanced,
+            language: .english,
             customPrompt: "면접처럼 질문해줘.",
             intervalMinutes: 7
         )
@@ -20,6 +21,29 @@ final class StudyMateTests: XCTestCase {
         store.saveSettings(settings)
 
         XCTAssertEqual(store.loadSettings(), settings)
+    }
+
+    func testSettingsWithoutLanguageDefaultsToKorean() throws {
+        let suiteName = "StudyMateTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let legacySettingsData = try XCTUnwrap("""
+        {
+          "topic": "Swift",
+          "difficulty": "beginner",
+          "customPrompt": "짧게",
+          "intervalMinutes": 15,
+          "maxHistoryCount": 100
+        }
+        """.data(using: .utf8))
+        defaults.set(legacySettingsData, forKey: "studySettings")
+
+        let store = SettingsStore(defaults: defaults)
+
+        XCTAssertEqual(store.loadSettings().language, .korean)
     }
 
     func testSettingsIntervalIsClampedWhenLoaded() {
@@ -173,6 +197,7 @@ final class StudyMateTests: XCTestCase {
         let settings = StudySettings(
             topic: "Swift Concurrency",
             difficulty: .intermediate,
+            language: .english,
             customPrompt: "면접 질문처럼",
             intervalMinutes: 15
         )
@@ -184,6 +209,8 @@ final class StudyMateTests: XCTestCase {
         let prompt = OpenAIClient.questionPrompt(settings: settings, recentQuestions: recentQuestions)
 
         XCTAssertTrue(prompt.contains("Recent questions to avoid:"))
+        XCTAssertTrue(prompt.contains("Language: English"))
+        XCTAssertTrue(prompt.contains("Write the question and expectedAnswerHint in English."))
         XCTAssertTrue(prompt.contains("actor는 어떤 문제를 해결하나요?"))
         XCTAssertTrue(prompt.contains("Do not repeat or closely paraphrase any recent question."))
     }

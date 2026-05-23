@@ -84,7 +84,7 @@ final class OpenAIClient {
 
         let output = try await sendStructuredRequest(
             apiKey: apiKey,
-            instructions: "You are a Korean AI teacher that creates varied study questions. Never repeat recent questions.",
+            instructions: "You are an AI teacher that creates varied study questions in \(settings.language.promptLabel). Never repeat recent questions.",
             input: prompt,
             previousResponseID: previousResponseID,
             schemaName: "study_question",
@@ -114,12 +114,15 @@ final class OpenAIClient {
 
         Topic: \(settings.topic)
         Difficulty: \(settings.difficulty.promptLabel)
+        Language: \(settings.language.promptLabel)
         Teacher instruction: \(settings.customPrompt)
         Recent questions to avoid:
         \(recentQuestionText.isEmpty ? "None" : recentQuestionText)
 
         Requirements:
         - Return JSON only.
+        - Write the question and expectedAnswerHint in \(settings.language.promptLabel).
+        - If Teacher instruction conflicts with Language, Language wins.
         - The question should be concise and practical.
         - Do not repeat or closely paraphrase any recent question.
         - Vary the concept, angle, example, or required reasoning from recent questions.
@@ -133,6 +136,7 @@ final class OpenAIClient {
 
         Topic: \(settings.topic)
         Difficulty: \(settings.difficulty.promptLabel)
+        Feedback language: \(settings.language.promptLabel)
         Question: \(question.question)
         Expected hint: \(question.expectedAnswerHint ?? "None")
         User answer: \(answer)
@@ -148,7 +152,7 @@ final class OpenAIClient {
         Set isCorrect to false when score is below 70.
         The feedback tone must match the numeric score. Do not praise a very low score as correct or close.
 
-        Return fair, concise Korean feedback.
+        Return fair, concise feedback and explanation in \(settings.language.promptLabel).
         """
 
         let schema: [String: Any] = [
@@ -169,7 +173,7 @@ final class OpenAIClient {
 
         let output = try await sendStructuredRequest(
             apiKey: apiKey,
-            instructions: "You are a strict but helpful Korean AI teacher.",
+            instructions: "You are a strict but helpful AI teacher. Write feedback in \(settings.language.promptLabel).",
             input: prompt,
             previousResponseID: nil,
             schemaName: "grading_result",
