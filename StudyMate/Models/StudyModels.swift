@@ -314,6 +314,7 @@ struct AppStrings {
     var resume: String { text("▶ 재개", "▶ Resume") }
     var quit: String { text("⏻ StudyMate 종료", "⏻ Quit StudyMate") }
 
+    var general: String { "General" }
     var secrets: String { "Secrets" }
     var study: String { "Study" }
     var records: String { "Records" }
@@ -334,6 +335,8 @@ struct AppStrings {
     }
     var apiKeyStorageHelp: String { text("API 키는 앱 설정에 저장됩니다.", "The API key is stored in app settings.") }
 
+    var generalSettings: String { text("일반", "General") }
+    var appLanguageHelp: String { text("앱 언어를 바꾸면 학습 언어도 같은 언어로 설정됩니다.", "Changing the app language also sets the study language to match.") }
     var studySettings: String { text("학습 설정", "Study Settings") }
     var appLanguage: String { text("앱 언어", "App language") }
     var studyTopic: String { text("공부할 주제", "Study topic") }

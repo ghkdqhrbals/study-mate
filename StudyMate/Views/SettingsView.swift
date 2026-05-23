@@ -2,7 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject private var appState: AppState
-    @State private var selection: SettingsCategory = .secrets
+    @State private var selection: SettingsCategory = .general
 
     private var visibleCategories: [SettingsCategory] {
         SettingsCategory.visible(isDebuggingEnabled: appState.isDebuggingEnabled)
@@ -46,6 +46,9 @@ struct SettingsView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 18) {
                         switch selection {
+                        case .general:
+                            GeneralSettingsSection()
+
                         case .secrets:
                             SecretsSettingsSection()
 
@@ -96,13 +99,14 @@ struct SettingsView: View {
         }
         .onChange(of: appState.isDebuggingEnabled) {
             if !appState.isDebuggingEnabled && selection == .developer {
-                selection = .secrets
+                selection = .general
             }
         }
     }
 }
 
 private enum SettingsCategory: String, CaseIterable, Identifiable {
+    case general
     case secrets
     case study
     case records
@@ -118,6 +122,8 @@ private enum SettingsCategory: String, CaseIterable, Identifiable {
 
     func title(strings: AppStrings) -> String {
         switch self {
+        case .general:
+            strings.general
         case .secrets:
             strings.secrets
         case .study:
@@ -142,6 +148,47 @@ private struct SettingsPanel<Content: View>: View {
             content
         }
         .frame(maxWidth: 440, alignment: .leading)
+    }
+}
+
+private struct GeneralSettingsSection: View {
+    @EnvironmentObject private var appState: AppState
+
+    var body: some View {
+        let strings = appState.strings
+
+        SettingsPanel(title: strings.generalSettings) {
+            Picker(
+                strings.appLanguage,
+                selection: Binding(
+                    get: { appState.settings.appLanguage },
+                    set: { appState.updateAppLanguage($0) }
+                )
+            ) {
+                ForEach(AppLanguage.allCases) { language in
+                    Text(language.displayName).tag(language)
+                }
+            }
+            .pickerStyle(.menu)
+
+            Text(strings.appLanguageHelp)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Divider()
+
+            Toggle(
+                strings.debuggingMode,
+                isOn: Binding(
+                    get: { appState.isDebuggingEnabled },
+                    set: { appState.setDebuggingEnabled($0) }
+                )
+            )
+
+            Text(strings.debuggingHelp)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
     }
 }
 
@@ -191,19 +238,6 @@ private struct StudySettingsSection: View {
         let strings = appState.strings
 
         SettingsPanel(title: strings.studySettings) {
-            Picker(
-                strings.appLanguage,
-                selection: Binding(
-                    get: { appState.settings.appLanguage },
-                    set: { appState.updateAppLanguage($0) }
-                )
-            ) {
-                ForEach(AppLanguage.allCases) { language in
-                    Text(language.displayName).tag(language)
-                }
-            }
-            .pickerStyle(.menu)
-
             TextField(strings.studyTopic, text: $appState.settings.topic)
                 .textFieldStyle(.roundedBorder)
 
@@ -289,20 +323,6 @@ private struct RecordsSettingsSection: View {
                 Label(strings.deleteRecords, systemImage: "trash")
             }
             .disabled(appState.studyRecords.isEmpty)
-
-            Divider()
-
-            Toggle(
-                strings.debuggingMode,
-                isOn: Binding(
-                    get: { appState.isDebuggingEnabled },
-                    set: { appState.setDebuggingEnabled($0) }
-                )
-            )
-
-            Text(strings.debuggingHelp)
-                .font(.caption)
-                .foregroundStyle(.secondary)
         }
     }
 }
