@@ -480,7 +480,8 @@ struct AppStrings {
     func recordLimitHelp(limit: Int, count: Int) -> String {
         text("저장 시 \(limit)개 범위로 정리됩니다. 현재 저장된 기록: \(count)개", "Records are trimmed to \(limit) on save. Current records: \(count)")
     }
-    var deleteRecords: String { text("기록 삭제", "Delete Records") }
+    var deleteRecords: String { text("기록 전체삭제", "Delete All Records") }
+    var deleteRecordsHelp: String { text("저장된 질문, 답변, 채점 기록을 모두 삭제합니다.", "Delete all saved questions, answers, and grading results.") }
     var debuggingMode: String { text("디버깅 모드", "Debugging Mode") }
     var debuggingHelp: String { text("켜면 왼쪽 메뉴에 Developer 탭이 표시되고 앱 로그를 확인할 수 있습니다.", "When enabled, the Developer tab appears in the left menu with app logs.") }
     var developerOptions: String { text("개발자 옵션", "Developer Options") }
@@ -524,6 +525,9 @@ struct AppStrings {
     var responses: String { text("응답", "Responses") }
     var average: String { text("평균", "Avg") }
     var best: String { text("최고", "Best") }
+    var period: String { text("기간", "Period") }
+    var firstRecord: String { text("처음", "First") }
+    var latestRecord: String { text("최근", "Latest") }
     var scoreByQuestion: String { text("문제별 점수", "Scores by Question") }
     var problem: String { text("문제", "Question") }
     var hint: String { text("힌트", "Hint") }

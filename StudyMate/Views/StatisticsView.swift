@@ -5,7 +5,13 @@ struct StatisticsView: View {
     @State private var selectedRecord: StudyRecord?
 
     private var gradedRecords: [StudyRecord] {
-        appState.studyRecords.filter { $0.gradingResult != nil }
+        appState.studyRecords
+            .filter { $0.gradingResult != nil }
+            .sorted { $0.question.createdAt < $1.question.createdAt }
+    }
+
+    private var listedGradedRecords: [StudyRecord] {
+        Array(gradedRecords.reversed())
     }
 
     private var scores: [Int] {
@@ -60,10 +66,13 @@ struct StatisticsView: View {
                             StatBox(title: strings.best, value: "\(scores.max() ?? 0)")
                         }
 
+                        DateRangeSummary(records: gradedRecords, strings: strings)
+                            .padding(.bottom, 4)
+
                         DifficultyStatsSection(stats: difficultyStats, strings: strings)
                             .padding(.top, 4)
 
-                        ScoreLineChart(scores: scores)
+                        ScoreLineChart(records: gradedRecords)
                             .frame(height: 160)
                             .padding(.vertical, 8)
 
@@ -72,30 +81,13 @@ struct StatisticsView: View {
                             .fontWeight(.semibold)
                             .padding(.top, 4)
 
-                        ForEach(Array(gradedRecords.enumerated()), id: \.element.id) { index, record in
+                        ForEach(Array(listedGradedRecords.enumerated()), id: \.element.id) { index, record in
                             Button {
                                 selectedRecord = record
                             } label: {
-                                HStack {
-                                    Text("\(index + 1)")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                        .frame(width: 24, alignment: .leading)
-
-                                    Text(record.question.question)
-                                        .lineLimit(1)
-
-                                    Spacer()
-
-                                    Text("\(record.gradingResult?.score ?? 0)")
-                                        .font(.headline)
-                                }
-                                .contentShape(Rectangle())
+                                ScoreRecordRow(index: listedGradedRecords.count - index, record: record, strings: strings)
                             }
                             .buttonStyle(.plain)
-                            .padding(8)
-                            .background(Color.secondary.opacity(0.07))
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
                         }
                     }
                     .padding(.bottom, 16)
@@ -335,8 +327,99 @@ private struct StatBox: View {
     }
 }
 
+private struct DateRangeSummary: View {
+    var records: [StudyRecord]
+    var strings: AppStrings
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Label(strings.period, systemImage: "calendar")
+                .font(.caption)
+                .fontWeight(.semibold)
+                .foregroundStyle(.secondary)
+
+            if let first = records.first?.question.createdAt,
+               let latest = records.last?.question.createdAt {
+                Text("\(strings.firstRecord) \(first, formatter: Self.dateFormatter)")
+                Text("·")
+                    .foregroundStyle(.secondary)
+                Text("\(strings.latestRecord) \(latest, formatter: Self.dateFormatter)")
+            }
+        }
+        .font(.caption)
+        .lineLimit(1)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
+        .background(Color.secondary.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private static let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
+        formatter.timeStyle = .short
+        return formatter
+    }()
+}
+
+private struct ScoreRecordRow: View {
+    var index: Int
+    var record: StudyRecord
+    var strings: AppStrings
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Text("\(index)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(width: 24, alignment: .leading)
+                .padding(.top, 2)
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Text(record.question.createdAt, formatter: Self.dateFormatter)
+                    Text("·")
+                    Text(record.topic.isEmpty ? strings.studyFallback : record.topic)
+                    Text("·")
+                    Text(record.difficulty.displayName(language: strings.language))
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+
+                Text(record.question.question)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 8)
+
+            Text("\(record.gradingResult?.score ?? 0)")
+                .font(.headline)
+        }
+        .contentShape(Rectangle())
+        .padding(9)
+        .background(Color.secondary.opacity(0.07))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.secondary.opacity(0.1), lineWidth: 1)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private static let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
+        formatter.timeStyle = .short
+        return formatter
+    }()
+}
+
 private struct ScoreLineChart: View {
-    var scores: [Int]
+    var records: [StudyRecord]
+
+    private var scores: [Int] {
+        records.compactMap { $0.gradingResult?.score }
+    }
 
     var body: some View {
         GeometryReader { proxy in
@@ -379,6 +462,27 @@ private struct ScoreLineChart: View {
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .padding(8)
+
+                VStack {
+                    Spacer()
+
+                    HStack {
+                        if let first = records.first?.question.createdAt {
+                            Text(first, formatter: Self.axisDateFormatter)
+                        }
+
+                        Spacer()
+
+                        if records.count > 1,
+                           let latest = records.last?.question.createdAt {
+                            Text(latest, formatter: Self.axisDateFormatter)
+                        }
+                    }
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 8)
+                    .padding(.bottom, 6)
+                }
             }
         }
     }
@@ -388,15 +492,23 @@ private struct ScoreLineChart: View {
             return []
         }
 
-        let padding: CGFloat = 18
-        let width = max(size.width - padding * 2, 1)
-        let height = max(size.height - padding * 2, 1)
+        let horizontalPadding: CGFloat = 22
+        let topPadding: CGFloat = 18
+        let bottomPadding: CGFloat = 30
+        let width = max(size.width - horizontalPadding * 2, 1)
+        let height = max(size.height - topPadding - bottomPadding, 1)
         let denominator = max(scores.count - 1, 1)
 
         return scores.enumerated().map { index, score in
-            let x = padding + width * CGFloat(index) / CGFloat(denominator)
-            let y = padding + height * (1 - CGFloat(min(max(score, 0), 100)) / 100)
+            let x = horizontalPadding + width * CGFloat(index) / CGFloat(denominator)
+            let y = topPadding + height * (1 - CGFloat(min(max(score, 0), 100)) / 100)
             return CGPoint(x: x, y: y)
         }
     }
+
+    private static let axisDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "M/d HH:mm"
+        return formatter
+    }()
 }

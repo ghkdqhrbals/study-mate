@@ -339,6 +339,7 @@ private struct StudySettingsSection: View {
 
 private struct RecordsSettingsSection: View {
     @EnvironmentObject private var appState: AppState
+    @State private var showsDeleteConfirmation = false
 
     var body: some View {
         let strings = appState.strings
@@ -371,12 +372,23 @@ private struct RecordsSettingsSection: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
+            Divider()
+
             Button(role: .destructive) {
-                appState.clearStudyRecords()
+                showsDeleteConfirmation = true
             } label: {
                 Label(strings.deleteRecords, systemImage: "trash")
             }
             .disabled(appState.studyRecords.isEmpty)
+
+            Text(strings.deleteRecordsHelp)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .confirmationDialog(strings.deleteRecords, isPresented: $showsDeleteConfirmation) {
+            Button(strings.deleteRecords, role: .destructive) {
+                appState.clearStudyRecords()
+            }
         }
     }
 }

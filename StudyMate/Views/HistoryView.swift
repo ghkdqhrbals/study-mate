@@ -37,13 +37,11 @@ struct HistoryView: View {
 
                 Spacer()
 
-                Button {
-                    appState.clearStudyRecords()
-                    page = 0
-                } label: {
-                    Label(strings.clear, systemImage: "trash")
+                if !appState.studyRecords.isEmpty {
+                    Text(strings.itemCount(appState.studyRecords.count))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
-                .disabled(appState.studyRecords.isEmpty)
             }
 
             if appState.studyRecords.isEmpty {
@@ -54,39 +52,33 @@ struct HistoryView: View {
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                List {
-                    ForEach(visibleRecords) { record in
-                        VStack(alignment: .leading, spacing: 8) {
-                            Button {
-                                selectedRecordID = selectedRecordID == record.id ? nil : record.id
-                            } label: {
-                                HistoryRow(record: record, strings: strings, isSelected: selectedRecordID == record.id)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                            .buttonStyle(.plain)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-
-                            if selectedRecordID == record.id {
-                                InlineStudyRecordDetail(record: record) {
-                                    selectedRecordID = nil
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 10) {
+                        ForEach(visibleRecords) { record in
+                            VStack(alignment: .leading, spacing: 8) {
+                                SwipeToDeleteHistoryRow(
+                                    strings: strings,
+                                    onDelete: {
+                                        delete(record)
+                                    },
+                                    onSelect: {
+                                        selectedRecordID = selectedRecordID == record.id ? nil : record.id
+                                    }
+                                ) {
+                                    HistoryRow(record: record, strings: strings, isSelected: selectedRecordID == record.id)
                                 }
-                                .transition(.opacity.combined(with: .move(edge: .top)))
-                            }
-                        }
-                        .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 10, trailing: 0))
-                        .listRowSeparator(.hidden)
-                        .listRowBackground(Color.clear)
-                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                            Button(role: .destructive) {
-                                delete(record)
-                            } label: {
-                                Label(strings.clear, systemImage: "trash")
+
+                                if selectedRecordID == record.id {
+                                    InlineStudyRecordDetail(record: record) {
+                                        selectedRecordID = nil
+                                    }
+                                    .transition(.opacity.combined(with: .move(edge: .top)))
+                                }
                             }
                         }
                     }
+                    .padding(.bottom, 12)
                 }
-                .listStyle(.plain)
-                .scrollContentBackground(.hidden)
                 .frame(maxHeight: .infinity)
 
                 Divider()
@@ -165,6 +157,90 @@ struct HistoryView: View {
         if selectedRecordID == record.id {
             selectedRecordID = nil
         }
+    }
+}
+
+private struct SwipeToDeleteHistoryRow<Content: View>: View {
+    var strings: AppStrings
+    var onDelete: () -> Void
+    var onSelect: () -> Void
+    var content: () -> Content
+
+    @GestureState private var dragTranslation: CGFloat = 0
+    @State private var restingOffset: CGFloat = 0
+
+    init(
+        strings: AppStrings,
+        onDelete: @escaping () -> Void,
+        onSelect: @escaping () -> Void,
+        @ViewBuilder content: @escaping () -> Content
+    ) {
+        self.strings = strings
+        self.onDelete = onDelete
+        self.onSelect = onSelect
+        self.content = content
+    }
+
+    private let actionWidth: CGFloat = 88
+
+    private var effectiveOffset: CGFloat {
+        min(0, max(-actionWidth, restingOffset + dragTranslation))
+    }
+
+    var body: some View {
+        ZStack(alignment: .trailing) {
+            Button(role: .destructive) {
+                withAnimation(.snappy) {
+                    restingOffset = 0
+                }
+                onDelete()
+            } label: {
+                VStack(spacing: 4) {
+                    Image(systemName: "trash")
+                    Text(strings.clear)
+                        .font(.caption2)
+                }
+                .frame(width: actionWidth)
+                .frame(maxHeight: .infinity)
+                .foregroundStyle(.white)
+                .background(Color.red)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+            }
+            .buttonStyle(.plain)
+
+            content()
+                .offset(x: effectiveOffset)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    if restingOffset < 0 {
+                        withAnimation(.snappy) {
+                            restingOffset = 0
+                        }
+                    } else {
+                        onSelect()
+                    }
+                }
+                .simultaneousGesture(
+                    DragGesture(minimumDistance: 12)
+                        .updating($dragTranslation) { value, state, _ in
+                            guard abs(value.translation.width) > abs(value.translation.height) else {
+                                return
+                            }
+                            state = value.translation.width
+                        }
+                        .onEnded { value in
+                            guard abs(value.translation.width) > abs(value.translation.height) else {
+                                return
+                            }
+
+                            let proposedOffset = restingOffset + value.translation.width
+                            withAnimation(.snappy) {
+                                restingOffset = proposedOffset < -actionWidth * 0.45 ? -actionWidth : 0
+                            }
+                        }
+                )
+        }
+        .clipped()
     }
 }
 
