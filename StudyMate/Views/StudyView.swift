@@ -39,6 +39,13 @@ struct StudyView: View {
                     .disabled(appState.isGeneratingQuestion)
                 }
 
+                StudyOverviewSection(
+                    pendingCount: appState.pendingStudyRecords.count,
+                    latestScore: latestScore,
+                    averageScore: averageScore,
+                    strings: strings
+                )
+
                 Divider()
 
                 if !appState.pendingStudyRecords.isEmpty {
@@ -118,9 +125,25 @@ struct StudyView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(strings.answer)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    HStack(alignment: .firstTextBaseline) {
+                        Text(strings.answer)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+
+                        Text(strings.draftSaved)
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+
+                        Spacer()
+
+                        if !draftAnswer.isEmpty {
+                            Button(strings.clearAnswer) {
+                                draftAnswer = ""
+                            }
+                            .buttonStyle(.borderless)
+                            .font(.caption)
+                        }
+                    }
 
                     AnswerEditor(
                         text: $draftAnswer,
@@ -193,6 +216,78 @@ struct StudyView: View {
             showsHint = false
             draftAnswer = appState.lastAnswer
         }
+    }
+
+    private var gradedRecords: [StudyRecord] {
+        appState.studyRecords.filter { $0.gradingResult != nil }
+    }
+
+    private var latestScore: Int? {
+        gradedRecords.last?.gradingResult?.score
+    }
+
+    private var averageScore: Int? {
+        let scores = gradedRecords.compactMap { $0.gradingResult?.score }
+        guard !scores.isEmpty else {
+            return nil
+        }
+
+        return Int((Double(scores.reduce(0, +)) / Double(scores.count)).rounded())
+    }
+}
+
+private struct StudyOverviewSection: View {
+    var pendingCount: Int
+    var latestScore: Int?
+    var averageScore: Int?
+    var strings: AppStrings
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(strings.studyOverview)
+                .font(.caption)
+                .fontWeight(.semibold)
+                .foregroundStyle(.secondary)
+
+            HStack(spacing: 8) {
+                StudyOverviewMetric(title: strings.pendingShort, value: "\(pendingCount)")
+                StudyOverviewMetric(title: strings.latestScoreShort, value: scoreText(latestScore))
+                StudyOverviewMetric(title: strings.averageScoreShort, value: scoreText(averageScore))
+            }
+        }
+    }
+
+    private func scoreText(_ score: Int?) -> String {
+        guard let score else {
+            return strings.noScoreShort
+        }
+
+        return "\(score)"
+    }
+}
+
+private struct StudyOverviewMetric: View {
+    var title: String
+    var value: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.headline)
+                .monospacedDigit()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 8)
+        .padding(.horizontal, 10)
+        .background(Color.secondary.opacity(0.045))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.secondary.opacity(0.1), lineWidth: 1)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
 

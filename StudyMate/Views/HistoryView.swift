@@ -4,6 +4,7 @@ struct HistoryView: View {
     @EnvironmentObject private var appState: AppState
     @State private var selectedRecordID: String?
     @State private var openSwipeRecordID: String?
+    @State private var searchText = ""
     @State private var page = 0
 
     private let pageSize = 10
@@ -12,20 +13,34 @@ struct HistoryView: View {
         Array(appState.studyRecords.reversed())
     }
 
+    private var filteredRecords: [StudyRecord] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !query.isEmpty else {
+            return orderedRecords
+        }
+
+        return orderedRecords.filter { record in
+            record.question.question.lowercased().contains(query) ||
+                record.topic.lowercased().contains(query) ||
+                (record.answer ?? "").lowercased().contains(query) ||
+                record.difficulty.displayName(language: appState.settings.appLanguage).lowercased().contains(query)
+        }
+    }
+
     private var pageCount: Int {
-        max(Int(ceil(Double(orderedRecords.count) / Double(pageSize))), 1)
+        max(Int(ceil(Double(filteredRecords.count) / Double(pageSize))), 1)
     }
 
     private var visibleRecords: [StudyRecord] {
         let clampedPage = min(max(page, 0), pageCount - 1)
         let start = clampedPage * pageSize
-        let end = min(start + pageSize, orderedRecords.count)
+        let end = min(start + pageSize, filteredRecords.count)
 
         guard start < end else {
             return []
         }
 
-        return Array(orderedRecords[start..<end])
+        return Array(filteredRecords[start..<end])
     }
 
     var body: some View {
@@ -53,96 +68,113 @@ struct HistoryView: View {
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 10) {
-                        ForEach(visibleRecords) { record in
-                            VStack(alignment: .leading, spacing: 8) {
-                                SwipeToDeleteHistoryRow(
-                                    id: record.id,
-                                    strings: strings,
-                                    openRowID: $openSwipeRecordID,
-                                    onDelete: {
-                                        delete(record)
-                                    },
-                                    onSelect: {
-                                        if let openSwipeRecordID, openSwipeRecordID != record.id {
-                                            self.openSwipeRecordID = nil
-                                        } else {
-                                            selectedRecordID = selectedRecordID == record.id ? nil : record.id
-                                        }
-                                    }
-                                ) {
-                                    HistoryRow(record: record, strings: strings, isSelected: selectedRecordID == record.id)
-                                }
+                TextField(strings.searchRecords, text: $searchText)
+                    .textFieldStyle(.roundedBorder)
 
-                                if selectedRecordID == record.id {
-                                    InlineStudyRecordDetail(record: record) {
-                                        selectedRecordID = nil
+                if filteredRecords.isEmpty {
+                    ContentUnavailableView(
+                        strings.noSearchResults,
+                        systemImage: "magnifyingglass",
+                        description: Text(strings.noSearchResultsDescription)
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 10) {
+                            ForEach(visibleRecords) { record in
+                                VStack(alignment: .leading, spacing: 8) {
+                                    SwipeToDeleteHistoryRow(
+                                        id: record.id,
+                                        strings: strings,
+                                        openRowID: $openSwipeRecordID,
+                                        onDelete: {
+                                            delete(record)
+                                        },
+                                        onSelect: {
+                                            if let openSwipeRecordID, openSwipeRecordID != record.id {
+                                                self.openSwipeRecordID = nil
+                                            } else {
+                                                selectedRecordID = selectedRecordID == record.id ? nil : record.id
+                                            }
+                                        }
+                                    ) {
+                                        HistoryRow(record: record, strings: strings, isSelected: selectedRecordID == record.id)
                                     }
-                                    .transition(.opacity.combined(with: .move(edge: .top)))
+
+                                    if selectedRecordID == record.id {
+                                        InlineStudyRecordDetail(record: record) {
+                                            selectedRecordID = nil
+                                        }
+                                        .transition(.opacity.combined(with: .move(edge: .top)))
+                                    }
                                 }
                             }
                         }
+                        .padding(.trailing, 8)
+                        .padding(.bottom, 18)
                     }
-                    .padding(.trailing, 8)
-                    .padding(.bottom, 18)
-                }
-                .frame(maxHeight: .infinity)
-                .background {
-                    Color.clear
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            closeOpenSwipeRow()
+                    .frame(maxHeight: .infinity)
+                    .background {
+                        Color.clear
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                closeOpenSwipeRow()
+                            }
+                    }
+
+                    Divider()
+
+                    HStack {
+                        Button {
+                            page = 0
+                        } label: {
+                            Image(systemName: "backward.end.fill")
                         }
+                        .disabled(page == 0)
+
+                        Button {
+                            page = max(page - 1, 0)
+                        } label: {
+                            Image(systemName: "chevron.left")
+                        }
+                        .disabled(page == 0)
+
+                        Spacer()
+
+                        Text("\(min(page + 1, pageCount)) / \(pageCount)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+
+                        Spacer()
+
+                        Button {
+                            page = min(page + 1, pageCount - 1)
+                        } label: {
+                            Image(systemName: "chevron.right")
+                        }
+                        .disabled(page >= pageCount - 1)
+
+                        Button {
+                            page = pageCount - 1
+                        } label: {
+                            Image(systemName: "forward.end.fill")
+                        }
+                        .disabled(page >= pageCount - 1)
+                    }
+                    .buttonStyle(.borderless)
+                    .padding(.bottom, 6)
                 }
-
-                Divider()
-
-                HStack {
-                    Button {
-                        page = 0
-                    } label: {
-                        Image(systemName: "backward.end.fill")
-                    }
-                    .disabled(page == 0)
-
-                    Button {
-                        page = max(page - 1, 0)
-                    } label: {
-                        Image(systemName: "chevron.left")
-                    }
-                    .disabled(page == 0)
-
-                    Spacer()
-
-                    Text("\(min(page + 1, pageCount)) / \(pageCount)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-
-                    Spacer()
-
-                    Button {
-                        page = min(page + 1, pageCount - 1)
-                    } label: {
-                        Image(systemName: "chevron.right")
-                    }
-                    .disabled(page >= pageCount - 1)
-
-                    Button {
-                        page = pageCount - 1
-                    } label: {
-                        Image(systemName: "forward.end.fill")
-                    }
-                    .disabled(page >= pageCount - 1)
-                }
-                .buttonStyle(.borderless)
-                .padding(.bottom, 6)
             }
         }
         .padding(.top, 10)
         .frame(maxHeight: .infinity, alignment: .top)
         .onChange(of: appState.studyRecords.count) {
             clampPage()
+        }
+        .onChange(of: searchText) {
+            page = 0
+            selectedRecordID = nil
+            openSwipeRecordID = nil
         }
         .onChange(of: appState.focusedRecordRequest) {
             showFocusedRecord()
@@ -162,6 +194,7 @@ struct HistoryView: View {
             return
         }
 
+        searchText = ""
         page = index / pageSize
         selectedRecordID = request.recordID
     }

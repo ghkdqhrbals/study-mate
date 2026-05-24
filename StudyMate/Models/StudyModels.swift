@@ -513,6 +513,13 @@ struct AppStrings {
     var noLogsDescription: String { text("앱 이벤트와 오류가 여기에 표시됩니다.", "App events and errors appear here.") }
 
     var newQuestion: String { text("새 질문", "New Question") }
+    var studyOverview: String { text("학습 현황", "Study Overview") }
+    var pendingShort: String { text("대기", "Pending") }
+    var latestScoreShort: String { text("최근 점수", "Latest") }
+    var averageScoreShort: String { text("평균", "Average") }
+    var noScoreShort: String { text("-", "-") }
+    var draftSaved: String { text("초안 자동 저장됨", "Draft auto-saved") }
+    var clearAnswer: String { text("답변 지우기", "Clear Answer") }
     var pendingQuestions: String { text("미제출 질문", "Pending Questions") }
     func pendingQuestionCount(_ count: Int) -> String { text("\(count)개 대기 중", "\(count) pending") }
     var current: String { text("현재", "Current") }
@@ -532,6 +539,9 @@ struct AppStrings {
     var needsImprovement: String { text("보완 필요", "Needs Work") }
 
     var clear: String { text("삭제", "Delete") }
+    var searchRecords: String { text("기록 검색", "Search records") }
+    var noSearchResults: String { text("검색 결과 없음", "No Results") }
+    var noSearchResultsDescription: String { text("다른 검색어로 기록을 찾아보세요.", "Try another search term.") }
     var noRecords: String { text("기록 없음", "No Records") }
     var noRecordsDescription: String { text("질문을 생성하고 답변을 채점하면 기록이 쌓입니다.", "Records appear after you create questions and grade answers.") }
     var deleteRecordHelp: String { text("기록 삭제", "Delete Record") }
