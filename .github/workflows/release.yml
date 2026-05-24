@@ -150,6 +150,16 @@ jobs:
 
           test -d "${APP_PATH}"
 
+          if [ "${SIGNING_ENABLED}" = "true" ]; then
+            codesign --force \
+              --deep \
+              --options runtime \
+              --sign "Developer ID Application" \
+              --timestamp \
+              "${APP_PATH}"
+            codesign --verify --deep --strict --verbose=2 "${APP_PATH}"
+          fi
+
           rm -rf "${DMG_ROOT}" dist
           mkdir -p "${DMG_ROOT}" dist
 
