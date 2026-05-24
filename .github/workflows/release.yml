@@ -1,0 +1,85 @@
+name: Build Release DMG
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build macOS DMG
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run tests
+        run: |
+          xcodebuild test \
+            -project StudyMate.xcodeproj \
+            -scheme StudyMate \
+            -destination 'platform=macOS' \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Build app archive
+        run: |
+          xcodebuild archive \
+            -project StudyMate.xcodeproj \
+            -scheme StudyMate \
+            -configuration Release \
+            -destination 'generic/platform=macOS' \
+            -derivedDataPath build/DerivedData \
+            -archivePath build/StudyMate.xcarchive \
+            SKIP_INSTALL=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_IDENTITY=""
+
+      - name: Create DMG
+        run: |
+          set -euo pipefail
+
+          VERSION="${GITHUB_REF_NAME#v}"
+          if [ "${VERSION}" = "${GITHUB_REF_NAME}" ]; then
+            VERSION="manual-${GITHUB_RUN_NUMBER}"
+          fi
+
+          APP_PATH="build/StudyMate.xcarchive/Products/Applications/StudyMate.app"
+          DMG_ROOT="build/dmg-root"
+          DMG_PATH="dist/StudyMate-${VERSION}.dmg"
+
+          test -d "${APP_PATH}"
+
+          rm -rf "${DMG_ROOT}" dist
+          mkdir -p "${DMG_ROOT}" dist
+
+          cp -R "${APP_PATH}" "${DMG_ROOT}/"
+          cp scripts/uninstall-studymate.command "${DMG_ROOT}/Uninstall StudyMate.command"
+          chmod +x "${DMG_ROOT}/Uninstall StudyMate.command"
+          ln -s /Applications "${DMG_ROOT}/Applications"
+
+          hdiutil create \
+            -volname "StudyMate" \
+            -srcfolder "${DMG_ROOT}" \
+            -ov \
+            -format UDZO \
+            "${DMG_PATH}"
+
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: StudyMate-DMG
+          path: dist/*.dmg
+          if-no-files-found: error
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.dmg
+          generate_release_notes: true

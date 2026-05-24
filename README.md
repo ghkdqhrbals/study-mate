@@ -42,6 +42,35 @@ The app runs as a menu bar utility and does not show a Dock icon.
 xcodebuild test -project StudyMate.xcodeproj -scheme StudyMate -destination 'platform=macOS,arch=arm64' -derivedDataPath ./DerivedData
 ```
 
+## Release
+
+GitHub Actions builds a DMG when a version tag is pushed.
+
+```sh
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+The release DMG includes:
+
+- `StudyMate.app`
+- `Applications` shortcut
+- `Uninstall StudyMate.command`
+
+Current releases are unsigned. Users may need to approve the app in macOS Privacy & Security after opening it for the first time.
+
+For trusted public distribution without Gatekeeper warnings, the app should be signed with an Apple Developer ID certificate and notarized by Apple.
+
+## Uninstall
+
+Open `Uninstall StudyMate.command` from the DMG, or remove manually:
+
+```sh
+rm -rf /Applications/StudyMate.app
+rm -rf ~/Applications/StudyMate.app
+defaults delete io.github.ghkdqhrbals.StudyMate 2>/dev/null || true
+```
+
 ## Website
 
 GitHub Pages files live in `docs/`.
