@@ -8,6 +8,7 @@ enum StudyNotificationAction {
     static let reply = "STUDY_QUESTION_REPLY"
     static let ignore = "STUDY_QUESTION_IGNORE"
     static let otherAnswer = "STUDY_QUESTION_OTHER_ANSWER"
+    static let questionCreatedAt = "questionCreatedAt"
 }
 
 @MainActor
@@ -35,7 +36,12 @@ final class NotificationService {
         }
     }
 
-    func showQuestionNotification(question: QuestionItem, title: String, language: AppLanguage) async {
+    func showQuestionNotification(
+        question: QuestionItem,
+        title: String,
+        sound: NotificationSoundOption,
+        language: AppLanguage
+    ) async {
         guard await requestAuthorizationIfNeeded(language: language) else {
             return
         }
@@ -43,8 +49,11 @@ final class NotificationService {
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = question.question
-        content.sound = .default
+        content.sound = sound == .defaultSound ? .default : nil
         content.categoryIdentifier = StudyNotificationAction.category
+        content.userInfo = [
+            StudyNotificationAction.questionCreatedAt: question.createdAt.timeIntervalSince1970
+        ]
 
         let request = UNNotificationRequest(
             identifier: "study-question-\(question.createdAt.timeIntervalSince1970)",
@@ -107,7 +116,7 @@ final class StudyNotificationDelegate: NSObject, UNUserNotificationCenterDelegat
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification
     ) async -> UNNotificationPresentationOptions {
-        [.banner, .sound]
+        notification.request.content.sound == nil ? [.banner] : [.banner, .sound]
     }
 
     func userNotificationCenter(
@@ -116,12 +125,17 @@ final class StudyNotificationDelegate: NSObject, UNUserNotificationCenterDelegat
     ) async {
         let actionIdentifier = response.actionIdentifier
         let replyText = (response as? UNTextInputNotificationResponse)?.userText
+        let questionCreatedAt = Self.questionCreatedAt(from: response.notification.request.content.userInfo)
 
-        await StudyNotificationDelegate.shared.handle(actionIdentifier: actionIdentifier, replyText: replyText)
+        await StudyNotificationDelegate.shared.handle(
+            actionIdentifier: actionIdentifier,
+            questionCreatedAt: questionCreatedAt,
+            replyText: replyText
+        )
     }
 
     @MainActor
-    func handle(actionIdentifier: String, replyText: String?) {
+    func handle(actionIdentifier: String, questionCreatedAt: TimeInterval?, replyText: String?) {
         guard let appState else {
             return
         }
@@ -131,23 +145,36 @@ final class StudyNotificationDelegate: NSObject, UNUserNotificationCenterDelegat
             appState.statusMessage = "질문을 무시했습니다."
 
         case StudyNotificationAction.reply:
-            if let replyText {
-                appState.updateAnswer(replyText)
-                appState.statusMessage = "알림 답장을 입력했습니다. 채점 받기를 눌러 확인하세요."
-            }
+            appState.openRecordFromNotification(questionCreatedAt: questionCreatedAt, replyText: replyText)
             StudyWindowPresenter.shared.show(appState: appState)
 
         case StudyNotificationAction.otherAnswer:
+            appState.openRecordFromNotification(questionCreatedAt: questionCreatedAt)
             appState.statusMessage = "다른 응답을 입력하세요."
             StudyWindowPresenter.shared.show(appState: appState)
 
         case UNNotificationDefaultActionIdentifier:
-            appState.statusMessage = "알림에서 열린 질문입니다."
+            appState.openRecordFromNotification(questionCreatedAt: questionCreatedAt)
             StudyWindowPresenter.shared.show(appState: appState)
 
         default:
+            appState.openRecordFromNotification(questionCreatedAt: questionCreatedAt)
             StudyWindowPresenter.shared.show(appState: appState)
         }
+    }
+
+    nonisolated private static func questionCreatedAt(from userInfo: [AnyHashable: Any]) -> TimeInterval? {
+        let value = userInfo[StudyNotificationAction.questionCreatedAt]
+
+        if let timeInterval = value as? TimeInterval {
+            return timeInterval
+        }
+
+        if let number = value as? NSNumber {
+            return number.doubleValue
+        }
+
+        return nil
     }
 }
 

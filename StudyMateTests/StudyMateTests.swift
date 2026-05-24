@@ -16,6 +16,7 @@ final class StudyMateTests: XCTestCase {
             appLanguage: .english,
             language: .english,
             openAIModel: "gpt-5.4",
+            notificationSound: .none,
             customPrompt: "면접처럼 질문해줘.",
             intervalMinutes: 7
         )
@@ -48,6 +49,7 @@ final class StudyMateTests: XCTestCase {
         XCTAssertEqual(store.loadSettings().appLanguage, .korean)
         XCTAssertEqual(store.loadSettings().language, .korean)
         XCTAssertEqual(store.loadSettings().openAIModel, StudySettings.defaultOpenAIModel)
+        XCTAssertEqual(store.loadSettings().notificationSound, .defaultSound)
     }
 
     func testAppLanguageControlsStudyLanguageOnSave() {
@@ -326,6 +328,44 @@ final class StudyMateTests: XCTestCase {
         XCTAssertEqual(history.count, 20)
         XCTAssertEqual(history.first?.question, "Question 3")
         XCTAssertEqual(history.last?.question, "  QUESTION   22  ")
+    }
+
+    @MainActor
+    func testNotificationReplyFocusesMatchingStudyRecord() {
+        let suiteName = "StudyMateTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = SettingsStore(defaults: defaults)
+        let settings = StudySettings(
+            topic: "Swift",
+            difficulty: .beginner,
+            customPrompt: "짧게",
+            intervalMinutes: 15
+        )
+        let question = QuestionItem(
+            question: "actor는 어떤 문제를 해결하나요?",
+            expectedAnswerHint: nil,
+            createdAt: Date()
+        )
+        store.appendStudyRecord(question: question, settings: settings)
+        let record = store.loadStudyRecords()[0]
+        let appState = AppState(settingsStore: store, openAIClient: SpyOpenAIClient())
+
+        appState.openRecordFromNotification(
+            questionCreatedAt: question.createdAt.timeIntervalSince1970,
+            replyText: "공유 상태 경쟁을 막습니다."
+        )
+
+        let updatedRecord = store.loadStudyRecords()[0]
+        XCTAssertEqual(appState.selectedTab, .records)
+        XCTAssertEqual(appState.focusedRecordRequest?.recordID, record.id)
+        XCTAssertEqual(appState.currentQuestion?.question, question.question)
+        XCTAssertEqual(appState.lastAnswer, "공유 상태 경쟁을 막습니다.")
+        XCTAssertEqual(updatedRecord.answer, "공유 상태 경쟁을 막습니다.")
+        XCTAssertNil(updatedRecord.gradingResult)
     }
 
     func testQuestionPromptIncludesRecentQuestionsToAvoid() {

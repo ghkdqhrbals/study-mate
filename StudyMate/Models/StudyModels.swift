@@ -97,6 +97,38 @@ enum AppLanguage: String, CaseIterable, Codable, Identifiable {
     }
 }
 
+enum NotificationSoundOption: String, CaseIterable, Codable, Identifiable {
+    case defaultSound
+    case none
+
+    var id: String { rawValue }
+
+    func displayName(language: AppLanguage) -> String {
+        switch (self, language) {
+        case (.defaultSound, .korean):
+            "기본음"
+        case (.defaultSound, .english):
+            "Default"
+        case (.none, .korean):
+            "없음"
+        case (.none, .english):
+            "None"
+        }
+    }
+}
+
+enum AppTab: Int, Hashable {
+    case study
+    case settings
+    case records
+    case statistics
+}
+
+struct FocusedRecordRequest: Equatable {
+    var token = UUID()
+    var recordID: String
+}
+
 extension AppLanguage {
     var studyLanguage: StudyLanguage {
         switch self {
@@ -116,6 +148,7 @@ struct StudySettings: Codable, Equatable {
     var appLanguage: AppLanguage
     var language: StudyLanguage
     var openAIModel: String
+    var notificationSound: NotificationSoundOption
     var customPrompt: String
     var intervalMinutes: Int
     var maxHistoryCount: Int
@@ -126,6 +159,7 @@ struct StudySettings: Codable, Equatable {
         appLanguage: AppLanguage = .korean,
         language: StudyLanguage = .korean,
         openAIModel: String = StudySettings.defaultOpenAIModel,
+        notificationSound: NotificationSoundOption = .defaultSound,
         customPrompt: String,
         intervalMinutes: Int,
         maxHistoryCount: Int = 100
@@ -135,6 +169,7 @@ struct StudySettings: Codable, Equatable {
         self.appLanguage = appLanguage
         self.language = language
         self.openAIModel = openAIModel
+        self.notificationSound = notificationSound
         self.customPrompt = customPrompt
         self.intervalMinutes = intervalMinutes
         self.maxHistoryCount = maxHistoryCount
@@ -146,6 +181,7 @@ struct StudySettings: Codable, Equatable {
         case appLanguage
         case language
         case openAIModel
+        case notificationSound
         case customPrompt
         case intervalMinutes
         case maxHistoryCount
@@ -158,6 +194,7 @@ struct StudySettings: Codable, Equatable {
         appLanguage = try container.decodeIfPresent(AppLanguage.self, forKey: .appLanguage) ?? .korean
         language = try container.decodeIfPresent(StudyLanguage.self, forKey: .language) ?? .korean
         openAIModel = try container.decodeIfPresent(String.self, forKey: .openAIModel) ?? Self.defaultOpenAIModel
+        notificationSound = try container.decodeIfPresent(NotificationSoundOption.self, forKey: .notificationSound) ?? .defaultSound
         customPrompt = try container.decode(String.self, forKey: .customPrompt)
         intervalMinutes = try container.decode(Int.self, forKey: .intervalMinutes)
         maxHistoryCount = try container.decodeIfPresent(Int.self, forKey: .maxHistoryCount) ?? 100
@@ -375,6 +412,8 @@ struct AppStrings {
 
     var generalSettings: String { text("일반", "General") }
     var appLanguageHelp: String { text("앱 언어를 바꾸면 학습 언어도 같은 언어로 설정됩니다.", "Changing the app language also sets the study language to match.") }
+    var notificationSound: String { text("알림음", "Notification sound") }
+    var notificationSoundHelp: String { text("질문 알림을 받을 때 소리를 낼지 선택합니다.", "Choose whether question notifications play a sound.") }
     var studySettings: String { text("학습 설정", "Study Settings") }
     var appLanguage: String { text("앱 언어", "App language") }
     var studyTopic: String { text("공부할 주제", "Study topic") }

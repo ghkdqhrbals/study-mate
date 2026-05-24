@@ -37,6 +37,7 @@ final class SettingsStore {
             appLanguage: settings.appLanguage,
             language: settings.appLanguage.studyLanguage,
             openAIModel: settings.sanitizedOpenAIModel,
+            notificationSound: settings.notificationSound,
             customPrompt: settings.customPrompt,
             intervalMinutes: settings.sanitizedIntervalMinutes,
             maxHistoryCount: settings.sanitizedMaxHistoryCount
@@ -50,6 +51,7 @@ final class SettingsStore {
             appLanguage: settings.appLanguage,
             language: settings.appLanguage.studyLanguage,
             openAIModel: settings.sanitizedOpenAIModel,
+            notificationSound: settings.notificationSound,
             customPrompt: settings.customPrompt,
             intervalMinutes: settings.sanitizedIntervalMinutes,
             maxHistoryCount: settings.sanitizedMaxHistoryCount
@@ -140,6 +142,27 @@ final class SettingsStore {
                 topic: "",
                 difficulty: .beginner,
                 answeredAt: Date()
+            ))
+        }
+
+        saveStudyRecords(records)
+    }
+
+    func updateStudyRecordAnswer(question: QuestionItem, answer: String) {
+        var records = loadStudyRecords()
+        let normalizedQuestion = Self.normalizedQuestionText(question.question)
+
+        if let index = records.lastIndex(where: {
+            $0.question.createdAt == question.createdAt ||
+                Self.normalizedQuestionText($0.question.question) == normalizedQuestion
+        }) {
+            records[index].answer = answer
+        } else {
+            records.append(StudyRecord(
+                question: question,
+                answer: answer,
+                topic: "",
+                difficulty: .beginner
             ))
         }
 

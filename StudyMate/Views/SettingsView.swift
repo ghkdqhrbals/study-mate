@@ -178,6 +178,19 @@ private struct GeneralSettingsSection: View {
 
             Divider()
 
+            Picker(strings.notificationSound, selection: $appState.settings.notificationSound) {
+                ForEach(NotificationSoundOption.allCases) { sound in
+                    Text(sound.displayName(language: appState.settings.appLanguage)).tag(sound)
+                }
+            }
+            .pickerStyle(.menu)
+
+            Text(strings.notificationSoundHelp)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Divider()
+
             Toggle(
                 strings.debuggingMode,
                 isOn: Binding(

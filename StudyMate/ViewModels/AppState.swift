@@ -17,6 +17,8 @@ final class AppState: ObservableObject {
     @Published var isDebuggingEnabled: Bool
     @Published var statusMessage: String?
     @Published var errorMessage: String?
+    @Published var selectedTab: AppTab = .study
+    @Published var focusedRecordRequest: FocusedRecordRequest?
 
     private let settingsStore: SettingsStore
     private let openAIClient: OpenAIClientProtocol
@@ -265,6 +267,7 @@ final class AppState: ObservableObject {
             await notificationService.showQuestionNotification(
                 question: question,
                 title: strings.notificationTitle,
+                sound: settings.notificationSound,
                 language: settings.appLanguage
             )
         } catch {
@@ -406,6 +409,31 @@ final class AppState: ObservableObject {
         settingsStore.saveLastAnswer(answer)
     }
 
+    func openRecordFromNotification(questionCreatedAt: TimeInterval?, replyText: String? = nil) {
+        studyRecords = settingsStore.loadStudyRecords()
+
+        let record = recordMatching(questionCreatedAt: questionCreatedAt) ?? studyRecords.last
+        guard let record else {
+            selectedTab = .records
+            statusMessage = "알림에서 열린 질문입니다."
+            return
+        }
+
+        let trimmedReply = replyText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !trimmedReply.isEmpty {
+            settingsStore.updateStudyRecordAnswer(question: record.question, answer: trimmedReply)
+            updateAnswer(trimmedReply)
+        }
+
+        studyRecords = settingsStore.loadStudyRecords()
+        let refreshedRecord = recordMatching(questionCreatedAt: questionCreatedAt) ?? record
+        currentQuestion = refreshedRecord.question
+        settingsStore.saveQuestion(refreshedRecord.question)
+        selectedTab = .records
+        focusedRecordRequest = FocusedRecordRequest(recordID: refreshedRecord.id)
+        statusMessage = trimmedReply.isEmpty ? "알림에서 열린 질문입니다." : "알림 답장을 기록에 저장했습니다."
+    }
+
     func clearStatus() {
         statusMessage = nil
         errorMessage = nil
@@ -504,10 +532,21 @@ final class AppState: ObservableObject {
             appLanguage: settings.appLanguage,
             language: settings.appLanguage.studyLanguage,
             openAIModel: settings.sanitizedOpenAIModel,
+            notificationSound: settings.notificationSound,
             customPrompt: settings.customPrompt,
             intervalMinutes: settings.sanitizedIntervalMinutes,
             maxHistoryCount: settings.sanitizedMaxHistoryCount
         )
+    }
+
+    private func recordMatching(questionCreatedAt: TimeInterval?) -> StudyRecord? {
+        guard let questionCreatedAt else {
+            return nil
+        }
+
+        return studyRecords.last {
+            abs($0.question.createdAt.timeIntervalSince1970 - questionCreatedAt) < 0.001
+        }
     }
 
     nonisolated private static func isAPIKeyError(_ error: Error) -> Bool {

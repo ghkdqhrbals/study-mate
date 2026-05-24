@@ -2,7 +2,7 @@ import SwiftUI
 
 struct HistoryView: View {
     @EnvironmentObject private var appState: AppState
-    @State private var selectedRecord: StudyRecord?
+    @State private var selectedRecordID: String?
     @State private var page = 0
 
     private let pageSize = 10
@@ -57,27 +57,36 @@ struct HistoryView: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 10) {
                         ForEach(visibleRecords) { record in
-                            HStack(alignment: .top, spacing: 8) {
-                                Button {
-                                    selectedRecord = record
-                                } label: {
-                                    HistoryRow(record: record, strings: strings)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                }
-                                .buttonStyle(.plain)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-
-                                Button(role: .destructive) {
-                                    appState.deleteStudyRecord(record)
-                                    clampPage()
-                                    if selectedRecord?.id == record.id {
-                                        selectedRecord = nil
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack(alignment: .top, spacing: 8) {
+                                    Button {
+                                        selectedRecordID = selectedRecordID == record.id ? nil : record.id
+                                    } label: {
+                                        HistoryRow(record: record, strings: strings, isSelected: selectedRecordID == record.id)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
                                     }
-                                } label: {
-                                    Image(systemName: "trash")
+                                    .buttonStyle(.plain)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                                    Button(role: .destructive) {
+                                        appState.deleteStudyRecord(record)
+                                        clampPage()
+                                        if selectedRecordID == record.id {
+                                            selectedRecordID = nil
+                                        }
+                                    } label: {
+                                        Image(systemName: "trash")
+                                    }
+                                    .buttonStyle(.borderless)
+                                    .help(strings.deleteRecordHelp)
                                 }
-                                .buttonStyle(.borderless)
-                                .help(strings.deleteRecordHelp)
+
+                                if selectedRecordID == record.id {
+                                    InlineStudyRecordDetail(record: record) {
+                                        selectedRecordID = nil
+                                    }
+                                    .transition(.opacity.combined(with: .move(edge: .top)))
+                                }
                             }
                         }
                     }
@@ -133,22 +142,33 @@ struct HistoryView: View {
         .onChange(of: appState.studyRecords.count) {
             clampPage()
         }
-        .popover(item: $selectedRecord, arrowEdge: .trailing) { record in
-            StudyRecordDetailView(record: record)
-                .frame(width: 420)
-                .frame(minHeight: 360)
-                .padding()
+        .onChange(of: appState.focusedRecordRequest) {
+            showFocusedRecord()
+        }
+        .onAppear {
+            showFocusedRecord()
         }
     }
 
     private func clampPage() {
         page = min(max(page, 0), pageCount - 1)
     }
+
+    private func showFocusedRecord() {
+        guard let request = appState.focusedRecordRequest,
+              let index = orderedRecords.firstIndex(where: { $0.id == request.recordID }) else {
+            return
+        }
+
+        page = index / pageSize
+        selectedRecordID = request.recordID
+    }
 }
 
 private struct HistoryRow: View {
     var record: StudyRecord
     var strings: AppStrings
+    var isSelected: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -195,7 +215,11 @@ private struct HistoryRow: View {
             }
         }
         .padding(12)
-        .background(Color.secondary.opacity(0.08))
+        .background(isSelected ? Color.accentColor.opacity(0.12) : Color.secondary.opacity(0.08))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(isSelected ? Color.accentColor.opacity(0.45) : Color.clear, lineWidth: 1)
+        }
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
@@ -216,4 +240,52 @@ private struct HistoryRow: View {
         formatter.timeStyle = .short
         return formatter
     }()
+}
+
+private struct InlineStudyRecordDetail: View {
+    var record: StudyRecord
+    var onClose: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Spacer()
+
+                Button(action: onClose) {
+                    Image(systemName: "xmark")
+                        .font(.caption)
+                }
+                .buttonStyle(.borderless)
+            }
+
+            StudyRecordDetailView(record: record)
+                .frame(minHeight: 320)
+        }
+        .padding(12)
+        .background {
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color(nsColor: .controlBackgroundColor))
+        }
+        .overlay(alignment: .topLeading) {
+            Triangle()
+                .fill(Color(nsColor: .controlBackgroundColor))
+                .frame(width: 14, height: 8)
+                .offset(x: 22, y: -7)
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.secondary.opacity(0.18), lineWidth: 1)
+        }
+    }
+}
+
+private struct Triangle: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.midX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.closeSubpath()
+        return path
+    }
 }

@@ -2,38 +2,37 @@ import SwiftUI
 
 struct RootView: View {
     @EnvironmentObject private var appState: AppState
-    @State private var selectedTab = 0
 
     var body: some View {
         let strings = appState.strings
 
-        TabView(selection: $selectedTab) {
+        TabView(selection: $appState.selectedTab) {
             StudyView()
                 .contentPadding()
                 .tabItem {
                     Label(strings.tabStudy, systemImage: "book.fill")
                 }
-                .tag(0)
+                .tag(AppTab.study)
 
             SettingsView()
                 .tabItem {
                     Label(strings.tabSettings, systemImage: "gearshape.fill")
                 }
-                .tag(1)
+                .tag(AppTab.settings)
 
             HistoryView()
                 .contentPadding()
                 .tabItem {
                     Label(strings.tabRecords, systemImage: "clock.arrow.circlepath")
                 }
-                .tag(2)
+                .tag(AppTab.records)
 
             StatisticsView()
                 .contentPadding()
                 .tabItem {
                     Label(strings.tabStatistics, systemImage: "chart.xyaxis.line")
                 }
-                .tag(3)
+                .tag(AppTab.statistics)
         }
         .frame(maxHeight: .infinity)
     }
