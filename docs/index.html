@@ -3,27 +3,26 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="StudyMate는 OpenAI API 키만 있으면 사용할 수 있는 무료 macOS 메뉴바 AI 튜터입니다.">
+  <meta name="description" content="StudyMate는 OpenAI API 키로 사용하는 무료 macOS 메뉴바 AI 튜터입니다.">
   <link rel="icon" href="assets/studymate-icon.svg" type="image/svg+xml">
   <link rel="alternate" hreflang="ko" href="https://ghkdqhrbals.github.io/study-mate/">
   <link rel="alternate" hreflang="en" href="https://ghkdqhrbals.github.io/study-mate/en/">
-  <title>StudyMate - 무료 AI 튜터</title>
+  <title>StudyMate</title>
   <style>
     :root {
       color-scheme: light dark;
-      --bg: #f7f7f4;
+      --bg: #fafafa;
       --fg: #1f2328;
-      --muted: #63686f;
+      --muted: #6b7280;
       --line: rgba(31, 35, 40, 0.14);
-      --accent: #4c8bf5;
     }
 
     @media (prefers-color-scheme: dark) {
       :root {
-        --bg: #171817;
-        --fg: #f4f4f0;
-        --muted: #a7aaa4;
-        --line: rgba(255, 255, 255, 0.15);
+        --bg: #141414;
+        --fg: #f5f5f5;
+        --muted: #a1a1aa;
+        --line: rgba(255, 255, 255, 0.14);
       }
     }
 
@@ -36,197 +35,178 @@
       background: var(--bg);
       color: var(--fg);
       font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
-      line-height: 1.5;
+      line-height: 1.55;
     }
 
     a {
       color: inherit;
+      text-decoration: none;
     }
 
-    .page {
-      width: min(640px, calc(100vw - 36px));
+    main {
+      width: min(680px, calc(100vw - 40px));
       margin: 0 auto;
-      padding: 56px 0 34px;
+      padding: 56px 0 40px;
+    }
+
+    nav {
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    nav strong {
+      color: var(--fg);
+    }
+
+    header {
+      padding: 72px 0 48px;
       text-align: center;
     }
 
-    .icon {
-      display: block;
-      width: 112px;
-      height: 112px;
-      margin: 0 auto 26px;
-      border-radius: 24px;
-    }
-
-    .language-switch {
-      display: inline-flex;
-      align-items: center;
-      gap: 10px;
-      margin: 0 0 22px;
-      color: var(--muted);
-      font-size: 13px;
-      font-weight: 700;
-    }
-
-    .language-switch a {
-      color: var(--fg);
-      text-decoration: none;
+    img {
+      width: 88px;
+      height: 88px;
+      margin-bottom: 22px;
+      border-radius: 20px;
     }
 
     h1 {
       margin: 0;
-      font-size: 54px;
+      font-size: 48px;
       line-height: 1.05;
       letter-spacing: 0;
     }
 
-    .tagline {
-      margin: 14px auto 0;
+    .lead {
       max-width: 560px;
+      margin: 16px auto 0;
       color: var(--muted);
-      font-size: 20px;
+      font-size: 19px;
     }
 
     .actions {
       display: flex;
       justify-content: center;
       gap: 10px;
-      margin: 28px 0 0;
+      margin-top: 28px;
     }
 
     .button {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 44px;
-      padding: 10px 18px;
+      min-height: 42px;
+      padding: 10px 16px;
       border: 1px solid var(--line);
       border-radius: 8px;
-      color: var(--fg);
-      font-size: 15px;
       font-weight: 700;
-      text-decoration: none;
     }
 
     .button.primary {
-      border-color: transparent;
-      background: var(--accent);
-      color: #fff;
+      background: var(--fg);
+      color: var(--bg);
+      border-color: var(--fg);
     }
 
-    .subtext {
-      margin: 12px 0 0;
+    .note {
+      margin-top: 12px;
       color: var(--muted);
       font-size: 13px;
     }
 
-    .features {
-      margin: 46px 0 0;
-      padding: 0;
+    section {
       border-top: 1px solid var(--line);
-      color: var(--muted);
+      padding: 24px 0;
+    }
+
+    h2 {
+      margin: 0 0 10px;
       font-size: 16px;
-      list-style: none;
-      text-align: left;
     }
 
-    .features li {
-      padding: 14px 0;
-      border-bottom: 1px solid var(--line);
-    }
-
-    .features strong {
-      color: var(--fg);
-    }
-
-    .hello {
-      margin: 34px 0 0;
-      padding: 24px 0 0;
-      border-top: 1px solid var(--line);
-      text-align: left;
-    }
-
-    .hello-title {
-      margin: 0 0 8px;
-      color: var(--fg);
-      font-size: 17px;
-      font-weight: 800;
-    }
-
-    .hello p {
+    p {
       margin: 0;
       color: var(--muted);
-      font-size: 16px;
+    }
+
+    ul {
+      display: grid;
+      gap: 10px;
+      margin: 0;
+      padding: 0;
+      color: var(--muted);
+      list-style: none;
+    }
+
+    li::before {
+      content: "- ";
     }
 
     footer {
-      margin-top: 38px;
+      border-top: 1px solid var(--line);
+      padding-top: 20px;
       color: var(--muted);
       font-size: 13px;
     }
 
-    footer a {
-      font-weight: 700;
-      text-decoration: none;
-    }
-
-    .copyright {
-      margin: 8px 0 0;
-      color: var(--muted);
-      font-size: 11px;
-      opacity: 0.78;
-    }
-
-    @media (max-width: 480px) {
-      .page {
-        padding-top: 40px;
+    @media (max-width: 520px) {
+      header {
+        padding-top: 52px;
       }
 
       h1 {
-        font-size: 42px;
+        font-size: 40px;
       }
 
-      .tagline {
-        font-size: 18px;
+      .lead {
+        font-size: 17px;
       }
 
       .actions {
         flex-direction: column;
       }
+
+      .button {
+        display: block;
+        text-align: center;
+      }
     }
   </style>
 </head>
 <body>
-  <main class="page">
-    <nav class="language-switch" aria-label="Language">
-      <span>한국어</span>
+  <main>
+    <nav aria-label="Language">
+      <strong>한국어</strong>
       <a href="en/" lang="en">English</a>
     </nav>
-    <img class="icon" src="assets/studymate-icon.svg" alt="StudyMate app icon" width="112" height="112">
-    <h1>StudyMate</h1>
-    <p class="tagline">AI 시대에도 좋은 산출물은 스스로 가진 지식에서 시작됩니다. StudyMate는 그 지식을 조금씩 쌓게 도와주는 무료 macOS 메뉴바 AI 튜터입니다.</p>
 
-    <div class="actions">
-      <a class="button primary" href="https://github.com/ghkdqhrbals/study-mate">Source Code</a>
-      <a class="button" href="https://github.com/ghkdqhrbals/study-mate/releases">Releases</a>
-    </div>
-    <p class="subtext">소프트웨어는 완전 무료입니다. 사용하려면 본인의 OpenAI API key만 설정하면 됩니다.</p>
+    <header>
+      <img src="assets/studymate-icon.svg" alt="StudyMate icon" width="88" height="88">
+      <h1>StudyMate</h1>
+      <p class="lead">AI 시대에도 좋은 결과물은 내가 가진 지식에서 시작됩니다. StudyMate는 그 지식을 매일 조금씩 쌓도록 돕는 무료 macOS 메뉴바 AI 튜터입니다.</p>
+      <div class="actions">
+        <a class="button primary" href="https://github.com/ghkdqhrbals/study-mate">GitHub</a>
+        <a class="button" href="https://github.com/ghkdqhrbals/study-mate/releases">Download</a>
+      </div>
+      <p class="note">앱은 무료입니다. 사용하려면 본인의 OpenAI API key가 필요합니다.</p>
+    </header>
 
-    <ul class="features" aria-label="Features">
-      <li><strong>메뉴바에서</strong> 조용히 실행되는 AI 선생님.</li>
-      <li><strong>주제와 난이도</strong>를 정하면 주기적으로 질문합니다.</li>
-      <li><strong>답변 후 채점</strong>으로 내가 아는지 바로 확인합니다.</li>
-      <li><strong>무료 오픈 소스</strong>로 사용할 수 있고, API 비용은 사용자의 OpenAI 계정에서 처리됩니다.</li>
-    </ul>
+    <section>
+      <h2>무엇을 하나요</h2>
+      <ul>
+        <li>원하는 주제와 난이도로 질문을 받습니다.</li>
+        <li>답변하면 AI가 점수, 피드백, 해설을 제공합니다.</li>
+        <li>기록과 통계로 내가 얼마나 알고 있는지 확인합니다.</li>
+      </ul>
+    </section>
 
-    <section class="hello" aria-label="Greeting">
-      <h2 class="hello-title">안녕하세요.</h2>
-      <p>평소에 AI를 계속 쓰다 보니, 결국 잘 아는 만큼 질문이 선명해지고 결과물의 해상도도 높아진다는 걸 느꼈습니다. 그 경험을 다 같이 나누고 싶어서 StudyMate를 만들었습니다.</p>
+    <section>
+      <h2>만든 이유</h2>
+      <p>AI를 계속 쓰다 보니, 내가 잘 아는 만큼 질문이 선명해지고 결과물의 해상도도 높아진다는 걸 느꼈습니다. 그 감각을 더 쉽게 유지하고 나누고 싶어서 만들었습니다.</p>
     </section>
 
     <footer>
-      <a href="https://github.com/ghkdqhrbals/study-mate">GitHub</a>
-      <p class="copyright">Made by ghkdqhrbals · Free to use.</p>
+      무료 오픈 소스입니다. API 사용량은 본인의 OpenAI 계정으로 청구됩니다.
     </footer>
   </main>
 </body>

@@ -1,25 +1,56 @@
 # StudyMate
 
-macOS menu bar AI teacher app built with SwiftUI.
+StudyMate is a free macOS menu bar AI tutor.
+
+It quietly stays in the menu bar, asks study questions on a schedule, and grades your answers with feedback. The app is free to use, but you need your own OpenAI API key.
+
+## Why
+
+AI is more useful when you know the subject yourself. Better knowledge leads to sharper questions, better judgment, and better output.
+
+StudyMate was built to help you keep that knowledge fresh through small, repeated questions.
 
 ## Features
 
-- Menu bar app using `MenuBarExtra`
-- App/study language, study topic, difficulty, prompt, question interval, and OpenAI model settings
-- OpenAI Responses API integration with configurable model ID
-- OpenAI API key storage in app settings
-- Scheduled question generation while the app is running
-- macOS notifications for generated questions
+- Menu bar app built with SwiftUI
+- Scheduled study questions by topic, difficulty, and interval
 - Answer grading with score, feedback, and explanation
+- Pending questions, history, and statistics
+- Korean and English app language support
+- macOS notifications with configurable sound
+- OpenAI Responses API integration
+
+## Requirements
+
+- macOS 14 or later
+- Xcode 16 or later
+- OpenAI API key
 
 ## Run
 
-Open `StudyMate.xcodeproj` in Xcode, select the `StudyMate` scheme, and run on My Mac.
+1. Open `StudyMate.xcodeproj` in Xcode.
+2. Select the `StudyMate` scheme.
+3. Run on `My Mac`.
+4. Click the StudyMate icon in the macOS menu bar.
+5. Open settings and enter your OpenAI API key.
 
-The app runs as a menu bar utility, so it does not show a Dock icon. Click the graduation cap icon in the macOS menu bar, open Settings, enter your OpenAI API key, then save.
+The app runs as a menu bar utility and does not show a Dock icon.
 
 ## Test
 
 ```sh
 xcodebuild test -project StudyMate.xcodeproj -scheme StudyMate -destination 'platform=macOS,arch=arm64' -derivedDataPath ./DerivedData
 ```
+
+## Website
+
+GitHub Pages files live in `docs/`.
+
+- Korean: `docs/index.html`
+- English: `docs/en/index.html`
+
+## Notes
+
+- StudyMate only generates scheduled questions while the app is running.
+- The app stores settings locally.
+- OpenAI API usage is billed through your own OpenAI account.
