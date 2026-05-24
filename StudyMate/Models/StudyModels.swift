@@ -418,7 +418,7 @@ struct AppStrings {
     }
 
     var invalidAPIKey: String { text("API 키가 잘못되었습니다", "Invalid API key") }
-    var notificationTitle: String { text("AI 선생님 질문", "AI Teacher Question") }
+    var notificationTitle: String { "StudyMate" }
     var reply: String { text("답장", "Reply") }
     var send: String { text("보내기", "Send") }
     var answerPlaceholder: String { text("답변 입력", "Enter answer") }
@@ -428,7 +428,7 @@ struct AppStrings {
     var aboutStudyMate: String { text("StudyMate 정보", "About StudyMate") }
     func timerTitle(minutes: Int) -> String { text("타이머: \(minutes)분", "Timer: \(minutes) min") }
     func minuteLabel(_ minutes: Int) -> String { text("\(minutes)분", "\(minutes) min") }
-    var languageMenu: String { text("앱 언어", "App Language") }
+    var languageMenu: String { "Language" }
     var pause: String { text("일시정지", "Pause") }
     var resume: String { text("재개", "Resume") }
     var quit: String { text("StudyMate 종료", "Quit StudyMate") }
@@ -459,7 +459,7 @@ struct AppStrings {
     var apiKeyStorageHelp: String { text("API 키는 앱 설정에 저장됩니다.", "The API key is stored in app settings.") }
 
     var generalSettings: String { text("일반", "General") }
-    var appLanguageHelp: String { text("앱 언어를 바꾸면 학습 언어도 같은 언어로 설정됩니다.", "Changing the app language also sets the study language to match.") }
+    var appLanguageHelp: String { text("언어를 바꾸면 학습 언어도 같은 언어로 설정됩니다.", "Changing Language also sets the study language to match.") }
     var notifications: String { text("알림", "Notifications") }
     var notificationPermissionHelp: String {
         text("macOS 설정에서 StudyMate 알림과 사운드 허용 여부를 직접 확인하세요.", "Check StudyMate notification and sound permissions directly in macOS Settings.")
@@ -468,7 +468,7 @@ struct AppStrings {
     var notificationSound: String { text("알림음", "Notification sound") }
     var notificationSoundHelp: String { text("질문 알림을 받을 때 소리를 낼지 선택합니다.", "Choose whether question notifications play a sound.") }
     var studySettings: String { text("학습 설정", "Study Settings") }
-    var appLanguage: String { text("앱 언어", "App language") }
+    var appLanguage: String { "Language" }
     var studyTopic: String { text("공부할 주제", "Study topic") }
     var difficulty: String { text("난이도", "Difficulty") }
     func questionInterval(minutes: Int) -> String { text("질문 간격: \(minutes)분", "Question interval: \(minutes) min") }

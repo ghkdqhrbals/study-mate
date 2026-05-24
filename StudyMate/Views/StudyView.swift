@@ -166,7 +166,7 @@ private struct PendingQuestionsSection: View {
     var onSelect: (StudyRecord) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
                 Text(strings.pendingQuestions)
                     .font(.subheadline)
@@ -211,52 +211,41 @@ private struct PendingQuestionRow: View {
     var isSelected: Bool
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: isSelected ? "arrow.turn.down.right.circle.fill" : "circle")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
-                .padding(.top, 3)
-
-            VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
                 HStack(spacing: 6) {
                     Text(record.topic.isEmpty ? strings.studyFallback : record.topic)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
 
                     Text("·")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
 
                     Text(record.difficulty.displayName(language: strings.language))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                Text(record.question.question)
-                    .font(.callout)
-                    .lineLimit(2)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                if let answer = record.answer, !answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Text(strings.answerPrefix(answer))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
-            }
-
-            Spacer(minLength: 8)
-
-            Text(isSelected ? strings.current : strings.openPendingQuestion)
                 .font(.caption)
                 .fontWeight(.semibold)
-                .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+                .foregroundStyle(.secondary)
+
+                Spacer(minLength: 8)
+
+                Text(isSelected ? strings.current : strings.openPendingQuestion)
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+            }
+
+            Text(record.question.question)
+                .font(.callout)
+                .fontWeight(isSelected ? .semibold : .regular)
+                .lineLimit(2)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(10)
-        .background(isSelected ? Color.accentColor.opacity(0.12) : Color.secondary.opacity(0.07))
+        .padding(.vertical, 10)
+        .padding(.horizontal, 12)
+        .background(isSelected ? Color.accentColor.opacity(0.11) : Color.secondary.opacity(0.06))
         .overlay {
             RoundedRectangle(cornerRadius: 8)
-                .stroke(isSelected ? Color.accentColor.opacity(0.45) : Color.clear, lineWidth: 1)
+                .stroke(isSelected ? Color.accentColor.opacity(0.35) : Color.secondary.opacity(0.12), lineWidth: 1)
         }
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .contentShape(Rectangle())

@@ -290,6 +290,7 @@ final class AppState: ObservableObject {
             await notificationService.showQuestionNotification(
                 question: question,
                 title: strings.notificationTitle,
+                subtitle: notificationSubtitle,
                 sound: settings.notificationSound,
                 language: settings.appLanguage
             )
@@ -329,6 +330,17 @@ final class AppState: ObservableObject {
             previousResponseID: settingsStore.loadQuestionResponseID(),
             apiKey: apiKey
         )
+    }
+
+    private var notificationSubtitle: String {
+        let topic = settings.topic.trimmingCharacters(in: .whitespacesAndNewlines)
+        let difficulty = settings.difficulty.displayName(language: settings.appLanguage)
+
+        guard !topic.isEmpty else {
+            return difficulty
+        }
+
+        return "\(topic) · \(difficulty)"
     }
 
     func gradeCurrentAnswer() async {

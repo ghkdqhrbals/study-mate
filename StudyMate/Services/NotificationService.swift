@@ -78,6 +78,7 @@ final class NotificationService {
     func showQuestionNotification(
         question: QuestionItem,
         title: String,
+        subtitle: String?,
         sound: NotificationSoundOption,
         language: AppLanguage
     ) async {
@@ -87,9 +88,12 @@ final class NotificationService {
 
         let content = UNMutableNotificationContent()
         content.title = title
+        content.subtitle = subtitle ?? ""
         content.body = question.question
         content.sound = sound.userNotificationSound
         content.categoryIdentifier = StudyNotificationAction.category
+        content.threadIdentifier = "StudyMate.question"
+        content.summaryArgument = question.question
         content.userInfo = [
             StudyNotificationAction.questionCreatedAt: question.createdAt.timeIntervalSince1970
         ]

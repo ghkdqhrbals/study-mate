@@ -84,11 +84,10 @@ private struct MenuBarMenuView: View {
             }
         }
 
-        Menu("\(strings.languageMenu): \(appState.settings.appLanguage.displayName)") {
+        Menu(strings.languageMenu) {
             ForEach(AppLanguage.allCases) { language in
                 Button {
                     appState.setAppLanguage(language)
-                    NSApp.activate(ignoringOtherApps: true)
                 } label: {
                     if appState.settings.appLanguage == language {
                         Label(language.displayName, systemImage: "checkmark")
