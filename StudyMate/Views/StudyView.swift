@@ -124,7 +124,6 @@ struct StudyView: View {
 
                     AnswerEditor(
                         text: $draftAnswer,
-                        placeholder: strings.answerPlaceholder,
                         minHeight: 96
                     )
                 }
@@ -199,11 +198,9 @@ struct StudyView: View {
 
 private struct AnswerEditor: View {
     @Binding var text: String
-    var placeholder: String
     var minHeight: CGFloat
 
     private let editorInset = EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 8)
-    private let placeholderInset = EdgeInsets(top: 13, leading: 13, bottom: 8, trailing: 8)
 
     var body: some View {
         TextEditor(text: $text)
@@ -211,15 +208,6 @@ private struct AnswerEditor: View {
             .scrollContentBackground(.hidden)
             .padding(editorInset)
             .frame(minHeight: minHeight)
-            .background(alignment: .topLeading) {
-                if text.isEmpty {
-                    Text(placeholder)
-                        .font(.body)
-                        .foregroundStyle(.secondary.opacity(0.72))
-                        .padding(placeholderInset)
-                        .allowsHitTesting(false)
-                }
-            }
             .overlay {
                 RoundedRectangle(cornerRadius: 8)
                     .stroke(Color.secondary.opacity(0.24))

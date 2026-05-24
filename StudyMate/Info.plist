@@ -29,5 +29,11 @@
 		<key>NSAllowsArbitraryLoads</key>
 		<false/>
 	</dict>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUFeedURL</key>
+	<string>https://ghkdqhrbals.github.io/study-mate/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>Jy7jVs42/k1I0GC5dqroL6XjZng3SXqj72xVGlEZohU=</string>
 </dict>
 </plist>

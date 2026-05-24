@@ -572,8 +572,7 @@ final class AppState: ObservableObject {
         let appURL = Bundle.main.bundleURL
 
         do {
-            try removeStoredAppData()
-            _ = try FileManager.default.trashItem(at: appURL, resultingItemURL: nil)
+            try launchUninstaller(for: appURL)
             log(.warning, "앱 제거를 실행했습니다.")
             NSApp.terminate(nil)
         } catch {
@@ -582,33 +581,67 @@ final class AppState: ObservableObject {
         }
     }
 
-    private func removeStoredAppData() throws {
-        for bundleIdentifier in ["io.github.ghkdqhrbals.StudyMate", "com.local.StudyMate"] {
-            UserDefaults.standard.removePersistentDomain(forName: bundleIdentifier)
-            try removeIfExists(preferencesURL(for: bundleIdentifier))
-            try removeIfExists(libraryURL("Application Support", appending: bundleIdentifier))
-            try removeIfExists(libraryURL("Caches", appending: bundleIdentifier))
-            try removeIfExists(libraryURL("Logs", appending: bundleIdentifier))
-            try removeIfExists(libraryURL("Saved Application State", appending: "\(bundleIdentifier).savedState"))
-        }
+    private func launchUninstaller(for appURL: URL) throws {
+        let scriptURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("studymate-uninstall-\(UUID().uuidString).sh")
+        let script = Self.uninstallScript(appPath: appURL.path)
+
+        try script.write(to: scriptURL, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: scriptURL.path)
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        process.arguments = [scriptURL.path]
+        try process.run()
     }
 
-    private func preferencesURL(for bundleIdentifier: String) -> URL {
-        FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Preferences/\(bundleIdentifier).plist")
+    nonisolated private static func uninstallScript(appPath: String) -> String {
+        let escapedAppPath = shellEscaped(appPath)
+        let finderDeleteCommand = shellEscaped(
+            "tell application \"Finder\" to delete POSIX file \"\(appleScriptEscaped(appPath))\""
+        )
+
+        return """
+        #!/bin/sh
+        set -eu
+        sleep 1
+
+        APP_PATH=\(escapedAppPath)
+        TRASH_DIR="${HOME}/.Trash"
+        APP_NAME="$(basename "${APP_PATH}")"
+        TARGET="${TRASH_DIR}/${APP_NAME}"
+
+        mkdir -p "${TRASH_DIR}"
+        if [ -e "${APP_PATH}" ]; then
+          if [ -e "${TARGET}" ]; then
+            TARGET="${TRASH_DIR}/StudyMate-$(date +%Y%m%d%H%M%S).app"
+          fi
+          mv "${APP_PATH}" "${TARGET}" 2>/dev/null || \\
+            osascript -e \(finderDeleteCommand) >/dev/null 2>&1 || \\
+            rm -rf "${APP_PATH}"
+        fi
+
+        for BUNDLE_ID in io.github.ghkdqhrbals.StudyMate com.local.StudyMate; do
+          defaults delete "${BUNDLE_ID}" >/dev/null 2>&1 || true
+          rm -f "${HOME}/Library/Preferences/${BUNDLE_ID}.plist"
+          rm -rf "${HOME}/Library/Application Support/${BUNDLE_ID}"
+          rm -rf "${HOME}/Library/Caches/${BUNDLE_ID}"
+          rm -rf "${HOME}/Library/Logs/${BUNDLE_ID}"
+          rm -rf "${HOME}/Library/Saved Application State/${BUNDLE_ID}.savedState"
+        done
+
+        rm -f "$0"
+        """
     }
 
-    private func libraryURL(_ directory: String, appending pathComponent: String) -> URL {
-        FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/\(directory)/\(pathComponent)")
+    nonisolated private static func shellEscaped(_ value: String) -> String {
+        "'\(value.replacingOccurrences(of: "'", with: "'\\''"))'"
     }
 
-    private func removeIfExists(_ url: URL) throws {
-        guard FileManager.default.fileExists(atPath: url.path) else {
-            return
-        }
-
-        try FileManager.default.removeItem(at: url)
+    nonisolated private static func appleScriptEscaped(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
     }
 
     private func restartTimer() {

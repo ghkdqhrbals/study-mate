@@ -18,6 +18,7 @@ StudyMate was built to help you keep that knowledge fresh through small, repeate
 - Pending questions, history, and statistics
 - Korean and English app language support
 - macOS notifications with configurable sound
+- Sparkle-based automatic updates from GitHub Releases
 - OpenAI Responses API integration
 
 ## Requirements
@@ -47,8 +48,8 @@ xcodebuild test -project StudyMate.xcodeproj -scheme StudyMate -destination 'pla
 GitHub Actions builds a DMG when a version tag is pushed.
 
 ```sh
-git tag v1.0.0
-git push origin v1.0.0
+git tag v1.0.3
+git push origin v1.0.3
 ```
 
 The release DMG includes:
@@ -67,8 +68,9 @@ For trusted public distribution without Gatekeeper warnings, configure these Git
 - `APPSTORE_CONNECT_KEY_ID`: App Store Connect API key ID
 - `APPSTORE_CONNECT_ISSUER_ID`: App Store Connect issuer ID
 - `APPSTORE_CONNECT_PRIVATE_KEY_BASE64`: base64-encoded App Store Connect API `.p8` private key
+- `SPARKLE_ED_PRIVATE_KEY`: base64 Sparkle EdDSA private key used to sign the appcast update archive
 
-When Developer ID secrets are present, the workflow signs the app and DMG, notarizes the DMG, and staples the notarization ticket before publishing the release.
+When Developer ID secrets are present, the workflow signs the app and DMG, notarizes the DMG, staples the notarization ticket, publishes the release, and updates `docs/appcast.xml` for automatic updates.
 
 You can configure the secrets from this machine with:
 

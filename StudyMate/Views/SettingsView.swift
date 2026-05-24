@@ -157,6 +157,7 @@ private struct SettingsPanel<Content: View>: View {
 
 private struct GeneralSettingsSection: View {
     @EnvironmentObject private var appState: AppState
+    @ObservedObject private var updateService = UpdateService.shared
     @State private var showsUninstallConfirmation = false
 
     var body: some View {
@@ -211,6 +212,40 @@ private struct GeneralSettingsSection: View {
             .pickerStyle(.menu)
 
             Text(strings.notificationSoundHelp)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Divider()
+
+            Text(strings.updates)
+                .font(.subheadline)
+                .fontWeight(.semibold)
+
+            Toggle(
+                strings.automaticallyCheckForUpdates,
+                isOn: Binding(
+                    get: { updateService.automaticallyChecksForUpdates },
+                    set: { updateService.setAutomaticallyChecksForUpdates($0) }
+                )
+            )
+
+            Toggle(
+                strings.automaticallyDownloadUpdates,
+                isOn: Binding(
+                    get: { updateService.automaticallyDownloadsUpdates },
+                    set: { updateService.setAutomaticallyDownloadsUpdates($0) }
+                )
+            )
+            .disabled(!updateService.automaticallyChecksForUpdates)
+
+            Button {
+                updateService.checkForUpdates()
+            } label: {
+                Label(strings.checkForUpdates, systemImage: "arrow.triangle.2.circlepath")
+            }
+            .disabled(!updateService.canCheckForUpdates)
+
+            Text(strings.updateHelp)
                 .font(.caption)
                 .foregroundStyle(.secondary)
 

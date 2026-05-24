@@ -8,6 +8,8 @@ on:
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
 
 jobs:
   build:
@@ -20,6 +22,7 @@ jobs:
       APPSTORE_CONNECT_KEY_ID: ${{ secrets.APPSTORE_CONNECT_KEY_ID }}
       APPSTORE_CONNECT_ISSUER_ID: ${{ secrets.APPSTORE_CONNECT_ISSUER_ID }}
       APPSTORE_CONNECT_PRIVATE_KEY_BASE64: ${{ secrets.APPSTORE_CONNECT_PRIVATE_KEY_BASE64 }}
+      SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
 
     steps:
       - name: Checkout
@@ -48,6 +51,11 @@ jobs:
 
           if [ -z "${APPSTORE_CONNECT_KEY_ID}" ] || [ -z "${APPSTORE_CONNECT_ISSUER_ID}" ] || [ -z "${APPSTORE_CONNECT_PRIVATE_KEY_BASE64}" ]; then
             echo "Signed releases must be notarized. Add APPSTORE_CONNECT_KEY_ID, APPSTORE_CONNECT_ISSUER_ID, and APPSTORE_CONNECT_PRIVATE_KEY_BASE64." >&2
+            exit 1
+          fi
+
+          if [ -z "${SPARKLE_PRIVATE_KEY}" ]; then
+            echo "Signed releases require SPARKLE_ED_PRIVATE_KEY so Sparkle updates can be signed." >&2
             exit 1
           fi
 
@@ -207,3 +215,65 @@ jobs:
         with:
           files: dist/*.dmg
           generate_release_notes: true
+
+      - name: Generate Sparkle appcast
+        if: startsWith(github.ref, 'refs/tags/') && env.SIGNING_ENABLED == 'true'
+        run: |
+          set -euo pipefail
+
+          VERSION="${GITHUB_REF_NAME#v}"
+          APP_PATH="build/StudyMate.xcarchive/Products/Applications/StudyMate.app"
+          DMG_PATH="dist/StudyMate-${VERSION}.dmg"
+          BUILD_NUMBER="$(/usr/libexec/PlistBuddy -c 'Print CFBundleVersion' "${APP_PATH}/Contents/Info.plist")"
+          DMG_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/StudyMate-${VERSION}.dmg"
+          RELEASE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/tag/${GITHUB_REF_NAME}"
+          SPARKLE_DIR="${RUNNER_TEMP}/sparkle"
+
+          curl -L \
+            https://github.com/sparkle-project/Sparkle/releases/download/2.9.2/Sparkle-for-Swift-Package-Manager.zip \
+            -o "${RUNNER_TEMP}/Sparkle-for-Swift-Package-Manager.zip"
+          unzip -q "${RUNNER_TEMP}/Sparkle-for-Swift-Package-Manager.zip" -d "${SPARKLE_DIR}"
+
+          SIGNATURE_ATTRIBUTES="$(printf '%s' "${SPARKLE_PRIVATE_KEY}" | "${SPARKLE_DIR}/bin/sign_update" --ed-key-file - "${DMG_PATH}")"
+
+          python3 scripts/create-appcast.py \
+            --version "${VERSION}" \
+            --build-number "${BUILD_NUMBER}" \
+            --dmg-url "${DMG_URL}" \
+            --release-url "${RELEASE_URL}" \
+            --signature-attributes "${SIGNATURE_ATTRIBUTES}" \
+            --output "${RUNNER_TEMP}/appcast.xml"
+
+      - name: Publish Sparkle appcast to Pages
+        if: startsWith(github.ref, 'refs/tags/') && env.SIGNING_ENABLED == 'true'
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git checkout main
+          git pull --ff-only origin main
+          cp "${RUNNER_TEMP}/appcast.xml" docs/appcast.xml
+          git add docs/appcast.xml
+
+          if git diff --cached --quiet; then
+            echo "Appcast is already up to date."
+          else
+            git commit -m "Update appcast for ${GITHUB_REF_NAME}"
+            git push origin main
+          fi
+
+      - name: Configure Pages
+        if: startsWith(github.ref, 'refs/tags/') && env.SIGNING_ENABLED == 'true'
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        if: startsWith(github.ref, 'refs/tags/') && env.SIGNING_ENABLED == 'true'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+
+      - name: Deploy GitHub Pages
+        if: startsWith(github.ref, 'refs/tags/') && env.SIGNING_ENABLED == 'true'
+        uses: actions/deploy-pages@v4

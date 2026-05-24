@@ -467,6 +467,13 @@ struct AppStrings {
     var openNotificationSettings: String { text("시스템 알림 설정 열기", "Open Notification Settings") }
     var notificationSound: String { text("알림음", "Notification sound") }
     var notificationSoundHelp: String { text("질문 알림을 받을 때 소리를 낼지 선택합니다.", "Choose whether question notifications play a sound.") }
+    var updates: String { text("업데이트", "Updates") }
+    var automaticallyCheckForUpdates: String { text("자동으로 업데이트 확인", "Automatically check for updates") }
+    var automaticallyDownloadUpdates: String { text("가능하면 자동으로 다운로드", "Automatically download updates when available") }
+    var checkForUpdates: String { text("업데이트 확인...", "Check for Updates...") }
+    var updateHelp: String {
+        text("GitHub Releases에 새 DMG가 올라오면 StudyMate가 업데이트를 안내합니다.", "StudyMate checks GitHub Releases and offers updates when a new DMG is available.")
+    }
     var uninstall: String { text("StudyMate 제거", "Uninstall StudyMate") }
     var uninstallHelp: String {
         text("앱을 휴지통으로 이동하고 로컬 설정과 캐시를 삭제합니다.", "Move the app to Trash and delete local settings and caches.")
