@@ -16,7 +16,7 @@ final class StudyMateTests: XCTestCase {
             appLanguage: .english,
             language: .english,
             openAIModel: "gpt-5.4",
-            notificationSound: .none,
+            notificationSound: .chime,
             customPrompt: "면접처럼 질문해줘.",
             intervalMinutes: 7
         )
@@ -50,6 +50,16 @@ final class StudyMateTests: XCTestCase {
         XCTAssertEqual(store.loadSettings().language, .korean)
         XCTAssertEqual(store.loadSettings().openAIModel, StudySettings.defaultOpenAIModel)
         XCTAssertEqual(store.loadSettings().notificationSound, .defaultSound)
+    }
+
+    func testNotificationSoundOptionsExposeBundledSoundNames() {
+        XCTAssertNil(NotificationSoundOption.defaultSound.bundledFileName)
+        XCTAssertNil(NotificationSoundOption.none.bundledFileName)
+        XCTAssertEqual(NotificationSoundOption.softPing.bundledFileName, "study_ping.wav")
+        XCTAssertEqual(NotificationSoundOption.chime.bundledFileName, "study_chime.wav")
+        XCTAssertEqual(NotificationSoundOption.pop.bundledFileName, "study_pop.wav")
+        XCTAssertEqual(NotificationSoundOption.bell.bundledFileName, "study_bell.wav")
+        XCTAssertEqual(NotificationSoundOption.tap.bundledFileName, "study_tap.wav")
     }
 
     func testAppLanguageControlsStudyLanguageOnSave() {

@@ -99,9 +99,37 @@ enum AppLanguage: String, CaseIterable, Codable, Identifiable {
 
 enum NotificationSoundOption: String, CaseIterable, Codable, Identifiable {
     case defaultSound
+    case softPing
+    case chime
+    case pop
+    case bell
+    case tap
     case none
 
     var id: String { rawValue }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let rawValue = try container.decode(String.self)
+        self = NotificationSoundOption(rawValue: rawValue) ?? .defaultSound
+    }
+
+    var bundledFileName: String? {
+        switch self {
+        case .defaultSound, .none:
+            nil
+        case .softPing:
+            "study_ping.wav"
+        case .chime:
+            "study_chime.wav"
+        case .pop:
+            "study_pop.wav"
+        case .bell:
+            "study_bell.wav"
+        case .tap:
+            "study_tap.wav"
+        }
+    }
 
     func displayName(language: AppLanguage) -> String {
         switch (self, language) {
@@ -109,6 +137,26 @@ enum NotificationSoundOption: String, CaseIterable, Codable, Identifiable {
             "기본음"
         case (.defaultSound, .english):
             "Default"
+        case (.softPing, .korean):
+            "부드러운 핑"
+        case (.softPing, .english):
+            "Soft Ping"
+        case (.chime, .korean):
+            "차임"
+        case (.chime, .english):
+            "Chime"
+        case (.pop, .korean):
+            "팝"
+        case (.pop, .english):
+            "Pop"
+        case (.bell, .korean):
+            "벨"
+        case (.bell, .english):
+            "Bell"
+        case (.tap, .korean):
+            "탭"
+        case (.tap, .english):
+            "Tap"
         case (.none, .korean):
             "없음"
         case (.none, .english):

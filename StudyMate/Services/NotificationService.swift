@@ -49,7 +49,7 @@ final class NotificationService {
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = question.question
-        content.sound = sound == .defaultSound ? .default : nil
+        content.sound = sound.userNotificationSound
         content.categoryIdentifier = StudyNotificationAction.category
         content.userInfo = [
             StudyNotificationAction.questionCreatedAt: question.createdAt.timeIntervalSince1970
@@ -62,6 +62,21 @@ final class NotificationService {
         )
 
         try? await UNUserNotificationCenter.current().add(request)
+    }
+}
+
+private extension NotificationSoundOption {
+    var userNotificationSound: UNNotificationSound? {
+        switch self {
+        case .defaultSound:
+            .default
+        case .none:
+            nil
+        case .softPing, .chime, .pop, .bell, .tap:
+            bundledFileName.map {
+                UNNotificationSound(named: UNNotificationSoundName(rawValue: $0))
+            } ?? .default
+        }
     }
 }
 
