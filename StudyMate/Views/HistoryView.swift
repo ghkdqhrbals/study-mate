@@ -208,17 +208,18 @@ private struct SwipeToDeleteHistoryRow<Content: View>: View {
                 .frame(maxHeight: .infinity)
                 .foregroundStyle(.white)
                 .background(Color.red)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .clipShape(TrailingRoundedRectangle(radius: 8))
             }
             .buttonStyle(.plain)
             .opacity(revealProgress)
-            .allowsHitTesting(restingOffset < 0)
-            .zIndex(0)
+            .allowsHitTesting(revealProgress > 0.95)
+            .zIndex(3)
 
             content()
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .offset(x: effectiveOffset)
                 .contentShape(Rectangle())
+                .allowsHitTesting(restingOffset == 0)
                 .onTapGesture {
                     if restingOffset < 0 {
                         withAnimation(.snappy) {
@@ -248,9 +249,50 @@ private struct SwipeToDeleteHistoryRow<Content: View>: View {
                         }
                 )
                 .zIndex(1)
+
+            if restingOffset < 0 {
+                HStack(spacing: 0) {
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            withAnimation(.snappy) {
+                                restingOffset = 0
+                            }
+                        }
+
+                    Color.clear
+                        .frame(width: actionWidth)
+                        .allowsHitTesting(false)
+                }
+                .zIndex(2)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .clipped()
+    }
+}
+
+private struct TrailingRoundedRectangle: Shape {
+    var radius: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        let radius = min(radius, rect.width / 2, rect.height / 2)
+
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX - radius, y: rect.minY))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.maxX, y: rect.minY + radius),
+            control: CGPoint(x: rect.maxX, y: rect.minY)
+        )
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - radius))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.maxX - radius, y: rect.maxY),
+            control: CGPoint(x: rect.maxX, y: rect.maxY)
+        )
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.closeSubpath()
+        return path
     }
 }
 
@@ -286,13 +328,11 @@ private struct HistoryRow: View {
 
             Text(record.question.question)
                 .font(.body)
-                .textSelection(.enabled)
 
             if let answer = record.answer, !answer.isEmpty {
                 Text(strings.answerPrefix(answer))
                     .font(.footnote)
                     .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
             }
 
             if let result = record.gradingResult {
