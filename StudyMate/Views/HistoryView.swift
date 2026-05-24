@@ -84,7 +84,8 @@ struct HistoryView: View {
                             }
                         }
                     }
-                    .padding(.bottom, 12)
+                    .padding(.trailing, 8)
+                    .padding(.bottom, 18)
                 }
                 .frame(maxHeight: .infinity)
                 .background {

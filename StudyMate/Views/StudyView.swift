@@ -189,6 +189,8 @@ struct StudyView: View {
                 }
             }
             .padding(.top, 10)
+            .padding(.trailing, 8)
+            .padding(.bottom, 22)
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
         .onChange(of: appState.currentQuestion?.createdAt) {

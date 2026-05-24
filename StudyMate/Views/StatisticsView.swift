@@ -129,7 +129,8 @@ struct StatisticsView: View {
                     }
                 }
             }
-            .padding(.bottom, 16)
+            .padding(.trailing, 8)
+            .padding(.bottom, 24)
         }
         .padding(.top, 10)
         .frame(maxHeight: .infinity, alignment: .top)

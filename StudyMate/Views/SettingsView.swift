@@ -62,7 +62,10 @@ struct SettingsView: View {
                             DeveloperSettingsSection()
                         }
                     }
-                    .padding(20)
+                    .padding(.leading, 20)
+                    .padding(.trailing, 28)
+                    .padding(.top, 20)
+                    .padding(.bottom, 28)
                     .frame(maxWidth: .infinity, alignment: .topLeading)
                 }
 
@@ -445,6 +448,8 @@ private struct DeveloperSettingsSection: View {
                             LogRow(entry: entry)
                         }
                     }
+                    .padding(.trailing, 8)
+                    .padding(.bottom, 12)
                 }
                 .frame(minHeight: 260)
             }

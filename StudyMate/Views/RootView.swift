@@ -40,7 +40,8 @@ struct RootView: View {
 
 private extension View {
     func contentPadding() -> some View {
-        padding(.horizontal, 12)
+        padding(.leading, 12)
+            .padding(.trailing, 18)
             .padding(.top, 18)
             .padding(.bottom, 16)
     }
