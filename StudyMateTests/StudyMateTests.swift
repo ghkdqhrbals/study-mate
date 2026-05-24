@@ -62,6 +62,28 @@ final class StudyMateTests: XCTestCase {
         XCTAssertEqual(NotificationSoundOption.tap.bundledFileName, "study_tap.wav")
     }
 
+    func testGeneratedUninstallScriptIsValidShellAndTargetsKnownInstallLocations() throws {
+        let script = AppState.makeUninstallScript(appPath: "/tmp/StudyMate Test.app")
+        let scriptURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("studymate-uninstall-test-\(UUID().uuidString).sh")
+        defer {
+            try? FileManager.default.removeItem(at: scriptURL)
+        }
+
+        try script.write(to: scriptURL, atomically: true, encoding: .utf8)
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        process.arguments = ["-n", scriptURL.path]
+        try process.run()
+        process.waitUntilExit()
+
+        XCTAssertEqual(process.terminationStatus, 0)
+        XCTAssertTrue(script.contains("/Applications/StudyMate.app"))
+        XCTAssertTrue(script.contains("~/Applications/StudyMate.app"))
+        XCTAssertTrue(script.contains("Library/Caches/Sparkle"))
+    }
+
     func testAppLanguageControlsStudyLanguageOnSave() {
         let suiteName = "StudyMateTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

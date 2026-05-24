@@ -584,7 +584,7 @@ final class AppState: ObservableObject {
     private func launchUninstaller(for appURL: URL) throws {
         let scriptURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("studymate-uninstall-\(UUID().uuidString).sh")
-        let script = Self.uninstallScript(appPath: appURL.path)
+        let script = Self.makeUninstallScript(appPath: appURL.path)
 
         try script.write(to: scriptURL, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: scriptURL.path)
@@ -595,42 +595,64 @@ final class AppState: ObservableObject {
         try process.run()
     }
 
-    nonisolated private static func uninstallScript(appPath: String) -> String {
+    nonisolated static func makeUninstallScript(appPath: String) -> String {
         let escapedAppPath = shellEscaped(appPath)
-        let finderDeleteCommand = shellEscaped(
-            "tell application \"Finder\" to delete POSIX file \"\(appleScriptEscaped(appPath))\""
-        )
+        let escapedHomeApplicationsPath = shellEscaped("~/Applications/StudyMate.app")
 
         return """
         #!/bin/sh
-        set -eu
-        sleep 1
+        set +e
 
         APP_PATH=\(escapedAppPath)
-        TRASH_DIR="${HOME}/.Trash"
-        APP_NAME="$(basename "${APP_PATH}")"
-        TARGET="${TRASH_DIR}/${APP_NAME}"
+        LOG_PATH="${TMPDIR:-/tmp}/studymate-uninstall.log"
 
-        mkdir -p "${TRASH_DIR}"
-        if [ -e "${APP_PATH}" ]; then
-          if [ -e "${TARGET}" ]; then
-            TARGET="${TRASH_DIR}/StudyMate-$(date +%Y%m%d%H%M%S).app"
-          fi
-          mv "${APP_PATH}" "${TARGET}" 2>/dev/null || \\
-            osascript -e \(finderDeleteCommand) >/dev/null 2>&1 || \\
-            rm -rf "${APP_PATH}"
-        fi
+        echo "StudyMate uninstall started at $(date)" > "${LOG_PATH}"
 
-        for BUNDLE_ID in io.github.ghkdqhrbals.StudyMate com.local.StudyMate; do
-          defaults delete "${BUNDLE_ID}" >/dev/null 2>&1 || true
-          rm -f "${HOME}/Library/Preferences/${BUNDLE_ID}.plist"
-          rm -rf "${HOME}/Library/Application Support/${BUNDLE_ID}"
-          rm -rf "${HOME}/Library/Caches/${BUNDLE_ID}"
-          rm -rf "${HOME}/Library/Logs/${BUNDLE_ID}"
-          rm -rf "${HOME}/Library/Saved Application State/${BUNDLE_ID}.savedState"
+        /usr/bin/osascript -e 'tell application "StudyMate" to quit' >> "${LOG_PATH}" 2>&1
+
+        ATTEMPT=0
+        while /usr/bin/pgrep -x "StudyMate" >/dev/null 2>&1 && [ "${ATTEMPT}" -lt 30 ]; do
+          /bin/sleep 0.2
+          ATTEMPT=$((ATTEMPT + 1))
         done
 
-        rm -f "$0"
+        /usr/bin/pkill -x "StudyMate" >> "${LOG_PATH}" 2>&1
+        /bin/sleep 0.5
+
+        remove_path() {
+          TARGET_PATH="$1"
+          EXPANDED_PATH="$(eval printf '%s' "${TARGET_PATH}")"
+
+          [ -e "${EXPANDED_PATH}" ] || return 0
+          echo "Removing ${EXPANDED_PATH}" >> "${LOG_PATH}"
+
+          /bin/mv "${EXPANDED_PATH}" "${HOME}/.Trash/$(basename "${EXPANDED_PATH}")-$(date +%Y%m%d%H%M%S)" >> "${LOG_PATH}" 2>&1 && return 0
+          /bin/rm -rf "${EXPANDED_PATH}" >> "${LOG_PATH}" 2>&1 && return 0
+
+          ESCAPED_TARGET="$(printf "%s" "${EXPANDED_PATH}" | /usr/bin/sed "s/'/'\\\\''/g")"
+          /usr/bin/osascript -e "do shell script \\"/bin/rm -rf '${ESCAPED_TARGET}'\\" with administrator privileges" >> "${LOG_PATH}" 2>&1
+        }
+
+        remove_path "${APP_PATH}"
+        remove_path "/Applications/StudyMate.app"
+        remove_path \(escapedHomeApplicationsPath)
+
+        remove_data() {
+          BUNDLE_ID="$1"
+          /usr/bin/defaults delete "${BUNDLE_ID}" >> "${LOG_PATH}" 2>&1
+          /bin/rm -f "${HOME}/Library/Preferences/${BUNDLE_ID}.plist"
+          /bin/rm -rf "${HOME}/Library/Application Support/${BUNDLE_ID}"
+          /bin/rm -rf "${HOME}/Library/Caches/${BUNDLE_ID}"
+          /bin/rm -rf "${HOME}/Library/Caches/Sparkle/${BUNDLE_ID}"
+          /bin/rm -rf "${HOME}/Library/Logs/${BUNDLE_ID}"
+          /bin/rm -rf "${HOME}/Library/Saved Application State/${BUNDLE_ID}.savedState"
+        }
+
+        remove_data "io.github.ghkdqhrbals.StudyMate"
+        remove_data "com.local.StudyMate"
+
+        echo "StudyMate uninstall finished at $(date)" >> "${LOG_PATH}"
+        /bin/rm -f "$0"
         """
     }
 

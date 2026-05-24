@@ -44,11 +44,14 @@ func drawIcon(size: Int) -> NSImage {
     NSColor.clear.setFill()
     NSRect(x: 0, y: 0, width: dimension, height: dimension).fill()
 
-    NSColor(calibratedRed: 0.122, green: 0.137, blue: 0.157, alpha: 1).setFill()
-    roundedRect(0, 0, 1024, 1024, radius: 224, scale: scale).fill()
+    let background = NSColor(calibratedRed: 0.126, green: 0.192, blue: 0.400, alpha: 1)
+    let foreground = NSColor(calibratedRed: 0.980, green: 0.965, blue: 0.905, alpha: 1)
+    let pageAccent = NSColor(calibratedRed: 0.745, green: 0.855, blue: 1.000, alpha: 1)
+    let lineAccent = NSColor(calibratedRed: 0.380, green: 0.565, blue: 0.940, alpha: 1)
+    let starAccent = NSColor(calibratedRed: 1.000, green: 0.780, blue: 0.255, alpha: 1)
 
-    let foreground = NSColor(calibratedRed: 0.969, green: 0.969, blue: 0.941, alpha: 1)
-    let background = NSColor(calibratedRed: 0.122, green: 0.137, blue: 0.157, alpha: 1)
+    background.setFill()
+    roundedRect(0, 0, 1024, 1024, radius: 224, scale: scale).fill()
 
     foreground.setFill()
 
@@ -72,11 +75,11 @@ func drawIcon(size: Int) -> NSImage {
     book.close()
     book.fill()
 
-    background.setFill()
+    pageAccent.setFill()
     roundedRect(240, 360, 245, 330, radius: 36, scale: scale).fill()
     roundedRect(539, 360, 245, 330, radius: 36, scale: scale).fill()
 
-    foreground.setFill()
+    lineAccent.setFill()
     roundedRect(285, 585, 155, 58, radius: 29, scale: scale).fill()
     roundedRect(285, 470, 155, 58, radius: 29, scale: scale).fill()
     roundedRect(590, 585, 122, 58, radius: 29, scale: scale).fill()
@@ -89,6 +92,7 @@ func drawIcon(size: Int) -> NSImage {
     foreground.setStroke()
     spine.stroke()
 
+    starAccent.setFill()
     let star = NSBezierPath()
     star.move(to: point(775, 862, scale: scale))
     star.curve(to: point(800, 837, scale: scale), controlPoint1: point(784, 862, scale: scale), controlPoint2: point(793, 853, scale: scale))
