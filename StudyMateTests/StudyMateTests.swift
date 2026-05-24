@@ -15,7 +15,7 @@ final class StudyMateTests: XCTestCase {
             difficulty: .advanced,
             appLanguage: .english,
             language: .english,
-            openAIModel: "gpt-5.4-mini",
+            openAIModel: "gpt-5.4",
             customPrompt: "면접처럼 질문해줘.",
             intervalMinutes: 7
         )
@@ -106,14 +106,14 @@ final class StudyMateTests: XCTestCase {
         let settings = StudySettings(
             topic: "Swift",
             difficulty: .beginner,
-            openAIModel: "gpt-5.5",
+            openAIModel: "gpt-5.4",
             customPrompt: "짧게",
             intervalMinutes: 15
         )
 
         store.saveSettings(settings)
 
-        XCTAssertEqual(store.loadSettings().openAIModel, "gpt-5.5")
+        XCTAssertEqual(store.loadSettings().openAIModel, "gpt-5.4")
     }
 
     func testEmptyOpenAIModelDefaultsWhenSaved() {
@@ -205,6 +205,50 @@ final class StudyMateTests: XCTestCase {
         store.saveAPIKey("   ")
 
         XCTAssertEqual(store.loadAPIKey(), "")
+    }
+
+    @MainActor
+    func testSaveSettingsWithoutAPIKeyChangeSkipsValidation() async {
+        let suiteName = "StudyMateTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = SettingsStore(defaults: defaults)
+        store.saveAPIKey("sk-existing")
+        let client = SpyOpenAIClient()
+        let appState = AppState(settingsStore: store, openAIClient: client)
+
+        appState.settings.topic = "Changed topic"
+
+        await appState.saveSettingsAndValidateAPIKey()
+
+        XCTAssertEqual(client.validateCallCount, 0)
+        XCTAssertEqual(store.loadSettings().topic, "Changed topic")
+        XCTAssertEqual(store.loadAPIKey(), "sk-existing")
+    }
+
+    @MainActor
+    func testSaveSettingsWithAPIKeyChangeValidatesTrimmedSecret() async {
+        let suiteName = "StudyMateTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = SettingsStore(defaults: defaults)
+        store.saveAPIKey("sk-old")
+        let client = SpyOpenAIClient()
+        let appState = AppState(settingsStore: store, openAIClient: client)
+
+        appState.apiKey = "  sk-new  "
+
+        await appState.saveSettingsAndValidateAPIKey()
+
+        XCTAssertEqual(client.validateCallCount, 1)
+        XCTAssertEqual(client.validatedAPIKeys, ["sk-new"])
+        XCTAssertEqual(store.loadAPIKey(), "sk-new")
     }
 
     @MainActor
@@ -426,6 +470,42 @@ final class StudyMateTests: XCTestCase {
         XCTAssertNil(store.loadQuestionResponseID())
     }
 
+    func testStructuredRequestBodyUsesModelSpecificTextInterface() throws {
+        let schema: [String: Any] = [
+            "type": "object",
+            "additionalProperties": false,
+            "properties": [
+                "value": ["type": "string"]
+            ],
+            "required": ["value"]
+        ]
+
+        for option in OpenAIModelOption.all {
+            let body = OpenAIClient.structuredRequestBody(
+                model: option.id,
+                instructions: "Answer as JSON.",
+                input: "Question",
+                previousResponseID: "resp_123",
+                schemaName: "model_interface_test",
+                schema: schema
+            )
+
+            let text = try XCTUnwrap(body["text"] as? [String: Any], option.id)
+            let format = try XCTUnwrap(text["format"] as? [String: Any], option.id)
+
+            XCTAssertEqual(body["model"] as? String, option.id, option.id)
+            XCTAssertEqual(body["previous_response_id"] as? String, "resp_123", option.id)
+            XCTAssertEqual(format["type"] as? String, "json_schema", option.id)
+            XCTAssertEqual(format["name"] as? String, "model_interface_test", option.id)
+
+            if option.supportsTextVerbosity {
+                XCTAssertEqual(text["verbosity"] as? String, "low", option.id)
+            } else {
+                XCTAssertNil(text["verbosity"], "\(option.id) must not send text.verbosity")
+            }
+        }
+    }
+
     func testExtractOutputTextFromTopLevelOutputText() throws {
         let data = try XCTUnwrap("""
         {
@@ -490,5 +570,29 @@ final class StudyMateTests: XCTestCase {
 
         XCTAssertEqual(normalized.score, 100)
         XCTAssertTrue(normalized.isCorrect)
+    }
+}
+
+@MainActor
+private final class SpyOpenAIClient: OpenAIClientProtocol {
+    var validateCallCount = 0
+    var validatedAPIKeys: [String] = []
+
+    func validateAPIKey(_ apiKey: String) async throws {
+        validateCallCount += 1
+        validatedAPIKeys.append(apiKey)
+    }
+
+    func generateQuestion(
+        settings: StudySettings,
+        recentQuestions: [QuestionItem],
+        previousResponseID: String?,
+        apiKey: String
+    ) async throws -> GeneratedQuestionResult {
+        throw OpenAIClientError.invalidResponse
+    }
+
+    func gradeAnswer(question: QuestionItem, answer: String, settings: StudySettings, apiKey: String) async throws -> GradingResult {
+        throw OpenAIClientError.invalidResponse
     }
 }

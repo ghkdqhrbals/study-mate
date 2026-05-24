@@ -356,26 +356,8 @@ private struct DeveloperSettingsSection: View {
 
         SettingsPanel(title: strings.developerOptions) {
             VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Label(strings.apiStatus, systemImage: appState.hasAPIKeyError ? "exclamationmark.circle.fill" : "checkmark.circle.fill")
-                        .foregroundStyle(appState.hasAPIKeyError ? .orange : .green)
-
-                    Spacer()
-
-                    Button {
-                        Task {
-                            await appState.saveSettingsAndValidateAPIKey()
-                        }
-                    } label: {
-                        if appState.isValidatingAPIKey {
-                            ProgressView()
-                                .controlSize(.small)
-                        } else {
-                            Label(strings.retest, systemImage: "arrow.clockwise")
-                        }
-                    }
-                    .disabled(appState.isValidatingAPIKey)
-                }
+                Label(strings.apiStatus, systemImage: appState.hasAPIKeyError ? "exclamationmark.circle.fill" : "checkmark.circle.fill")
+                    .foregroundStyle(appState.hasAPIKeyError ? .orange : .green)
 
                 Text(appState.hasAPIKeyError ? strings.apiKeyErrorDetected : strings.apiKeyNoError)
                     .font(.caption)

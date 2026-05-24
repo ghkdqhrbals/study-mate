@@ -19,7 +19,7 @@ final class AppState: ObservableObject {
     @Published var errorMessage: String?
 
     private let settingsStore: SettingsStore
-    private let openAIClient: OpenAIClient
+    private let openAIClient: OpenAIClientProtocol
     private let notificationService: NotificationService
     private var timerTask: Task<Void, Never>?
     private var didStart = false
@@ -57,7 +57,7 @@ final class AppState: ObservableObject {
 
     init(
         settingsStore: SettingsStore = SettingsStore(),
-        openAIClient: OpenAIClient? = nil,
+        openAIClient: OpenAIClientProtocol? = nil,
         notificationService: NotificationService = NotificationService()
     ) {
         let loadedSettings = settingsStore.loadSettings()
@@ -130,19 +130,26 @@ final class AppState: ObservableObject {
     }
 
     func saveSettings() {
+        let trimmedAPIKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        let didAPIKeyChange = trimmedAPIKey != savedAPIKey
+
         settings.language = settings.appLanguage.studyLanguage
         settings.openAIModel = settings.sanitizedOpenAIModel
         settings.intervalMinutes = settings.sanitizedIntervalMinutes
         settings.maxHistoryCount = settings.sanitizedMaxHistoryCount
         settingsStore.saveSettings(settings)
-        settingsStore.saveAPIKey(apiKey)
-        savedSettings = normalizedSettings(settings)
-        savedAPIKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        studyRecords = settingsStore.loadStudyRecords()
-        if apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            hasAPIKeyError = true
+        if didAPIKeyChange {
+            settingsStore.saveAPIKey(apiKey)
         }
-        errorMessage = hasAPIKeyError ? strings.apiKeyEmptyDetailed : nil
+        savedSettings = normalizedSettings(settings)
+        savedAPIKey = trimmedAPIKey
+        studyRecords = settingsStore.loadStudyRecords()
+        if trimmedAPIKey.isEmpty {
+            hasAPIKeyError = true
+            errorMessage = strings.apiKeyEmptyDetailed
+        } else if didAPIKeyChange || !hasAPIKeyError {
+            errorMessage = nil
+        }
         statusMessage = "설정을 저장했습니다."
         log(.info, "설정을 저장했습니다. interval=\(settings.sanitizedIntervalMinutes), maxHistory=\(settings.sanitizedMaxHistoryCount)")
 
@@ -150,14 +157,30 @@ final class AppState: ObservableObject {
     }
 
     func saveSettingsAndValidateAPIKey() async {
+        let trimmedAPIKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        let didAPIKeyChange = trimmedAPIKey != savedAPIKey
+
         saveSettings()
+
+        guard didAPIKeyChange else {
+            log(.info, "API 키 변경사항이 없어 저장 후 검증을 건너뛰었습니다.")
+            return
+        }
+
+        guard !trimmedAPIKey.isEmpty else {
+            hasAPIKeyError = true
+            errorMessage = strings.apiKeyEmptyDetailed
+            statusMessage = nil
+            log(.warning, "API 키가 비어 있어 검증을 건너뛰었습니다.")
+            return
+        }
 
         isValidatingAPIKey = true
         statusMessage = "API 키를 확인 중입니다."
         errorMessage = nil
 
         do {
-            try await openAIClient.validateAPIKey(apiKey)
+            try await openAIClient.validateAPIKey(trimmedAPIKey)
             hasAPIKeyError = false
             statusMessage = "설정을 저장했고 API 키도 확인했습니다."
             log(.info, "OpenAI API 키 검증에 성공했습니다.")

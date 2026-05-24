@@ -191,19 +191,18 @@ struct StudySettings: Codable, Equatable {
 struct OpenAIModelOption: Identifiable, Equatable {
     var id: String
     var displayName: String
+    var supportsTextVerbosity: Bool
 
     static let all: [OpenAIModelOption] = [
-        OpenAIModelOption(id: "gpt-5.5", displayName: "GPT-5.5"),
-        OpenAIModelOption(id: "gpt-5.4", displayName: "GPT-5.4"),
-        OpenAIModelOption(id: "gpt-5.4-mini", displayName: "GPT-5.4 mini"),
-        OpenAIModelOption(id: "gpt-5.4-nano", displayName: "GPT-5.4 nano"),
-        OpenAIModelOption(id: "gpt-5-mini", displayName: "GPT-5 mini"),
-        OpenAIModelOption(id: "gpt-5-nano", displayName: "GPT-5 nano"),
-        OpenAIModelOption(id: "gpt-4.1", displayName: "GPT-4.1")
+        OpenAIModelOption(id: "gpt-5.4", displayName: "GPT-5.4", supportsTextVerbosity: true)
     ]
 
     static var supportedIDs: Set<String> {
         Set(all.map(\.id))
+    }
+
+    static func supportsTextVerbosity(modelID: String) -> Bool {
+        all.first { $0.id == modelID }?.supportsTextVerbosity ?? false
     }
 }
 
@@ -394,7 +393,6 @@ struct AppStrings {
     var debuggingHelp: String { text("켜면 왼쪽 메뉴에 Developer 탭이 표시되고 앱 로그를 확인할 수 있습니다.", "When enabled, the Developer tab appears in the left menu with app logs.") }
     var developerOptions: String { text("개발자 옵션", "Developer Options") }
     var apiStatus: String { text("API 상태", "API Status") }
-    var retest: String { text("다시 테스트", "Retest") }
     var apiKeyErrorDetected: String { text("API 키 오류가 감지됐습니다.", "An API key error was detected.") }
     var apiKeyNoError: String { text("API 키 오류가 없습니다.", "No API key error.") }
     var logs: String { text("로그", "Logs") }

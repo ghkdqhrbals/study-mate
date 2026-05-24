@@ -27,7 +27,21 @@ enum OpenAIClientError: LocalizedError, Equatable {
 }
 
 @MainActor
-final class OpenAIClient {
+protocol OpenAIClientProtocol: AnyObject {
+    func validateAPIKey(_ apiKey: String) async throws
+
+    func generateQuestion(
+        settings: StudySettings,
+        recentQuestions: [QuestionItem],
+        previousResponseID: String?,
+        apiKey: String
+    ) async throws -> GeneratedQuestionResult
+
+    func gradeAnswer(question: QuestionItem, answer: String, settings: StudySettings, apiKey: String) async throws -> GradingResult
+}
+
+@MainActor
+final class OpenAIClient: OpenAIClientProtocol {
     private let endpoint = URL(string: "https://api.openai.com/v1/responses")
     private let modelsEndpoint = URL(string: "https://api.openai.com/v1/models")
     private let session: URLSession
@@ -249,25 +263,14 @@ final class OpenAIClient {
             throw OpenAIClientError.invalidURL
         }
 
-        var body: [String: Any] = [
-            "model": model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? StudySettings.defaultOpenAIModel : model.trimmingCharacters(in: .whitespacesAndNewlines),
-            "instructions": instructions,
-            "input": input,
-            "text": [
-                "format": [
-                    "type": "json_schema",
-                    "name": schemaName,
-                    "schema": schema,
-                    "strict": true
-                ],
-                "verbosity": "low"
-            ]
-        ]
-
-        if let previousResponseID,
-           !previousResponseID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            body["previous_response_id"] = previousResponseID
-        }
+        let body = Self.structuredRequestBody(
+            model: model,
+            instructions: instructions,
+            input: input,
+            previousResponseID: previousResponseID,
+            schemaName: schemaName,
+            schema: schema
+        )
 
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
@@ -293,6 +296,45 @@ final class OpenAIClient {
             text: text,
             responseID: Self.extractResponseID(from: data)
         )
+    }
+
+    nonisolated static func structuredRequestBody(
+        model: String,
+        instructions: String,
+        input: String,
+        previousResponseID: String?,
+        schemaName: String,
+        schema: [String: Any]
+    ) -> [String: Any] {
+        let trimmedModel = model.trimmingCharacters(in: .whitespacesAndNewlines)
+        let modelID = trimmedModel.isEmpty ? StudySettings.defaultOpenAIModel : trimmedModel
+
+        var text: [String: Any] = [
+            "format": [
+                "type": "json_schema",
+                "name": schemaName,
+                "schema": schema,
+                "strict": true
+            ]
+        ]
+
+        if OpenAIModelOption.supportsTextVerbosity(modelID: modelID) {
+            text["verbosity"] = "low"
+        }
+
+        var body: [String: Any] = [
+            "model": modelID,
+            "instructions": instructions,
+            "input": input,
+            "text": text
+        ]
+
+        if let previousResponseID,
+           !previousResponseID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            body["previous_response_id"] = previousResponseID
+        }
+
+        return body
     }
 
     private func decodeOutput<T: Decodable>(_ type: T.Type, from output: String) throws -> T {
