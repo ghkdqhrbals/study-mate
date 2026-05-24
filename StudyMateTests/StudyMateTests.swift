@@ -82,6 +82,7 @@ final class StudyMateTests: XCTestCase {
         XCTAssertTrue(script.contains("/Applications/StudyMate.app"))
         XCTAssertTrue(script.contains("~/Applications/StudyMate.app"))
         XCTAssertTrue(script.contains("Library/Caches/Sparkle"))
+        XCTAssertTrue(script.contains("사용해주셔서 감사합니다."))
     }
 
     func testAppLanguageControlsStudyLanguageOnSave() {
