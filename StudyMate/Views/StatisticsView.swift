@@ -125,6 +125,7 @@ struct StudyRecordDetailView: View {
     @EnvironmentObject private var appState: AppState
     var record: StudyRecord
     @State private var draftAnswer: String
+    @State private var showsHint = false
 
     init(record: StudyRecord) {
         self.record = record
@@ -159,8 +160,21 @@ struct StudyRecordDetailView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     DetailSection(title: appState.strings.question, text: displayedRecord.question.question)
 
-                    if let hint = displayedRecord.question.expectedAnswerHint, !hint.isEmpty {
-                        DetailSection(title: appState.strings.hint, text: hint)
+                    if let hint = displayedRecord.question.expectedAnswerHint,
+                       !hint.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Button {
+                                showsHint.toggle()
+                            } label: {
+                                Label(showsHint ? appState.strings.hideHint : appState.strings.showHint, systemImage: "lightbulb")
+                            }
+                            .buttonStyle(.borderless)
+                            .font(.caption)
+
+                            if showsHint {
+                                DetailSection(title: appState.strings.hint, text: hint)
+                            }
+                        }
                     }
 
                     if let answer = displayedRecord.answer, !answer.isEmpty {

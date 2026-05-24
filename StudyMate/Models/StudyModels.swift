@@ -503,6 +503,8 @@ struct AppStrings {
     var noQuestionDescription: String { text("설정을 저장한 뒤 새 질문을 생성하세요.", "Save settings, then create a new question.") }
     var answer: String { text("답변", "Answer") }
     var gradeAnswer: String { text("채점 받기", "Grade Answer") }
+    var showHint: String { text("힌트 보기", "Show Hint") }
+    var hideHint: String { text("힌트 숨기기", "Hide Hint") }
     var correct: String { text("정답", "Correct") }
     var nearlyCorrect: String { text("정답에 가까움", "Nearly Correct") }
     var partialCorrect: String { text("부분 정답", "Partially Correct") }

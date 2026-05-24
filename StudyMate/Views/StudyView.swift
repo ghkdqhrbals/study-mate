@@ -2,6 +2,7 @@ import SwiftUI
 
 struct StudyView: View {
     @EnvironmentObject private var appState: AppState
+    @State private var showsHint = false
 
     var body: some View {
         let strings = appState.strings
@@ -57,11 +58,25 @@ struct StudyView: View {
                             .font(.body)
                             .textSelection(.enabled)
 
-                        if let hint = question.expectedAnswerHint, !hint.isEmpty {
-                            Label(hint, systemImage: "lightbulb")
+                        if let hint = question.expectedAnswerHint,
+                           !hint.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Button {
+                                    showsHint.toggle()
+                                } label: {
+                                    Label(showsHint ? strings.hideHint : strings.showHint, systemImage: "lightbulb")
+                                }
+                                .buttonStyle(.borderless)
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .padding(.top, 4)
+
+                                if showsHint {
+                                    Text(hint)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .textSelection(.enabled)
+                                }
+                            }
+                            .padding(.top, 4)
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -134,6 +149,9 @@ struct StudyView: View {
             Spacer(minLength: 0)
         }
         .padding(.top, 10)
+        .onChange(of: appState.currentQuestion?.createdAt) {
+            showsHint = false
+        }
     }
 }
 

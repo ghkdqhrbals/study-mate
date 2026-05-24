@@ -241,6 +241,8 @@ final class StudyWindowPresenter {
     private init() {}
 
     func show(appState: AppState) {
+        let targetScreen = Self.targetScreen(for: window)
+
         if window == nil {
             window = NSApp.windows.first {
                 $0.title == "AI Teacher" || $0.title == "AI 선생님"
@@ -263,8 +265,12 @@ final class StudyWindowPresenter {
             window.minSize = NSSize(width: 560, height: 700)
             window.maxSize = NSSize(width: 560, height: 700)
             window.contentViewController = NSHostingController(rootView: rootView)
-            window.center()
             self.window = window
+        }
+
+        if let window {
+            move(window, to: targetScreen)
+            window.deminiaturize(nil)
         }
 
         NSApp.activate(ignoringOtherApps: true)
@@ -273,6 +279,38 @@ final class StudyWindowPresenter {
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
             self?.window?.level = .normal
+        }
+    }
+
+    private func move(_ window: NSWindow, to screen: NSScreen) {
+        let visibleFrame = screen.visibleFrame
+        let size = window.frame.size
+        let width = min(size.width, visibleFrame.width)
+        let height = min(size.height, visibleFrame.height)
+        let origin = NSPoint(
+            x: visibleFrame.midX - width / 2,
+            y: visibleFrame.midY - height / 2
+        )
+
+        window.setFrame(NSRect(origin: origin, size: NSSize(width: width, height: height)), display: true)
+    }
+
+    private static func targetScreen(for window: NSWindow?) -> NSScreen {
+        if let screen = screenContainingMouse() {
+            return screen
+        }
+
+        guard let screen = window?.screen ?? NSScreen.main ?? NSScreen.screens.first else {
+            preconditionFailure("StudyMate requires at least one display.")
+        }
+
+        return screen
+    }
+
+    private static func screenContainingMouse() -> NSScreen? {
+        let mouseLocation = NSEvent.mouseLocation
+        return NSScreen.screens.first { screen in
+            screen.frame.contains(mouseLocation)
         }
     }
 }
