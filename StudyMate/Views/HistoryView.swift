@@ -54,44 +54,39 @@ struct HistoryView: View {
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 10) {
-                        ForEach(visibleRecords) { record in
-                            VStack(alignment: .leading, spacing: 8) {
-                                HStack(alignment: .top, spacing: 8) {
-                                    Button {
-                                        selectedRecordID = selectedRecordID == record.id ? nil : record.id
-                                    } label: {
-                                        HistoryRow(record: record, strings: strings, isSelected: selectedRecordID == record.id)
-                                            .frame(maxWidth: .infinity, alignment: .leading)
-                                    }
-                                    .buttonStyle(.plain)
+                List {
+                    ForEach(visibleRecords) { record in
+                        VStack(alignment: .leading, spacing: 8) {
+                            Button {
+                                selectedRecordID = selectedRecordID == record.id ? nil : record.id
+                            } label: {
+                                HistoryRow(record: record, strings: strings, isSelected: selectedRecordID == record.id)
                                     .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .buttonStyle(.plain)
+                            .frame(maxWidth: .infinity, alignment: .leading)
 
-                                    Button(role: .destructive) {
-                                        appState.deleteStudyRecord(record)
-                                        clampPage()
-                                        if selectedRecordID == record.id {
-                                            selectedRecordID = nil
-                                        }
-                                    } label: {
-                                        Image(systemName: "trash")
-                                    }
-                                    .buttonStyle(.borderless)
-                                    .help(strings.deleteRecordHelp)
+                            if selectedRecordID == record.id {
+                                InlineStudyRecordDetail(record: record) {
+                                    selectedRecordID = nil
                                 }
-
-                                if selectedRecordID == record.id {
-                                    InlineStudyRecordDetail(record: record) {
-                                        selectedRecordID = nil
-                                    }
-                                    .transition(.opacity.combined(with: .move(edge: .top)))
-                                }
+                                .transition(.opacity.combined(with: .move(edge: .top)))
+                            }
+                        }
+                        .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 10, trailing: 0))
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button(role: .destructive) {
+                                delete(record)
+                            } label: {
+                                Label(strings.clear, systemImage: "trash")
                             }
                         }
                     }
-                    .padding(.bottom, 12)
                 }
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
                 .frame(maxHeight: .infinity)
 
                 Divider()
@@ -162,6 +157,14 @@ struct HistoryView: View {
 
         page = index / pageSize
         selectedRecordID = request.recordID
+    }
+
+    private func delete(_ record: StudyRecord) {
+        appState.deleteStudyRecord(record)
+        clampPage()
+        if selectedRecordID == record.id {
+            selectedRecordID = nil
+        }
     }
 }
 

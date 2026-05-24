@@ -237,6 +237,8 @@ private struct DetailSection: View {
                 .foregroundStyle(.secondary)
             Text(text)
                 .textSelection(.enabled)
+                .lineLimit(nil)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }

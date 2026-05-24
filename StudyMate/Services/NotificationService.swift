@@ -269,8 +269,10 @@ final class StudyWindowPresenter {
         }
 
         if let window {
+            prepareForActiveDesktop(window)
             move(window, to: targetScreen)
             window.deminiaturize(nil)
+            window.orderFrontRegardless()
         }
 
         NSApp.activate(ignoringOtherApps: true)
@@ -280,6 +282,10 @@ final class StudyWindowPresenter {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
             self?.window?.level = .normal
         }
+    }
+
+    private func prepareForActiveDesktop(_ window: NSWindow) {
+        window.collectionBehavior.insert(.moveToActiveSpace)
     }
 
     private func move(_ window: NSWindow, to screen: NSScreen) {
