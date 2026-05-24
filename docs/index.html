@@ -44,9 +44,9 @@
     }
 
     main {
-      width: min(680px, calc(100vw - 40px));
+      width: min(720px, calc(100vw - 40px));
       margin: 0 auto;
-      padding: 56px 0 40px;
+      padding: 48px 0 40px;
     }
 
     nav {
@@ -62,34 +62,43 @@
     }
 
     header {
-      padding: 72px 0 48px;
-      text-align: center;
+      padding: 72px 0 42px;
     }
 
-    img {
-      width: 88px;
-      height: 88px;
-      margin-bottom: 22px;
-      border-radius: 20px;
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 34px;
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .brand img {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
     }
 
     h1 {
       margin: 0;
-      font-size: 48px;
-      line-height: 1.05;
+      max-width: 680px;
+      font-size: clamp(42px, 8vw, 72px);
+      line-height: 1.02;
       letter-spacing: 0;
     }
 
     .lead {
-      max-width: 560px;
-      margin: 16px auto 0;
+      max-width: 640px;
+      margin: 22px 0 0;
       color: var(--muted);
-      font-size: 19px;
+      font-size: 20px;
     }
 
     .meta {
       display: flex;
-      justify-content: center;
+      flex-wrap: wrap;
       gap: 12px;
       margin-top: 18px;
       color: var(--muted);
@@ -104,9 +113,8 @@
 
     .actions {
       display: flex;
-      justify-content: center;
       gap: 10px;
-      margin-top: 28px;
+      margin-top: 30px;
     }
 
     .button {
@@ -124,7 +132,7 @@
     }
 
     .note {
-      margin-top: 12px;
+      margin-top: 14px;
       color: var(--muted);
       font-size: 13px;
     }
@@ -169,10 +177,6 @@
         padding-top: 52px;
       }
 
-      h1 {
-        font-size: 40px;
-      }
-
       .lead {
         font-size: 17px;
       }
@@ -196,22 +200,26 @@
     </nav>
 
     <header>
-      <img src="assets/studymate-icon.svg" alt="StudyMate icon" width="88" height="88">
-      <h1>StudyMate</h1>
-      <p class="lead">AI 시대에도 좋은 결과물은 내가 가진 지식에서 시작됩니다. StudyMate는 그 지식을 매일 조금씩 쌓도록 돕는 무료 macOS 메뉴바 AI 튜터입니다.</p>
+      <div class="brand">
+        <img src="assets/studymate-icon.svg" alt="StudyMate icon" width="40" height="40">
+        <span>StudyMate</span>
+      </div>
+      <h1>잘 아는 만큼, AI 결과도 선명해집니다.</h1>
+      <p class="lead">AI를 매일 쓰면서 깨달았습니다. 내가 더 잘 이해할수록 질문은 또렷해지고, 결과물의 해상도도 높아집니다. 그 감각을 꾸준히 유지하고 나누고 싶어서 StudyMate를 만들었습니다.</p>
       <div class="meta" aria-label="Release information">
         <span>v1.0.8</span>
         <span>MIT License</span>
+        <span>무료 소프트웨어</span>
       </div>
       <div class="actions">
         <a class="button primary" href="https://github.com/ghkdqhrbals/study-mate/releases/download/v1.0.8/StudyMate-1.0.8.dmg">DMG 다운로드</a>
         <a class="button" href="https://github.com/ghkdqhrbals/study-mate">GitHub</a>
       </div>
-      <p class="note">앱은 무료입니다. 사용하려면 본인의 OpenAI API key가 필요합니다.</p>
+      <p class="note">앱은 무료입니다. 사용하려면 본인의 OpenAI API key만 있으면 됩니다.</p>
     </header>
 
     <section>
-      <h2>무엇을 하나요</h2>
+      <h2>무엇을 돕나요</h2>
       <ul>
         <li>원하는 주제와 난이도로 질문을 받습니다.</li>
         <li>답변하면 AI가 점수, 피드백, 해설을 제공합니다.</li>
@@ -220,8 +228,8 @@
     </section>
 
     <section>
-      <h2>만든 이유</h2>
-      <p>AI를 계속 쓰다 보니, 내가 잘 아는 만큼 질문이 선명해지고 결과물의 해상도도 높아진다는 걸 느꼈습니다. 그 감각을 더 쉽게 유지하고 나누고 싶어서 만들었습니다.</p>
+      <h2>간단한 원칙</h2>
+      <p>AI가 대신 생각해주는 도구가 되지 않도록, 나만의 지식을 계속 쌓는 작은 루틴을 만드는 것이 목표입니다.</p>
     </section>
 
     <footer>
