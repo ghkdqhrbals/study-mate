@@ -185,10 +185,10 @@ private struct PendingQuestionsSection: View {
     var onSelect: (StudyRecord) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline) {
                 Text(strings.pendingQuestions)
-                    .font(.subheadline)
+                    .font(.caption)
                     .fontWeight(.semibold)
 
                 Text(strings.pendingQuestionCount(records.count))
@@ -198,7 +198,7 @@ private struct PendingQuestionsSection: View {
                 Spacer()
             }
 
-            VStack(spacing: 8) {
+            VStack(spacing: 4) {
                 ForEach(records) { record in
                     let isSelected = isCurrent(record)
 
@@ -230,37 +230,32 @@ private struct PendingQuestionRow: View {
     var isSelected: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                HStack(spacing: 6) {
+        HStack(alignment: .center, spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(record.question.question)
+                    .font(.callout)
+                    .fontWeight(isSelected ? .semibold : .regular)
+                    .lineLimit(1)
+
+                HStack(spacing: 5) {
                     Text(record.topic.isEmpty ? strings.studyFallback : record.topic)
-                        .lineLimit(1)
-
                     Text("·")
-
                     Text(record.difficulty.displayName(language: strings.language))
-                        .lineLimit(1)
                 }
-                .font(.caption)
-                .fontWeight(.semibold)
+                .font(.caption2)
                 .foregroundStyle(.secondary)
-
-                Spacer(minLength: 8)
-
-                Text(isSelected ? strings.current : strings.openPendingQuestion)
-                    .font(.caption)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.secondary)
+                .lineLimit(1)
             }
 
-            Text(record.question.question)
-                .font(.callout)
-                .fontWeight(isSelected ? .semibold : .regular)
-                .lineLimit(2)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            Spacer(minLength: 8)
+
+            Text(isSelected ? strings.current : strings.openPendingQuestion)
+                .font(.caption2)
+                .fontWeight(.semibold)
+                .foregroundStyle(.secondary)
         }
-        .padding(.vertical, 10)
-        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .padding(.horizontal, 10)
         .background(isSelected ? Color.secondary.opacity(0.1) : Color.secondary.opacity(0.04))
         .overlay {
             RoundedRectangle(cornerRadius: 8)

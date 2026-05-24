@@ -76,6 +76,7 @@ struct StatisticsView: View {
                     selectedPeriod: $selectedPeriod,
                     customStartDate: $customStartDate,
                     customEndDate: $customEndDate,
+                    filteredRecords: gradedRecords,
                     strings: strings
                 )
 
@@ -94,27 +95,17 @@ struct StatisticsView: View {
                     )
                     .frame(maxWidth: .infinity, minHeight: 280)
                 } else {
-                    LazyVGrid(
-                        columns: [
-                            GridItem(.flexible(minimum: 120), spacing: 8),
-                            GridItem(.flexible(minimum: 120), spacing: 8),
-                            GridItem(.flexible(minimum: 120), spacing: 8)
-                        ],
-                        spacing: 8
-                    ) {
-                        StatBox(title: strings.responses, value: "\(scores.count)")
-                        StatBox(title: strings.average, value: "\(averageScore)")
-                        StatBox(title: strings.latestScore, value: "\(scores.last ?? 0)")
-                        StatBox(title: strings.best, value: "\(scores.max() ?? 0)")
-                        StatBox(title: strings.lowest, value: "\(scores.min() ?? 0)")
-                        StatBox(title: strings.trend, value: trendText)
-                    }
-
-                    DateRangeSummary(records: gradedRecords, strings: strings)
-                        .padding(.bottom, 2)
+                    KeyMetricsStrip(metrics: [
+                        MetricItem(title: strings.responses, value: "\(scores.count)"),
+                        MetricItem(title: strings.average, value: "\(averageScore)"),
+                        MetricItem(title: strings.latestScore, value: "\(scores.last ?? 0)"),
+                        MetricItem(title: strings.best, value: "\(scores.max() ?? 0)"),
+                        MetricItem(title: strings.lowest, value: "\(scores.min() ?? 0)"),
+                        MetricItem(title: strings.trend, value: trendText)
+                    ])
 
                     ScoreLineChart(records: gradedRecords)
-                        .frame(height: 170)
+                        .frame(height: 150)
                         .padding(.vertical, 4)
 
                     ScoreDistributionSection(records: gradedRecords, strings: strings)
@@ -370,30 +361,52 @@ private struct StatisticsPeriodControls: View {
     @Binding var selectedPeriod: StatisticsPeriod
     @Binding var customStartDate: Date
     @Binding var customEndDate: Date
+    var filteredRecords: [StudyRecord]
     var strings: AppStrings
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 7) {
             HStack(spacing: 10) {
-                Label(strings.period, systemImage: "calendar")
+                Text(strings.period)
                     .font(.caption)
-                    .fontWeight(.semibold)
                     .foregroundStyle(.secondary)
 
-                Spacer()
-
-                Picker(strings.period, selection: $selectedPeriod) {
+                Menu {
                     ForEach(StatisticsPeriod.allCases) { period in
-                        Text(period.title(strings: strings)).tag(period)
+                        Button {
+                            selectedPeriod = period
+                        } label: {
+                            if selectedPeriod == period {
+                                Text("✓ \(period.title(strings: strings))")
+                            } else {
+                                Text("  \(period.title(strings: strings))")
+                            }
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 5) {
+                        Text(selectedPeriod.title(strings: strings))
+                            .font(.caption)
+                            .fontWeight(.semibold)
+
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(.secondary)
                     }
                 }
-                .labelsHidden()
-                .pickerStyle(.menu)
-                .frame(width: 150)
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+
+                Spacer(minLength: 8)
+
+                Text(rangeText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
 
             if selectedPeriod == .custom {
-                HStack(spacing: 12) {
+                HStack(spacing: 10) {
                     DatePicker(
                         strings.startDate,
                         selection: $customStartDate,
@@ -409,13 +422,45 @@ private struct StatisticsPeriodControls: View {
                 .font(.caption)
             }
         }
-        .padding(10)
+        .padding(.vertical, 8)
+        .padding(.horizontal, 10)
         .background(Color.secondary.opacity(0.04))
         .overlay {
             RoundedRectangle(cornerRadius: 8)
                 .stroke(Color.secondary.opacity(0.1), lineWidth: 1)
         }
         .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var rangeText: String {
+        if selectedPeriod == .custom {
+            return "\(Self.dateFormatter.string(from: customStartDate)) - \(Self.dateFormatter.string(from: customEndDate))"
+        }
+
+        guard let firstRecord = filteredRecords.first,
+              let latestRecord = filteredRecords.last else {
+            return selectedPeriod.title(strings: strings)
+        }
+
+        let first = Self.statsDate(for: firstRecord)
+        let latest = Self.statsDate(for: latestRecord)
+        return "\(Self.dateTimeFormatter.string(from: first)) - \(Self.dateTimeFormatter.string(from: latest))"
+    }
+
+    private static let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "M/d"
+        return formatter
+    }()
+
+    private static let dateTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "M/d HH:mm"
+        return formatter
+    }()
+
+    private static func statsDate(for record: StudyRecord) -> Date {
+        record.answeredAt ?? record.question.createdAt
     }
 }
 
@@ -542,6 +587,39 @@ private struct ScoreBucket: Identifiable {
     var id: String { title }
 }
 
+private struct MetricItem: Identifiable {
+    var title: String
+    var value: String
+
+    var id: String { title }
+}
+
+private struct KeyMetricsStrip: View {
+    var metrics: [MetricItem]
+
+    var body: some View {
+        LazyVGrid(
+            columns: [
+                GridItem(.flexible(), spacing: 10),
+                GridItem(.flexible(), spacing: 10),
+                GridItem(.flexible(), spacing: 10)
+            ],
+            spacing: 10
+        ) {
+            ForEach(metrics) { metric in
+                MiniMetric(title: metric.title, value: metric.value)
+            }
+        }
+        .padding(10)
+        .background(Color.secondary.opacity(0.045))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.secondary.opacity(0.1), lineWidth: 1)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+}
+
 private struct MiniMetric: View {
     var title: String
     var value: String
@@ -556,75 +634,6 @@ private struct MiniMetric: View {
                 .fontWeight(.semibold)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
-private struct StatBox: View {
-    var title: String
-    var value: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Text(value)
-                .font(.title3)
-                .fontWeight(.semibold)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(10)
-        .background(Color.secondary.opacity(0.045))
-        .overlay {
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(Color.secondary.opacity(0.1), lineWidth: 1)
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-    }
-}
-
-private struct DateRangeSummary: View {
-    var records: [StudyRecord]
-    var strings: AppStrings
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Label(strings.period, systemImage: "calendar")
-                .font(.caption)
-                .fontWeight(.semibold)
-                .foregroundStyle(.secondary)
-
-            if let firstRecord = records.first,
-               let latestRecord = records.last {
-                let first = Self.statsDate(for: firstRecord)
-                let latest = Self.statsDate(for: latestRecord)
-                Text("\(strings.firstRecord) \(first, formatter: Self.dateFormatter)")
-                Text("·")
-                    .foregroundStyle(.secondary)
-                Text("\(strings.latestRecord) \(latest, formatter: Self.dateFormatter)")
-            }
-        }
-        .font(.caption)
-        .lineLimit(1)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(10)
-        .background(Color.secondary.opacity(0.04))
-        .overlay {
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(Color.secondary.opacity(0.1), lineWidth: 1)
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-    }
-
-    private static let dateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .short
-        formatter.timeStyle = .short
-        return formatter
-    }()
-
-    private static func statsDate(for record: StudyRecord) -> Date {
-        record.answeredAt ?? record.question.createdAt
     }
 }
 
