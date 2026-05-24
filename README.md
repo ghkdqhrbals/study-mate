@@ -70,6 +70,13 @@ For trusted public distribution without Gatekeeper warnings, configure these Git
 
 When Developer ID secrets are present, the workflow signs the app and DMG, notarizes the DMG, and staples the notarization ticket before publishing the release.
 
+You can configure the secrets from this machine with:
+
+```sh
+gh auth login -h github.com
+DEVELOPER_ID_CERTIFICATE_PASSWORD='your-p12-password' ./scripts/configure-release-secrets.sh
+```
+
 ## Uninstall
 
 Open `Uninstall StudyMate.command` from the DMG, or remove manually:
