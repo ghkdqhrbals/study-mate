@@ -1,7 +1,7 @@
 import Foundation
 import AppKit
 import SwiftUI
-import UserNotifications
+@preconcurrency import UserNotifications
 
 enum StudyNotificationAction {
     static let category = "STUDY_QUESTION_CATEGORY"
