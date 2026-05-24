@@ -166,8 +166,8 @@ private struct SwipeToDeleteHistoryRow<Content: View>: View {
     var onSelect: () -> Void
     var content: () -> Content
 
-    @GestureState private var dragTranslation: CGFloat = 0
-    @State private var restingOffset: CGFloat = 0
+    @State private var rowOffset: CGFloat = 0
+    @State private var dragStartOffset: CGFloat?
 
     init(
         strings: AppStrings,
@@ -184,18 +184,14 @@ private struct SwipeToDeleteHistoryRow<Content: View>: View {
     private let actionWidth: CGFloat = 88
 
     private var effectiveOffset: CGFloat {
-        min(0, max(-actionWidth, restingOffset + dragTranslation))
-    }
-
-    private var revealProgress: Double {
-        min(1, max(0, Double(-effectiveOffset / actionWidth)))
+        min(0, max(-actionWidth, rowOffset))
     }
 
     var body: some View {
         ZStack(alignment: .trailing) {
             Button(role: .destructive) {
                 withAnimation(.snappy) {
-                    restingOffset = 0
+                    rowOffset = 0
                 }
                 onDelete()
             } label: {
@@ -211,19 +207,19 @@ private struct SwipeToDeleteHistoryRow<Content: View>: View {
                 .clipShape(TrailingRoundedRectangle(radius: 8))
             }
             .buttonStyle(.plain)
-            .opacity(revealProgress)
-            .allowsHitTesting(revealProgress > 0.95)
+            .offset(x: actionWidth + effectiveOffset)
+            .allowsHitTesting(rowOffset <= -actionWidth * 0.95)
             .zIndex(3)
 
             content()
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .offset(x: effectiveOffset)
                 .contentShape(Rectangle())
-                .allowsHitTesting(restingOffset == 0)
+                .allowsHitTesting(rowOffset == 0)
                 .onTapGesture {
-                    if restingOffset < 0 {
+                    if rowOffset < 0 {
                         withAnimation(.snappy) {
-                            restingOffset = 0
+                            rowOffset = 0
                         }
                     } else {
                         onSelect()
@@ -231,32 +227,42 @@ private struct SwipeToDeleteHistoryRow<Content: View>: View {
                 }
                 .simultaneousGesture(
                     DragGesture(minimumDistance: 12)
-                        .updating($dragTranslation) { value, state, _ in
-                            guard abs(value.translation.width) > abs(value.translation.height) else {
-                                return
-                            }
-                            state = value.translation.width
-                        }
-                        .onEnded { value in
+                        .onChanged { value in
                             guard abs(value.translation.width) > abs(value.translation.height) else {
                                 return
                             }
 
-                            let proposedOffset = restingOffset + value.translation.width
+                            if dragStartOffset == nil {
+                                dragStartOffset = rowOffset
+                            }
+
+                            let startOffset = dragStartOffset ?? 0
+                            rowOffset = min(0, max(-actionWidth, startOffset + value.translation.width))
+                        }
+                        .onEnded { value in
+                            defer {
+                                dragStartOffset = nil
+                            }
+
+                            guard abs(value.translation.width) > abs(value.translation.height) else {
+                                return
+                            }
+
+                            let targetOffset = rowOffset < -actionWidth * 0.45 ? -actionWidth : 0
                             withAnimation(.snappy) {
-                                restingOffset = proposedOffset < -actionWidth * 0.45 ? -actionWidth : 0
+                                rowOffset = targetOffset
                             }
                         }
                 )
                 .zIndex(1)
 
-            if restingOffset < 0 {
+            if rowOffset < 0 {
                 HStack(spacing: 0) {
                     Color.clear
                         .contentShape(Rectangle())
                         .onTapGesture {
                             withAnimation(.snappy) {
-                                restingOffset = 0
+                                rowOffset = 0
                             }
                         }
 
