@@ -187,6 +187,10 @@ private struct SwipeToDeleteHistoryRow<Content: View>: View {
         min(0, max(-actionWidth, restingOffset + dragTranslation))
     }
 
+    private var revealProgress: Double {
+        min(1, max(0, Double(-effectiveOffset / actionWidth)))
+    }
+
     var body: some View {
         ZStack(alignment: .trailing) {
             Button(role: .destructive) {
@@ -207,8 +211,12 @@ private struct SwipeToDeleteHistoryRow<Content: View>: View {
                 .clipShape(RoundedRectangle(cornerRadius: 8))
             }
             .buttonStyle(.plain)
+            .opacity(revealProgress)
+            .allowsHitTesting(restingOffset < 0)
+            .zIndex(0)
 
             content()
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .offset(x: effectiveOffset)
                 .contentShape(Rectangle())
                 .onTapGesture {
@@ -239,7 +247,9 @@ private struct SwipeToDeleteHistoryRow<Content: View>: View {
                             }
                         }
                 )
+                .zIndex(1)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .clipped()
     }
 }
@@ -294,6 +304,7 @@ private struct HistoryRow: View {
             }
         }
         .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(isSelected ? Color.accentColor.opacity(0.12) : Color.secondary.opacity(0.08))
         .overlay {
             RoundedRectangle(cornerRadius: 8)
