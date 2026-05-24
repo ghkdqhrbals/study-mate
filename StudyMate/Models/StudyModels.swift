@@ -429,9 +429,9 @@ struct AppStrings {
     func timerTitle(minutes: Int) -> String { text("타이머: \(minutes)분", "Timer: \(minutes) min") }
     func minuteLabel(_ minutes: Int) -> String { text("\(minutes)분", "\(minutes) min") }
     var languageMenu: String { text("앱 언어", "App Language") }
-    var pause: String { text("⏸ 일시정지", "⏸ Pause") }
-    var resume: String { text("▶ 재개", "▶ Resume") }
-    var quit: String { text("⏻ StudyMate 종료", "⏻ Quit StudyMate") }
+    var pause: String { text("일시정지", "Pause") }
+    var resume: String { text("재개", "Resume") }
+    var quit: String { text("StudyMate 종료", "Quit StudyMate") }
 
     var general: String { "General" }
     var secrets: String { "Secrets" }

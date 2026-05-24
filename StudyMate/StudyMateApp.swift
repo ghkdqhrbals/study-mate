@@ -105,14 +105,17 @@ private struct MenuBarMenuView: View {
             appState.setRunning(!appState.isRunning)
             NSApp.activate(ignoringOtherApps: true)
         } label: {
-            Text(appState.isRunning ? strings.pause : strings.resume)
+            Label(
+                appState.isRunning ? strings.pause : strings.resume,
+                systemImage: appState.isRunning ? "pause.fill" : "play.fill"
+            )
         }
         .keyboardShortcut("p", modifiers: .command)
 
         Button {
             NSApp.terminate(nil)
         } label: {
-            Text(strings.quit)
+            Label(strings.quit, systemImage: "power")
         }
         .keyboardShortcut("q", modifiers: .command)
     }
@@ -178,10 +181,13 @@ private struct StatusMenuRow: View {
     var title: String
 
     var body: some View {
-        Text("● ")
-            .font(.system(size: 10, weight: .semibold))
-            .foregroundStyle(isRunning ? Color.green : Color.orange)
-            + Text(title)
+        Label {
+            Text(title)
+        } icon: {
+            Circle()
+                .fill(isRunning ? Color.green : Color.orange)
+                .frame(width: 8, height: 8)
+        }
     }
 }
 
