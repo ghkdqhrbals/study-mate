@@ -19,8 +19,6 @@ final class AppState: ObservableObject {
     @Published var errorMessage: String?
     @Published var selectedTab: AppTab = .study
     @Published var focusedRecordRequest: FocusedRecordRequest?
-    @Published var notificationPermissionState: NotificationPermissionState = .unknown
-    @Published var isRequestingNotificationPermission = false
 
     private let settingsStore: SettingsStore
     private let openAIClient: OpenAIClientProtocol
@@ -109,7 +107,6 @@ final class AppState: ObservableObject {
 
         didStart = true
         _ = await notificationService.requestAuthorizationIfNeeded(language: settings.appLanguage)
-        await refreshNotificationPermissionState()
         await validateAPIKeyOnStartup()
         restartTimer()
     }
@@ -238,22 +235,6 @@ final class AppState: ObservableObject {
         statusMessage = sound == .none
             ? "알림음을 없음으로 설정했습니다."
             : "\(sound.displayName(language: settings.appLanguage)) 알림음을 재생했습니다."
-    }
-
-    func refreshNotificationPermissionState() async {
-        notificationPermissionState = await notificationService.notificationPermissionState()
-    }
-
-    func requestNotificationPermission() async {
-        isRequestingNotificationPermission = true
-        notificationPermissionState = await notificationService.requestAuthorization(language: settings.appLanguage)
-        isRequestingNotificationPermission = false
-
-        if notificationPermissionState == .authorized || notificationPermissionState == .provisional {
-            statusMessage = "알림 권한이 허용되었습니다."
-        } else if notificationPermissionState == .denied {
-            statusMessage = "알림 권한이 거부되어 macOS 설정에서 허용해야 합니다."
-        }
     }
 
     func openSystemNotificationSettings() {

@@ -182,38 +182,10 @@ private struct GeneralSettingsSection: View {
                 .font(.subheadline)
                 .fontWeight(.semibold)
 
-            HStack(alignment: .firstTextBaseline) {
-                Text(strings.notificationPermission)
-                    .foregroundStyle(.secondary)
-
-                Spacer()
-
-                Text(appState.notificationPermissionState.displayName(language: appState.settings.appLanguage))
-                    .fontWeight(.semibold)
-            }
-
-            HStack(spacing: 8) {
-                Button {
-                    Task {
-                        await appState.requestNotificationPermission()
-                    }
-                } label: {
-                    if appState.isRequestingNotificationPermission {
-                        ProgressView()
-                            .controlSize(.small)
-                    } else {
-                        Text(strings.requestNotificationPermission)
-                    }
-                }
-                .disabled(!appState.notificationPermissionState.canRequestPermission || appState.isRequestingNotificationPermission)
-
-                if appState.notificationPermissionState.needsSystemSettings {
-                    Button {
-                        appState.openSystemNotificationSettings()
-                    } label: {
-                        Text(strings.openNotificationSettings)
-                    }
-                }
+            Button {
+                appState.openSystemNotificationSettings()
+            } label: {
+                Label(strings.openNotificationSettings, systemImage: "bell.badge")
             }
 
             Text(strings.notificationPermissionHelp)
@@ -250,9 +222,6 @@ private struct GeneralSettingsSection: View {
             Text(strings.debuggingHelp)
                 .font(.caption)
                 .foregroundStyle(.secondary)
-        }
-        .task {
-            await appState.refreshNotificationPermissionState()
         }
     }
 }

@@ -15,11 +15,6 @@ enum StudyNotificationAction {
 final class NotificationService {
     private var previewSound: NSSound?
 
-    func notificationPermissionState() async -> NotificationPermissionState {
-        let settings = await UNUserNotificationCenter.current().notificationSettings()
-        return NotificationPermissionState(authorizationStatus: settings.authorizationStatus)
-    }
-
     func requestAuthorizationIfNeeded(language: AppLanguage) async -> Bool {
         let center = UNUserNotificationCenter.current()
         StudyNotificationDelegate.shared.register(language: language)
@@ -41,18 +36,6 @@ final class NotificationService {
         @unknown default:
             return false
         }
-    }
-
-    func requestAuthorization(language: AppLanguage) async -> NotificationPermissionState {
-        let center = UNUserNotificationCenter.current()
-        StudyNotificationDelegate.shared.register(language: language)
-        let settings = await center.notificationSettings()
-
-        if settings.authorizationStatus == .notDetermined {
-            _ = try? await center.requestAuthorization(options: [.alert, .sound])
-        }
-
-        return await notificationPermissionState()
     }
 
     func openSystemNotificationSettings() {
@@ -118,25 +101,6 @@ final class NotificationService {
         )
 
         try? await UNUserNotificationCenter.current().add(request)
-    }
-}
-
-private extension NotificationPermissionState {
-    init(authorizationStatus: UNAuthorizationStatus) {
-        switch authorizationStatus {
-        case .notDetermined:
-            self = .notDetermined
-        case .denied:
-            self = .denied
-        case .authorized:
-            self = .authorized
-        case .provisional:
-            self = .provisional
-        case .ephemeral:
-            self = .ephemeral
-        @unknown default:
-            self = .unknown
-        }
     }
 }
 
