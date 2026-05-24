@@ -123,30 +123,53 @@ private struct MenuBarIcon: View {
     var hasAPIKeyError: Bool
 
     var body: some View {
-        ZStack {
+        ZStack(alignment: .bottomTrailing) {
+            BookStarGlyph(isRunning: isRunning)
+                .frame(width: 21, height: 18)
+                .padding(.trailing, hasAPIKeyError ? 3 : 0)
+
+            if hasAPIKeyError {
+                WarningBadge()
+                    .frame(width: 10, height: 10)
+                    .offset(x: 1, y: 1)
+            }
+        }
+        .frame(width: 26, height: 20, alignment: .center)
+    }
+}
+
+private struct BookStarGlyph: View {
+    var isRunning: Bool
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
             Image(systemName: isRunning ? "book.fill" : "book.closed.fill")
                 .font(.system(size: 16, weight: .semibold))
                 .symbolRenderingMode(.hierarchical)
-                .frame(width: 22, height: 18, alignment: .center)
 
-            if hasAPIKeyError {
-                ZStack {
-                    Circle()
-                        .fill(Color.orange)
-                    Text("!")
-                        .font(.system(size: 7, weight: .black, design: .rounded))
-                        .foregroundStyle(.white)
-                }
-                .frame(width: 10, height: 10)
-                .overlay {
-                    Circle()
-                        .stroke(Color.black.opacity(0.7), lineWidth: 1)
-                }
-                .offset(x: 7, y: 4)
-            }
+            Image(systemName: "star.fill")
+                .font(.system(size: 6.5, weight: .black))
+                .offset(x: 1.5, y: -1)
         }
-        .frame(width: 24, height: 20, alignment: .center)
-        .clipped()
+        .foregroundStyle(.primary.opacity(isRunning ? 1 : 0.62))
+        .accessibilityLabel("StudyMate")
+    }
+}
+
+private struct WarningBadge: View {
+    var body: some View {
+        ZStack {
+            Image(systemName: "exclamationmark.circle.fill")
+                .font(.system(size: 10, weight: .black))
+                .symbolRenderingMode(.palette)
+                .foregroundStyle(.white, .orange)
+        }
+        .overlay {
+            Circle()
+                .stroke(.white.opacity(0.95), lineWidth: 0.8)
+        }
+        .shadow(color: .black.opacity(0.35), radius: 0.6, x: 0, y: 0)
+        .accessibilityLabel("Invalid API key")
     }
 }
 
