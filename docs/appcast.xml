@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+  <channel>
+    <title>StudyMate Updates</title>
+    <link>https://ghkdqhrbals.github.io/study-mate/</link>
+    <description>StudyMate release feed</description>
+    <language>en</language>
+    <item>
+      <title>StudyMate 1.0.5</title>
+      <sparkle:version>5</sparkle:version>
+      <sparkle:shortVersionString>1.0.5</sparkle:shortVersionString>
+      <pubDate>Sun, 24 May 2026 17:43:30 GMT</pubDate>
+      <link>https://github.com/ghkdqhrbals/study-mate/releases/tag/v1.0.5</link>
+      <enclosure
+        url="https://github.com/ghkdqhrbals/study-mate/releases/download/v1.0.5/StudyMate-1.0.5.dmg"
+        sparkle:edSignature="mXxq/YQa84bTpRArpSxh4wnMtJyaMLIOFDTN/TtT7gTc4eEl3KPrIMJe77eHic9vqXwlKc19E2oXHA1yNe90BA=="
+        length="2348977"
+        type="application/x-apple-diskimage" />
+    </item>
+  </channel>
+</rss>
