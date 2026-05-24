@@ -5,6 +5,7 @@ struct HistoryView: View {
     @State private var selectedRecordID: String?
     @State private var openSwipeRecordID: String?
     @State private var searchText = ""
+    @State private var filter: HistoryRecordFilter = .all
     @State private var page = 0
 
     private let pageSize = 10
@@ -13,13 +14,24 @@ struct HistoryView: View {
         Array(appState.studyRecords.reversed())
     }
 
+    private var filteredByStatusRecords: [StudyRecord] {
+        switch filter {
+        case .all:
+            orderedRecords
+        case .graded:
+            orderedRecords.filter { $0.gradingResult != nil }
+        case .ungraded:
+            orderedRecords.filter { $0.gradingResult == nil }
+        }
+    }
+
     private var filteredRecords: [StudyRecord] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !query.isEmpty else {
-            return orderedRecords
+            return filteredByStatusRecords
         }
 
-        return orderedRecords.filter { record in
+        return filteredByStatusRecords.filter { record in
             record.question.question.lowercased().contains(query) ||
                 record.topic.lowercased().contains(query) ||
                 (record.answer ?? "").lowercased().contains(query) ||
@@ -54,7 +66,7 @@ struct HistoryView: View {
                 Spacer()
 
                 if !appState.studyRecords.isEmpty {
-                    Text(strings.itemCount(appState.studyRecords.count))
+                    Text(strings.filteredRecordCount(filteredRecords.count, total: appState.studyRecords.count))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -68,6 +80,13 @@ struct HistoryView: View {
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
+                Picker("", selection: $filter) {
+                    ForEach(HistoryRecordFilter.allCases) { filter in
+                        Text(filter.title(strings: strings)).tag(filter)
+                    }
+                }
+                .pickerStyle(.segmented)
+
                 TextField(strings.searchRecords, text: $searchText)
                     .textFieldStyle(.roundedBorder)
 
@@ -176,6 +195,11 @@ struct HistoryView: View {
             selectedRecordID = nil
             openSwipeRecordID = nil
         }
+        .onChange(of: filter) {
+            page = 0
+            selectedRecordID = nil
+            openSwipeRecordID = nil
+        }
         .onChange(of: appState.focusedRecordRequest) {
             showFocusedRecord()
         }
@@ -215,6 +239,25 @@ struct HistoryView: View {
 
         withAnimation(.snappy) {
             openSwipeRecordID = nil
+        }
+    }
+}
+
+private enum HistoryRecordFilter: String, CaseIterable, Identifiable {
+    case all
+    case graded
+    case ungraded
+
+    var id: String { rawValue }
+
+    func title(strings: AppStrings) -> String {
+        switch self {
+        case .all:
+            strings.recordFilterAll
+        case .graded:
+            strings.recordFilterGraded
+        case .ungraded:
+            strings.recordFilterUngraded
         }
     }
 }

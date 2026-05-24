@@ -482,6 +482,28 @@ final class AppState: ObservableObject {
         log(.info, "현재 미제출 질문을 넘겼습니다.")
     }
 
+    func openOldestPendingQuestion() {
+        guard let record = pendingStudyRecords.last else {
+            return
+        }
+
+        selectStudyRecord(record)
+        statusMessage = "가장 오래된 미제출 질문을 열었습니다."
+        log(.info, "가장 오래된 미제출 질문을 열었습니다.")
+    }
+
+    func copyToClipboard(_ text: String, message: String? = nil) {
+        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedText.isEmpty else {
+            return
+        }
+
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(trimmedText, forType: .string)
+        statusMessage = message ?? strings.copiedToClipboard
+        log(.info, "텍스트를 클립보드에 복사했습니다.")
+    }
+
     func updateAnswer(_ answer: String) {
         lastAnswer = answer
         settingsStore.saveLastAnswer(answer)

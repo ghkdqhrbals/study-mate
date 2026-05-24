@@ -43,7 +43,10 @@ struct StudyView: View {
                     pendingCount: appState.pendingStudyRecords.count,
                     latestScore: latestScore,
                     averageScore: averageScore,
-                    strings: strings
+                    strings: strings,
+                    onContinue: {
+                        appState.openOldestPendingQuestion()
+                    }
                 )
 
                 Divider()
@@ -69,6 +72,14 @@ struct StudyView: View {
                                     .foregroundStyle(.secondary)
 
                                 Spacer()
+
+                                Button {
+                                    appState.copyToClipboard(question.question)
+                                } label: {
+                                    Label(strings.copyQuestion, systemImage: "doc.on.doc")
+                                }
+                                .buttonStyle(.borderless)
+                                .font(.caption)
 
                                 if appState.canSkipCurrentQuestion {
                                     Button {
@@ -137,6 +148,12 @@ struct StudyView: View {
                         Spacer()
 
                         if !draftAnswer.isEmpty {
+                            Button(strings.copyAnswer) {
+                                appState.copyToClipboard(draftAnswer)
+                            }
+                            .buttonStyle(.borderless)
+                            .font(.caption)
+
                             Button(strings.clearAnswer) {
                                 draftAnswer = ""
                             }
@@ -241,13 +258,24 @@ private struct StudyOverviewSection: View {
     var latestScore: Int?
     var averageScore: Int?
     var strings: AppStrings
+    var onContinue: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(strings.studyOverview)
-                .font(.caption)
-                .fontWeight(.semibold)
-                .foregroundStyle(.secondary)
+            HStack(alignment: .firstTextBaseline) {
+                Text(strings.studyOverview)
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.secondary)
+
+                Spacer()
+
+                if pendingCount > 0 {
+                    Button(strings.continueOldestPending, action: onContinue)
+                        .buttonStyle(.borderless)
+                        .font(.caption)
+                }
+            }
 
             HStack(spacing: 8) {
                 StudyOverviewMetric(title: strings.pendingShort, value: "\(pendingCount)")

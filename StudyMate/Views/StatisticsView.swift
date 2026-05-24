@@ -104,6 +104,8 @@ struct StatisticsView: View {
                         MetricItem(title: strings.trend, value: trendText)
                     ])
 
+                    StatisticsInsightSection(stats: difficultyStats, strings: strings)
+
                     ScoreLineChart(records: gradedRecords)
                         .frame(height: 150)
                         .padding(.vertical, 4)
@@ -174,6 +176,83 @@ struct StatisticsView: View {
 
     private func statsDate(for record: StudyRecord) -> Date {
         record.answeredAt ?? record.question.createdAt
+    }
+}
+
+private struct StatisticsInsightSection: View {
+    var stats: [DifficultyStat]
+    var strings: AppStrings
+
+    private var strongest: DifficultyStat? {
+        stats.max { lhs, rhs in
+            if lhs.average == rhs.average {
+                return lhs.count < rhs.count
+            }
+            return lhs.average < rhs.average
+        }
+    }
+
+    private var weakest: DifficultyStat? {
+        stats.min { lhs, rhs in
+            if lhs.average == rhs.average {
+                return lhs.count < rhs.count
+            }
+            return lhs.average < rhs.average
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(strings.insight)
+                .font(.subheadline)
+                .fontWeight(.semibold)
+
+            if let strongest, let weakest {
+                HStack(spacing: 8) {
+                    insightCard(
+                        title: strings.strongestDifficulty,
+                        stat: strongest,
+                        systemImage: "arrow.up.circle"
+                    )
+                    insightCard(
+                        title: strings.weakestDifficulty,
+                        stat: weakest,
+                        systemImage: "target"
+                    )
+                }
+            } else {
+                Text(strings.notEnoughStats)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(10)
+                    .background(Color.secondary.opacity(0.045))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+            }
+        }
+    }
+
+    private func insightCard(title: String, stat: DifficultyStat, systemImage: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Label(title, systemImage: systemImage)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(stat.difficulty.displayName(language: strings.language))
+                .font(.callout)
+                .fontWeight(.semibold)
+                .lineLimit(1)
+            Text("\(stat.average)/100 · \(stat.count)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
+        .background(Color.secondary.opacity(0.045))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.secondary.opacity(0.1), lineWidth: 1)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
 

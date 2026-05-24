@@ -520,6 +520,10 @@ struct AppStrings {
     var noScoreShort: String { text("-", "-") }
     var draftSaved: String { text("초안 자동 저장됨", "Draft auto-saved") }
     var clearAnswer: String { text("답변 지우기", "Clear Answer") }
+    var continueOldestPending: String { text("오래된 질문 이어하기", "Continue Oldest") }
+    var copyQuestion: String { text("질문 복사", "Copy Question") }
+    var copyAnswer: String { text("답변 복사", "Copy Answer") }
+    var copiedToClipboard: String { text("클립보드에 복사했습니다.", "Copied to clipboard.") }
     var pendingQuestions: String { text("미제출 질문", "Pending Questions") }
     func pendingQuestionCount(_ count: Int) -> String { text("\(count)개 대기 중", "\(count) pending") }
     var current: String { text("현재", "Current") }
@@ -540,6 +544,12 @@ struct AppStrings {
 
     var clear: String { text("삭제", "Delete") }
     var searchRecords: String { text("기록 검색", "Search records") }
+    var recordFilterAll: String { text("전체", "All") }
+    var recordFilterGraded: String { text("채점됨", "Graded") }
+    var recordFilterUngraded: String { text("미채점", "Ungraded") }
+    func filteredRecordCount(_ shown: Int, total: Int) -> String {
+        text("\(shown)/\(total)개 표시", "\(shown)/\(total) shown")
+    }
     var noSearchResults: String { text("검색 결과 없음", "No Results") }
     var noSearchResultsDescription: String { text("다른 검색어로 기록을 찾아보세요.", "Try another search term.") }
     var noRecords: String { text("기록 없음", "No Records") }
@@ -584,6 +594,10 @@ struct AppStrings {
     var feedback: String { text("피드백", "Feedback") }
     var explanation: String { text("해설", "Explanation") }
     var statsByDifficulty: String { text("난이도별 통계", "Stats by Difficulty") }
+    var insight: String { text("인사이트", "Insight") }
+    var strongestDifficulty: String { text("강점 난이도", "Strongest") }
+    var weakestDifficulty: String { text("보완 난이도", "Needs Focus") }
+    var notEnoughStats: String { text("통계를 만들려면 채점 기록이 더 필요합니다.", "Grade more answers to build insights.") }
     func itemCount(_ count: Int) -> String { text("\(count)개", "\(count)") }
     var correctRate: String { text("정답", "Correct") }
 }
