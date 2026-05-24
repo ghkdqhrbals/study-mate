@@ -164,8 +164,6 @@ jobs:
           mkdir -p "${DMG_ROOT}" dist
 
           cp -R "${APP_PATH}" "${DMG_ROOT}/"
-          cp scripts/uninstall-studymate.command "${DMG_ROOT}/Uninstall StudyMate.command"
-          chmod +x "${DMG_ROOT}/Uninstall StudyMate.command"
           ln -s /Applications "${DMG_ROOT}/Applications"
 
           hdiutil create \

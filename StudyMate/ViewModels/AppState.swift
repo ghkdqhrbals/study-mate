@@ -591,8 +591,16 @@ final class AppState: ObservableObject {
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/sh")
-        process.arguments = [scriptURL.path]
+        process.arguments = [
+            "-c",
+            "nohup /bin/sh \(Self.shellEscaped(scriptURL.path)) >/dev/null 2>&1 &"
+        ]
         try process.run()
+        process.waitUntilExit()
+
+        if process.terminationStatus != 0 {
+            throw CocoaError(.executableLoad)
+        }
     }
 
     nonisolated static func makeUninstallScript(appPath: String) -> String {
@@ -608,6 +616,7 @@ final class AppState: ObservableObject {
 
         echo "StudyMate uninstall started at $(date)" > "${LOG_PATH}"
 
+        /usr/bin/osascript -e 'tell application id "io.github.ghkdqhrbals.StudyMate" to quit' >> "${LOG_PATH}" 2>&1
         /usr/bin/osascript -e 'tell application "StudyMate" to quit' >> "${LOG_PATH}" 2>&1
 
         ATTEMPT=0
@@ -626,11 +635,18 @@ final class AppState: ObservableObject {
           [ -e "${EXPANDED_PATH}" ] || return 0
           echo "Removing ${EXPANDED_PATH}" >> "${LOG_PATH}"
 
-          /bin/mv "${EXPANDED_PATH}" "${HOME}/.Trash/$(basename "${EXPANDED_PATH}")-$(date +%Y%m%d%H%M%S)" >> "${LOG_PATH}" 2>&1 && return 0
-          /bin/rm -rf "${EXPANDED_PATH}" >> "${LOG_PATH}" 2>&1 && return 0
+          TRASH_TARGET="${HOME}/.Trash/$(basename "${EXPANDED_PATH}")-$(date +%Y%m%d%H%M%S)"
+          /bin/mv "${EXPANDED_PATH}" "${TRASH_TARGET}" >> "${LOG_PATH}" 2>&1
+          [ ! -e "${EXPANDED_PATH}" ] && return 0
+
+          /bin/rm -rf "${EXPANDED_PATH}" >> "${LOG_PATH}" 2>&1
+          [ ! -e "${EXPANDED_PATH}" ] && return 0
 
           ESCAPED_TARGET="$(printf "%s" "${EXPANDED_PATH}" | /usr/bin/sed "s/'/'\\\\''/g")"
           /usr/bin/osascript -e "do shell script \\"/bin/rm -rf '${ESCAPED_TARGET}'\\" with administrator privileges" >> "${LOG_PATH}" 2>&1
+          [ ! -e "${EXPANDED_PATH}" ] && return 0
+
+          echo "Failed to remove ${EXPANDED_PATH}" >> "${LOG_PATH}"
         }
 
         remove_path "${APP_PATH}"
