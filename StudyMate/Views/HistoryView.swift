@@ -3,6 +3,7 @@ import SwiftUI
 struct HistoryView: View {
     @EnvironmentObject private var appState: AppState
     @State private var selectedRecordID: String?
+    @State private var openSwipeRecordID: String?
     @State private var page = 0
 
     private let pageSize = 10
@@ -57,12 +58,18 @@ struct HistoryView: View {
                         ForEach(visibleRecords) { record in
                             VStack(alignment: .leading, spacing: 8) {
                                 SwipeToDeleteHistoryRow(
+                                    id: record.id,
                                     strings: strings,
+                                    openRowID: $openSwipeRecordID,
                                     onDelete: {
                                         delete(record)
                                     },
                                     onSelect: {
-                                        selectedRecordID = selectedRecordID == record.id ? nil : record.id
+                                        if let openSwipeRecordID, openSwipeRecordID != record.id {
+                                            self.openSwipeRecordID = nil
+                                        } else {
+                                            selectedRecordID = selectedRecordID == record.id ? nil : record.id
+                                        }
                                     }
                                 ) {
                                     HistoryRow(record: record, strings: strings, isSelected: selectedRecordID == record.id)
@@ -80,6 +87,13 @@ struct HistoryView: View {
                     .padding(.bottom, 12)
                 }
                 .frame(maxHeight: .infinity)
+                .background {
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            closeOpenSwipeRow()
+                        }
+                }
 
                 Divider()
 
@@ -157,11 +171,24 @@ struct HistoryView: View {
         if selectedRecordID == record.id {
             selectedRecordID = nil
         }
+        openSwipeRecordID = nil
+    }
+
+    private func closeOpenSwipeRow() {
+        guard openSwipeRecordID != nil else {
+            return
+        }
+
+        withAnimation(.snappy) {
+            openSwipeRecordID = nil
+        }
     }
 }
 
 private struct SwipeToDeleteHistoryRow<Content: View>: View {
+    var id: String
     var strings: AppStrings
+    @Binding var openRowID: String?
     var onDelete: () -> Void
     var onSelect: () -> Void
     var content: () -> Content
@@ -170,12 +197,16 @@ private struct SwipeToDeleteHistoryRow<Content: View>: View {
     @State private var dragStartOffset: CGFloat?
 
     init(
+        id: String,
         strings: AppStrings,
+        openRowID: Binding<String?>,
         onDelete: @escaping () -> Void,
         onSelect: @escaping () -> Void,
         @ViewBuilder content: @escaping () -> Content
     ) {
+        self.id = id
         self.strings = strings
+        _openRowID = openRowID
         self.onDelete = onDelete
         self.onSelect = onSelect
         self.content = content
@@ -192,6 +223,7 @@ private struct SwipeToDeleteHistoryRow<Content: View>: View {
             Button(role: .destructive) {
                 withAnimation(.snappy) {
                     rowOffset = 0
+                    openRowID = nil
                 }
                 onDelete()
             } label: {
@@ -233,6 +265,7 @@ private struct SwipeToDeleteHistoryRow<Content: View>: View {
                             }
 
                             if dragStartOffset == nil {
+                                openRowID = id
                                 dragStartOffset = rowOffset
                             }
 
@@ -251,6 +284,7 @@ private struct SwipeToDeleteHistoryRow<Content: View>: View {
                             let targetOffset = rowOffset < -actionWidth * 0.45 ? -actionWidth : 0
                             withAnimation(.snappy) {
                                 rowOffset = targetOffset
+                                openRowID = targetOffset == 0 ? nil : id
                             }
                         }
                 )
@@ -263,6 +297,7 @@ private struct SwipeToDeleteHistoryRow<Content: View>: View {
                         .onTapGesture {
                             withAnimation(.snappy) {
                                 rowOffset = 0
+                                openRowID = nil
                             }
                         }
 
@@ -275,6 +310,15 @@ private struct SwipeToDeleteHistoryRow<Content: View>: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .clipped()
+        .onChange(of: openRowID) {
+            guard openRowID != id, rowOffset != 0 else {
+                return
+            }
+
+            withAnimation(.snappy) {
+                rowOffset = 0
+            }
+        }
     }
 }
 
