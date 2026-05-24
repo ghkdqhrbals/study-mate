@@ -352,22 +352,31 @@ private struct HistoryRow: View {
     var isSelected: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 7) {
             HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
                     Text(record.topic.isEmpty ? strings.studyFallback : record.topic)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+
+                    Text("·")
+
+                    Text(record.difficulty.displayName(language: strings.language))
+                        .lineLimit(1)
+
+                    Text("·")
+
                     Text(record.question.createdAt, formatter: Self.dateFormatter)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
+                .font(.caption)
+                .foregroundStyle(.secondary)
 
                 Spacer()
 
                 if let result = record.gradingResult {
                     Text("\(result.score)/100")
-                        .font(.headline)
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
                         .foregroundStyle(scoreColor(result.score))
                 } else {
                     Text(strings.ungraded)
@@ -378,20 +387,7 @@ private struct HistoryRow: View {
 
             Text(record.question.question)
                 .font(.body)
-
-            if let answer = record.answer, !answer.isEmpty {
-                Text(strings.answerPrefix(answer))
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
-            if let result = record.gradingResult {
-                Text(result.feedback)
-                    .font(.footnote)
-                Text(result.explanation)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+                .lineLimit(2)
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
