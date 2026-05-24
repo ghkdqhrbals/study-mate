@@ -3,11 +3,12 @@ import SwiftUI
 struct StudyView: View {
     @EnvironmentObject private var appState: AppState
     @State private var showsHint = false
+    @State private var draftAnswer = ""
 
     var body: some View {
         let strings = appState.strings
         let canSubmitAnswer = appState.currentQuestion != nil &&
-            !appState.lastAnswer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+            !draftAnswer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
             !appState.isGradingAnswer
 
         ScrollView {
@@ -122,15 +123,12 @@ struct StudyView: View {
                         .foregroundStyle(.secondary)
 
                     ZStack(alignment: .topLeading) {
-                        TextEditor(text: Binding(
-                            get: { appState.lastAnswer },
-                            set: { appState.updateAnswer($0) }
-                        ))
+                        TextEditor(text: $draftAnswer)
                         .font(.body)
                         .frame(minHeight: 96)
                         .padding(6)
 
-                        if appState.lastAnswer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        if draftAnswer.isEmpty {
                             Text(strings.answerPlaceholder)
                                 .font(.body)
                                 .foregroundStyle(.secondary.opacity(0.72))
@@ -193,8 +191,22 @@ struct StudyView: View {
             .padding(.bottom, 22)
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
+        .onAppear {
+            draftAnswer = appState.lastAnswer
+        }
+        .onChange(of: draftAnswer) {
+            if draftAnswer != appState.lastAnswer {
+                appState.updateAnswer(draftAnswer)
+            }
+        }
+        .onChange(of: appState.lastAnswer) {
+            if draftAnswer != appState.lastAnswer {
+                draftAnswer = appState.lastAnswer
+            }
+        }
         .onChange(of: appState.currentQuestion?.createdAt) {
             showsHint = false
+            draftAnswer = appState.lastAnswer
         }
     }
 }
