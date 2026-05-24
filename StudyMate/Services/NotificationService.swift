@@ -13,6 +13,13 @@ enum StudyNotificationAction {
 
 @MainActor
 final class NotificationService {
+    private var previewSound: NSSound?
+
+    func notificationPermissionState() async -> NotificationPermissionState {
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        return NotificationPermissionState(authorizationStatus: settings.authorizationStatus)
+    }
+
     func requestAuthorizationIfNeeded(language: AppLanguage) async -> Bool {
         let center = UNUserNotificationCenter.current()
         StudyNotificationDelegate.shared.register(language: language)
@@ -33,6 +40,55 @@ final class NotificationService {
             return true
         @unknown default:
             return false
+        }
+    }
+
+    func requestAuthorization(language: AppLanguage) async -> NotificationPermissionState {
+        let center = UNUserNotificationCenter.current()
+        StudyNotificationDelegate.shared.register(language: language)
+        let settings = await center.notificationSettings()
+
+        if settings.authorizationStatus == .notDetermined {
+            _ = try? await center.requestAuthorization(options: [.alert, .sound])
+        }
+
+        return await notificationPermissionState()
+    }
+
+    func openSystemNotificationSettings() {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.notifications") else {
+            return
+        }
+
+        NSWorkspace.shared.open(url)
+    }
+
+    func playPreview(sound: NotificationSoundOption) {
+        previewSound?.stop()
+        previewSound = nil
+
+        switch sound {
+        case .defaultSound:
+            NSSound.beep()
+        case .none:
+            return
+        case .softPing, .chime, .pop, .bell, .tap:
+            guard let fileName = sound.bundledFileName else {
+                NSSound.beep()
+                return
+            }
+
+            let resourceName = NSString(string: fileName).deletingPathExtension
+            let fileExtension = NSString(string: fileName).pathExtension
+
+            guard let url = Bundle.main.url(forResource: resourceName, withExtension: fileExtension),
+                  let sound = NSSound(contentsOf: url, byReference: false) else {
+                NSSound.beep()
+                return
+            }
+
+            previewSound = sound
+            sound.play()
         }
     }
 
@@ -62,6 +118,25 @@ final class NotificationService {
         )
 
         try? await UNUserNotificationCenter.current().add(request)
+    }
+}
+
+private extension NotificationPermissionState {
+    init(authorizationStatus: UNAuthorizationStatus) {
+        switch authorizationStatus {
+        case .notDetermined:
+            self = .notDetermined
+        case .denied:
+            self = .denied
+        case .authorized:
+            self = .authorized
+        case .provisional:
+            self = .provisional
+        case .ephemeral:
+            self = .ephemeral
+        @unknown default:
+            self = .unknown
+        }
     }
 }
 

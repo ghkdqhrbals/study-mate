@@ -178,7 +178,55 @@ private struct GeneralSettingsSection: View {
 
             Divider()
 
-            Picker(strings.notificationSound, selection: $appState.settings.notificationSound) {
+            Text(strings.notifications)
+                .font(.subheadline)
+                .fontWeight(.semibold)
+
+            HStack(alignment: .firstTextBaseline) {
+                Text(strings.notificationPermission)
+                    .foregroundStyle(.secondary)
+
+                Spacer()
+
+                Text(appState.notificationPermissionState.displayName(language: appState.settings.appLanguage))
+                    .fontWeight(.semibold)
+            }
+
+            HStack(spacing: 8) {
+                Button {
+                    Task {
+                        await appState.requestNotificationPermission()
+                    }
+                } label: {
+                    if appState.isRequestingNotificationPermission {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Text(strings.requestNotificationPermission)
+                    }
+                }
+                .disabled(!appState.notificationPermissionState.canRequestPermission || appState.isRequestingNotificationPermission)
+
+                if appState.notificationPermissionState.needsSystemSettings {
+                    Button {
+                        appState.openSystemNotificationSettings()
+                    } label: {
+                        Text(strings.openNotificationSettings)
+                    }
+                }
+            }
+
+            Text(strings.notificationPermissionHelp)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Picker(
+                strings.notificationSound,
+                selection: Binding(
+                    get: { appState.settings.notificationSound },
+                    set: { appState.setNotificationSound($0) }
+                )
+            ) {
                 ForEach(NotificationSoundOption.allCases) { sound in
                     Text(sound.displayName(language: appState.settings.appLanguage)).tag(sound)
                 }
@@ -202,6 +250,9 @@ private struct GeneralSettingsSection: View {
             Text(strings.debuggingHelp)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+        }
+        .task {
+            await appState.refreshNotificationPermissionState()
         }
     }
 }

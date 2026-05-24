@@ -165,6 +165,52 @@ enum NotificationSoundOption: String, CaseIterable, Codable, Identifiable {
     }
 }
 
+enum NotificationPermissionState: String, Equatable {
+    case notDetermined
+    case authorized
+    case denied
+    case provisional
+    case ephemeral
+    case unknown
+
+    var canRequestPermission: Bool {
+        self == .notDetermined
+    }
+
+    var needsSystemSettings: Bool {
+        self == .denied
+    }
+
+    func displayName(language: AppLanguage) -> String {
+        switch (self, language) {
+        case (.notDetermined, .korean):
+            "요청 필요"
+        case (.notDetermined, .english):
+            "Needs Request"
+        case (.authorized, .korean):
+            "허용됨"
+        case (.authorized, .english):
+            "Allowed"
+        case (.denied, .korean):
+            "거부됨"
+        case (.denied, .english):
+            "Denied"
+        case (.provisional, .korean):
+            "임시 허용"
+        case (.provisional, .english):
+            "Provisional"
+        case (.ephemeral, .korean):
+            "임시 세션"
+        case (.ephemeral, .english):
+            "Ephemeral"
+        case (.unknown, .korean):
+            "확인 필요"
+        case (.unknown, .english):
+            "Unknown"
+        }
+    }
+}
+
 enum AppTab: Int, Hashable {
     case study
     case settings
@@ -460,6 +506,13 @@ struct AppStrings {
 
     var generalSettings: String { text("일반", "General") }
     var appLanguageHelp: String { text("앱 언어를 바꾸면 학습 언어도 같은 언어로 설정됩니다.", "Changing the app language also sets the study language to match.") }
+    var notifications: String { text("알림", "Notifications") }
+    var notificationPermission: String { text("알림 권한", "Notification permission") }
+    var notificationPermissionHelp: String {
+        text("질문 알림을 받으려면 macOS 알림 권한이 필요합니다.", "macOS notification permission is required to receive question alerts.")
+    }
+    var requestNotificationPermission: String { text("권한 요청", "Request Permission") }
+    var openNotificationSettings: String { text("시스템 알림 설정 열기", "Open Notification Settings") }
     var notificationSound: String { text("알림음", "Notification sound") }
     var notificationSoundHelp: String { text("질문 알림을 받을 때 소리를 낼지 선택합니다.", "Choose whether question notifications play a sound.") }
     var studySettings: String { text("학습 설정", "Study Settings") }
