@@ -57,9 +57,18 @@ The release DMG includes:
 - `Applications` shortcut
 - `Uninstall StudyMate.command`
 
-Current releases are unsigned. Users may need to approve the app in macOS Privacy & Security after opening it for the first time.
+If signing secrets are not configured, the workflow builds an unsigned DMG. Users may need to approve unsigned builds in macOS Privacy & Security after opening the app for the first time.
 
-For trusted public distribution without Gatekeeper warnings, the app should be signed with an Apple Developer ID certificate and notarized by Apple.
+For trusted public distribution without Gatekeeper warnings, configure these GitHub Actions secrets:
+
+- `DEVELOPER_ID_CERTIFICATE_P12_BASE64`: base64-encoded Developer ID Application `.p12`
+- `DEVELOPER_ID_CERTIFICATE_PASSWORD`: password for the `.p12`
+- `APPLE_TEAM_ID`: Apple Developer Team ID
+- `APPSTORE_CONNECT_KEY_ID`: App Store Connect API key ID
+- `APPSTORE_CONNECT_ISSUER_ID`: App Store Connect issuer ID
+- `APPSTORE_CONNECT_PRIVATE_KEY_BASE64`: base64-encoded App Store Connect API `.p8` private key
+
+When Developer ID secrets are present, the workflow signs the app and DMG, notarizes the DMG, and staples the notarization ticket before publishing the release.
 
 ## Uninstall
 

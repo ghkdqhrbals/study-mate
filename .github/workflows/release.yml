@@ -13,10 +13,78 @@ jobs:
   build:
     name: Build macOS DMG
     runs-on: macos-15
+    env:
+      CERTIFICATE_P12_BASE64: ${{ secrets.DEVELOPER_ID_CERTIFICATE_P12_BASE64 }}
+      CERTIFICATE_PASSWORD: ${{ secrets.DEVELOPER_ID_CERTIFICATE_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      APPSTORE_CONNECT_KEY_ID: ${{ secrets.APPSTORE_CONNECT_KEY_ID }}
+      APPSTORE_CONNECT_ISSUER_ID: ${{ secrets.APPSTORE_CONNECT_ISSUER_ID }}
+      APPSTORE_CONNECT_PRIVATE_KEY_BASE64: ${{ secrets.APPSTORE_CONNECT_PRIVATE_KEY_BASE64 }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Validate release secrets
+        run: |
+          set -euo pipefail
+
+          signing_count=0
+          [ -n "${CERTIFICATE_P12_BASE64}" ] && signing_count=$((signing_count + 1))
+          [ -n "${CERTIFICATE_PASSWORD}" ] && signing_count=$((signing_count + 1))
+          [ -n "${APPLE_TEAM_ID}" ] && signing_count=$((signing_count + 1))
+
+          if [ "${signing_count}" -eq 0 ]; then
+            echo "SIGNING_ENABLED=false" >> "${GITHUB_ENV}"
+            echo "NOTARIZATION_ENABLED=false" >> "${GITHUB_ENV}"
+            echo "No signing secrets found. Building an unsigned DMG."
+            exit 0
+          fi
+
+          if [ "${signing_count}" -ne 3 ]; then
+            echo "Developer ID signing requires DEVELOPER_ID_CERTIFICATE_P12_BASE64, DEVELOPER_ID_CERTIFICATE_PASSWORD, and APPLE_TEAM_ID." >&2
+            exit 1
+          fi
+
+          if [ -z "${APPSTORE_CONNECT_KEY_ID}" ] || [ -z "${APPSTORE_CONNECT_ISSUER_ID}" ] || [ -z "${APPSTORE_CONNECT_PRIVATE_KEY_BASE64}" ]; then
+            echo "Signed releases must be notarized. Add APPSTORE_CONNECT_KEY_ID, APPSTORE_CONNECT_ISSUER_ID, and APPSTORE_CONNECT_PRIVATE_KEY_BASE64." >&2
+            exit 1
+          fi
+
+          echo "SIGNING_ENABLED=true" >> "${GITHUB_ENV}"
+          echo "NOTARIZATION_ENABLED=true" >> "${GITHUB_ENV}"
+
+      - name: Install Developer ID certificate
+        run: |
+          set -euo pipefail
+
+          if [ "${SIGNING_ENABLED}" != "true" ]; then
+            echo "Skipping certificate import for unsigned build."
+            exit 0
+          fi
+
+          KEYCHAIN_PATH="${RUNNER_TEMP}/app-signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -hex 24)"
+          CERTIFICATE_PATH="${RUNNER_TEMP}/developer-id.p12"
+
+          echo "${CERTIFICATE_P12_BASE64}" | base64 --decode > "${CERTIFICATE_PATH}"
+
+          security create-keychain -p "${KEYCHAIN_PASSWORD}" "${KEYCHAIN_PATH}"
+          security set-keychain-settings -lut 21600 "${KEYCHAIN_PATH}"
+          security unlock-keychain -p "${KEYCHAIN_PASSWORD}" "${KEYCHAIN_PATH}"
+          security import "${CERTIFICATE_PATH}" \
+            -P "${CERTIFICATE_PASSWORD}" \
+            -A \
+            -t cert \
+            -f pkcs12 \
+            -k "${KEYCHAIN_PATH}"
+          security list-keychains -d user -s "${KEYCHAIN_PATH}"
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s \
+            -k "${KEYCHAIN_PASSWORD}" \
+            "${KEYCHAIN_PATH}"
+          security find-identity -v -p codesigning "${KEYCHAIN_PATH}"
 
       - name: Run tests
         run: |
@@ -29,16 +97,35 @@ jobs:
 
       - name: Build app archive
         run: |
-          xcodebuild archive \
-            -project StudyMate.xcodeproj \
-            -scheme StudyMate \
-            -configuration Release \
-            -destination 'generic/platform=macOS' \
-            -derivedDataPath build/DerivedData \
-            -archivePath build/StudyMate.xcarchive \
-            SKIP_INSTALL=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGN_IDENTITY=""
+          set -euo pipefail
+
+          if [ "${SIGNING_ENABLED}" = "true" ]; then
+            xcodebuild archive \
+              -project StudyMate.xcodeproj \
+              -scheme StudyMate \
+              -configuration Release \
+              -destination 'generic/platform=macOS' \
+              -derivedDataPath build/DerivedData \
+              -archivePath build/StudyMate.xcarchive \
+              SKIP_INSTALL=NO \
+              CODE_SIGN_STYLE=Manual \
+              DEVELOPMENT_TEAM="${APPLE_TEAM_ID}" \
+              CODE_SIGN_IDENTITY="Developer ID Application" \
+              CODE_SIGNING_ALLOWED=YES \
+              ENABLE_HARDENED_RUNTIME=YES \
+              OTHER_CODE_SIGN_FLAGS="--timestamp"
+          else
+            xcodebuild archive \
+              -project StudyMate.xcodeproj \
+              -scheme StudyMate \
+              -configuration Release \
+              -destination 'generic/platform=macOS' \
+              -derivedDataPath build/DerivedData \
+              -archivePath build/StudyMate.xcarchive \
+              SKIP_INSTALL=NO \
+              CODE_SIGNING_ALLOWED=NO \
+              CODE_SIGN_IDENTITY=""
+          fi
 
       - name: Create DMG
         run: |
@@ -69,6 +156,43 @@ jobs:
             -ov \
             -format UDZO \
             "${DMG_PATH}"
+
+          if [ "${SIGNING_ENABLED}" = "true" ]; then
+            codesign --force \
+              --sign "Developer ID Application" \
+              --timestamp \
+              "${DMG_PATH}"
+            codesign --verify --verbose=2 "${DMG_PATH}"
+          fi
+
+      - name: Notarize DMG
+        run: |
+          set -euo pipefail
+
+          if [ "${NOTARIZATION_ENABLED}" != "true" ]; then
+            echo "Skipping notarization for unsigned build."
+            exit 0
+          fi
+
+          VERSION="${GITHUB_REF_NAME#v}"
+          if [ "${VERSION}" = "${GITHUB_REF_NAME}" ]; then
+            VERSION="manual-${GITHUB_RUN_NUMBER}"
+          fi
+
+          DMG_PATH="dist/StudyMate-${VERSION}.dmg"
+          PRIVATE_KEY_PATH="${RUNNER_TEMP}/AuthKey_${APPSTORE_CONNECT_KEY_ID}.p8"
+
+          echo "${APPSTORE_CONNECT_PRIVATE_KEY_BASE64}" | base64 --decode > "${PRIVATE_KEY_PATH}"
+
+          xcrun notarytool submit "${DMG_PATH}" \
+            --key "${PRIVATE_KEY_PATH}" \
+            --key-id "${APPSTORE_CONNECT_KEY_ID}" \
+            --issuer "${APPSTORE_CONNECT_ISSUER_ID}" \
+            --team-id "${APPLE_TEAM_ID}" \
+            --wait
+
+          xcrun stapler staple "${DMG_PATH}"
+          xcrun stapler validate "${DMG_PATH}"
 
       - name: Upload DMG artifact
         uses: actions/upload-artifact@v4
