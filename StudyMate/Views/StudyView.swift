@@ -35,6 +35,18 @@ struct StudyView: View {
 
             Divider()
 
+            if !appState.pendingStudyRecords.isEmpty {
+                PendingQuestionsSection(
+                    records: appState.pendingStudyRecords,
+                    currentQuestion: appState.currentQuestion,
+                    strings: strings
+                ) { record in
+                    appState.selectStudyRecord(record)
+                }
+
+                Divider()
+            }
+
             Group {
                 if let question = appState.currentQuestion {
                     VStack(alignment: .leading, spacing: 8) {
@@ -122,6 +134,110 @@ struct StudyView: View {
             Spacer(minLength: 0)
         }
         .padding(.top, 10)
+    }
+}
+
+private struct PendingQuestionsSection: View {
+    var records: [StudyRecord]
+    var currentQuestion: QuestionItem?
+    var strings: AppStrings
+    var onSelect: (StudyRecord) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(strings.pendingQuestions)
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+
+                Text(strings.pendingQuestionCount(records.count))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Spacer()
+            }
+
+            VStack(spacing: 8) {
+                ForEach(records) { record in
+                    let isSelected = isCurrent(record)
+
+                    Button {
+                        onSelect(record)
+                    } label: {
+                        PendingQuestionRow(record: record, strings: strings, isSelected: isSelected)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private func isCurrent(_ record: StudyRecord) -> Bool {
+        guard let currentQuestion else {
+            return false
+        }
+
+        return record.question.createdAt == currentQuestion.createdAt ||
+            SettingsStore.normalizedQuestionText(record.question.question) ==
+            SettingsStore.normalizedQuestionText(currentQuestion.question)
+    }
+}
+
+private struct PendingQuestionRow: View {
+    var record: StudyRecord
+    var strings: AppStrings
+    var isSelected: Bool
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: isSelected ? "arrow.turn.down.right.circle.fill" : "circle")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+                .padding(.top, 3)
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Text(record.topic.isEmpty ? strings.studyFallback : record.topic)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    Text("·")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    Text(record.difficulty.displayName(language: strings.language))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Text(record.question.question)
+                    .font(.callout)
+                    .lineLimit(2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                if let answer = record.answer, !answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text(strings.answerPrefix(answer))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer(minLength: 8)
+
+            Text(isSelected ? strings.current : strings.openPendingQuestion)
+                .font(.caption)
+                .fontWeight(.semibold)
+                .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+        }
+        .padding(10)
+        .background(isSelected ? Color.accentColor.opacity(0.12) : Color.secondary.opacity(0.07))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(isSelected ? Color.accentColor.opacity(0.45) : Color.clear, lineWidth: 1)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .contentShape(Rectangle())
     }
 }
 

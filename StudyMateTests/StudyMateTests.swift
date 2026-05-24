@@ -341,7 +341,7 @@ final class StudyMateTests: XCTestCase {
     }
 
     @MainActor
-    func testNotificationReplyFocusesMatchingStudyRecord() {
+    func testNotificationReplyLandsOnMatchingStudyQuestion() {
         let suiteName = "StudyMateTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer {
@@ -361,7 +361,6 @@ final class StudyMateTests: XCTestCase {
             createdAt: Date()
         )
         store.appendStudyRecord(question: question, settings: settings)
-        let record = store.loadStudyRecords()[0]
         let appState = AppState(settingsStore: store, openAIClient: SpyOpenAIClient())
 
         appState.openRecordFromNotification(
@@ -370,12 +369,47 @@ final class StudyMateTests: XCTestCase {
         )
 
         let updatedRecord = store.loadStudyRecords()[0]
-        XCTAssertEqual(appState.selectedTab, .records)
-        XCTAssertEqual(appState.focusedRecordRequest?.recordID, record.id)
+        XCTAssertEqual(appState.selectedTab, .study)
+        XCTAssertNil(appState.focusedRecordRequest)
         XCTAssertEqual(appState.currentQuestion?.question, question.question)
         XCTAssertEqual(appState.lastAnswer, "공유 상태 경쟁을 막습니다.")
         XCTAssertEqual(updatedRecord.answer, "공유 상태 경쟁을 막습니다.")
         XCTAssertNil(updatedRecord.gradingResult)
+    }
+
+    @MainActor
+    func testSelectingPendingStudyRecordLoadsDraftAnswer() {
+        let suiteName = "StudyMateTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = SettingsStore(defaults: defaults)
+        let settings = StudySettings(
+            topic: "운영체제",
+            difficulty: .intermediate,
+            customPrompt: "짧게",
+            intervalMinutes: 15
+        )
+        let question = QuestionItem(
+            question: "프로세스와 스레드의 차이는?",
+            expectedAnswerHint: nil,
+            createdAt: Date()
+        )
+        store.appendStudyRecord(question: question, settings: settings)
+        store.updateStudyRecordAnswer(question: question, answer: "프로세스는 자원을 갖고 스레드는 실행 흐름입니다.")
+
+        let record = store.loadStudyRecords()[0]
+        let appState = AppState(settingsStore: store, openAIClient: SpyOpenAIClient())
+
+        appState.selectStudyRecord(record)
+
+        XCTAssertEqual(appState.selectedTab, .study)
+        XCTAssertEqual(appState.currentQuestion?.question, question.question)
+        XCTAssertEqual(appState.lastAnswer, "프로세스는 자원을 갖고 스레드는 실행 흐름입니다.")
+        XCTAssertNil(appState.gradingResult)
+        XCTAssertEqual(appState.pendingStudyRecords.count, 1)
     }
 
     func testQuestionPromptIncludesRecentQuestionsToAvoid() {

@@ -489,6 +489,10 @@ struct AppStrings {
     var noLogsDescription: String { text("앱 이벤트와 오류가 여기에 표시됩니다.", "App events and errors appear here.") }
 
     var newQuestion: String { text("새 질문", "New Question") }
+    var pendingQuestions: String { text("미제출 질문", "Pending Questions") }
+    func pendingQuestionCount(_ count: Int) -> String { text("\(count)개 대기 중", "\(count) pending") }
+    var current: String { text("현재", "Current") }
+    var openPendingQuestion: String { text("답변하기", "Answer") }
     var question: String { text("질문", "Question") }
     var noQuestion: String { text("질문 없음", "No Question") }
     var noQuestionDescription: String { text("설정을 저장한 뒤 새 질문을 생성하세요.", "Save settings, then create a new question.") }

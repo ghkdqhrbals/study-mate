@@ -57,6 +57,12 @@ final class AppState: ObservableObject {
         studyRecords.filter { $0.gradingResult == nil }.count
     }
 
+    var pendingStudyRecords: [StudyRecord] {
+        studyRecords
+            .filter { $0.gradingResult == nil }
+            .sorted { $0.question.createdAt > $1.question.createdAt }
+    }
+
     init(
         settingsStore: SettingsStore = SettingsStore(),
         openAIClient: OpenAIClientProtocol? = nil,
@@ -407,6 +413,22 @@ final class AppState: ObservableObject {
     func updateAnswer(_ answer: String) {
         lastAnswer = answer
         settingsStore.saveLastAnswer(answer)
+        if let currentQuestion {
+            settingsStore.updateStudyRecordAnswer(question: currentQuestion, answer: answer, onlyIfUngraded: true)
+            studyRecords = settingsStore.loadStudyRecords()
+        }
+    }
+
+    func selectStudyRecord(_ record: StudyRecord) {
+        currentQuestion = record.question
+        lastAnswer = record.answer ?? ""
+        gradingResult = record.gradingResult
+        settingsStore.saveQuestion(record.question)
+        settingsStore.saveLastAnswer(record.answer ?? "")
+        settingsStore.saveGradingResult(record.gradingResult)
+        selectedTab = .study
+        focusedRecordRequest = nil
+        statusMessage = record.gradingResult == nil ? "미제출 질문을 열었습니다." : "학습 기록을 열었습니다."
     }
 
     func openRecordFromNotification(questionCreatedAt: TimeInterval?, replyText: String? = nil) {
@@ -414,7 +436,7 @@ final class AppState: ObservableObject {
 
         let record = recordMatching(questionCreatedAt: questionCreatedAt) ?? studyRecords.last
         guard let record else {
-            selectedTab = .records
+            selectedTab = .study
             statusMessage = "알림에서 열린 질문입니다."
             return
         }
@@ -422,15 +444,13 @@ final class AppState: ObservableObject {
         let trimmedReply = replyText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !trimmedReply.isEmpty {
             settingsStore.updateStudyRecordAnswer(question: record.question, answer: trimmedReply)
-            updateAnswer(trimmedReply)
         }
 
         studyRecords = settingsStore.loadStudyRecords()
-        let refreshedRecord = recordMatching(questionCreatedAt: questionCreatedAt) ?? record
-        currentQuestion = refreshedRecord.question
-        settingsStore.saveQuestion(refreshedRecord.question)
-        selectedTab = .records
-        focusedRecordRequest = FocusedRecordRequest(recordID: refreshedRecord.id)
+        let refreshedRecord = recordMatching(questionCreatedAt: questionCreatedAt) ??
+            studyRecords.first { $0.id == record.id } ??
+            record
+        selectStudyRecord(refreshedRecord)
         statusMessage = trimmedReply.isEmpty ? "알림에서 열린 질문입니다." : "알림 답장을 기록에 저장했습니다."
     }
 

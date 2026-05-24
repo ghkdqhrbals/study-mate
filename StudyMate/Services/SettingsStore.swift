@@ -148,7 +148,7 @@ final class SettingsStore {
         saveStudyRecords(records)
     }
 
-    func updateStudyRecordAnswer(question: QuestionItem, answer: String) {
+    func updateStudyRecordAnswer(question: QuestionItem, answer: String, onlyIfUngraded: Bool = false) {
         var records = loadStudyRecords()
         let normalizedQuestion = Self.normalizedQuestionText(question.question)
 
@@ -156,6 +156,9 @@ final class SettingsStore {
             $0.question.createdAt == question.createdAt ||
                 Self.normalizedQuestionText($0.question.question) == normalizedQuestion
         }) {
+            guard !onlyIfUngraded || records[index].gradingResult == nil else {
+                return
+            }
             records[index].answer = answer
         } else {
             records.append(StudyRecord(
