@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 
 @MainActor
@@ -565,6 +566,49 @@ final class AppState: ObservableObject {
         isDebuggingEnabled = isEnabled
         settingsStore.saveIsDebuggingEnabled(isEnabled)
         log(.info, isEnabled ? "디버깅 모드를 켰습니다." : "디버깅 모드를 껐습니다.")
+    }
+
+    func uninstallApplication() {
+        let appURL = Bundle.main.bundleURL
+
+        do {
+            try removeStoredAppData()
+            _ = try FileManager.default.trashItem(at: appURL, resultingItemURL: nil)
+            log(.warning, "앱 제거를 실행했습니다.")
+            NSApp.terminate(nil)
+        } catch {
+            errorMessage = strings.uninstallFailed(error.localizedDescription)
+            log(.error, "앱 제거 실패: \(error.localizedDescription)")
+        }
+    }
+
+    private func removeStoredAppData() throws {
+        for bundleIdentifier in ["io.github.ghkdqhrbals.StudyMate", "com.local.StudyMate"] {
+            UserDefaults.standard.removePersistentDomain(forName: bundleIdentifier)
+            try removeIfExists(preferencesURL(for: bundleIdentifier))
+            try removeIfExists(libraryURL("Application Support", appending: bundleIdentifier))
+            try removeIfExists(libraryURL("Caches", appending: bundleIdentifier))
+            try removeIfExists(libraryURL("Logs", appending: bundleIdentifier))
+            try removeIfExists(libraryURL("Saved Application State", appending: "\(bundleIdentifier).savedState"))
+        }
+    }
+
+    private func preferencesURL(for bundleIdentifier: String) -> URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Preferences/\(bundleIdentifier).plist")
+    }
+
+    private func libraryURL(_ directory: String, appending pathComponent: String) -> URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/\(directory)/\(pathComponent)")
+    }
+
+    private func removeIfExists(_ url: URL) throws {
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            return
+        }
+
+        try FileManager.default.removeItem(at: url)
     }
 
     private func restartTimer() {

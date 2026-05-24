@@ -157,6 +157,7 @@ private struct SettingsPanel<Content: View>: View {
 
 private struct GeneralSettingsSection: View {
     @EnvironmentObject private var appState: AppState
+    @State private var showsUninstallConfirmation = false
 
     var body: some View {
         let strings = appState.strings
@@ -226,6 +227,29 @@ private struct GeneralSettingsSection: View {
             Text(strings.debuggingHelp)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+
+            Divider()
+
+            Button(role: .destructive) {
+                showsUninstallConfirmation = true
+            } label: {
+                Label(strings.uninstall, systemImage: "trash")
+            }
+
+            Text(strings.uninstallHelp)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .confirmationDialog(
+            strings.uninstallConfirmationTitle,
+            isPresented: $showsUninstallConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button(strings.uninstall, role: .destructive) {
+                appState.uninstallApplication()
+            }
+        } message: {
+            Text(strings.uninstallConfirmationMessage)
         }
     }
 }

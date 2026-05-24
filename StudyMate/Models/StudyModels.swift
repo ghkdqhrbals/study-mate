@@ -467,6 +467,17 @@ struct AppStrings {
     var openNotificationSettings: String { text("시스템 알림 설정 열기", "Open Notification Settings") }
     var notificationSound: String { text("알림음", "Notification sound") }
     var notificationSoundHelp: String { text("질문 알림을 받을 때 소리를 낼지 선택합니다.", "Choose whether question notifications play a sound.") }
+    var uninstall: String { text("StudyMate 제거", "Uninstall StudyMate") }
+    var uninstallHelp: String {
+        text("앱을 휴지통으로 이동하고 로컬 설정과 캐시를 삭제합니다.", "Move the app to Trash and delete local settings and caches.")
+    }
+    var uninstallConfirmationTitle: String { text("StudyMate를 제거할까요?", "Uninstall StudyMate?") }
+    var uninstallConfirmationMessage: String {
+        text("앱, 로컬 설정, 캐시가 삭제되고 StudyMate가 종료됩니다.", "The app, local settings, and caches will be deleted, then StudyMate will quit.")
+    }
+    func uninstallFailed(_ reason: String) -> String {
+        text("앱 제거 실패: \(reason)", "Uninstall failed: \(reason)")
+    }
     var studySettings: String { text("학습 설정", "Study Settings") }
     var appLanguage: String { text("언어", "Language") }
     var studyTopic: String { text("공부할 주제", "Study topic") }

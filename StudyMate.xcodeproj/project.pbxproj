@@ -25,6 +25,7 @@
 		110000000000000000000152 /* study_pop.wav in Resources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000147 /* study_pop.wav */; };
 		110000000000000000000153 /* study_bell.wav in Resources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000148 /* study_bell.wav */; };
 		110000000000000000000154 /* study_tap.wav in Resources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000149 /* study_tap.wav */; };
+		110000000000000000000155 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000014A /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -71,6 +72,7 @@
 		110000000000000000000147 /* study_pop.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = study_pop.wav; sourceTree = "<group>"; };
 		110000000000000000000148 /* study_bell.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = study_bell.wav; sourceTree = "<group>"; };
 		110000000000000000000149 /* study_tap.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = study_tap.wav; sourceTree = "<group>"; };
+		11000000000000000000014A /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -172,6 +174,7 @@
 		110000000000000000000068 /* Resources */ = {
 			isa = PBXGroup;
 			children = (
+				11000000000000000000014A /* Assets.xcassets */,
 				110000000000000000000069 /* Sounds */,
 			);
 			path = Resources;
@@ -277,6 +280,7 @@
 				110000000000000000000152 /* study_pop.wav in Resources */,
 				110000000000000000000153 /* study_bell.wav in Resources */,
 				110000000000000000000154 /* study_tap.wav in Resources */,
+				110000000000000000000155 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
