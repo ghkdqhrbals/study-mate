@@ -326,6 +326,23 @@ private enum StatisticsPeriod: String, CaseIterable, Identifiable {
         }
     }
 
+    func shortTitle(strings: AppStrings) -> String {
+        switch self {
+        case .all:
+            return strings.allPeriods
+        case .today:
+            return strings.today
+        case .last7Days:
+            return strings.language == .korean ? "7일" : "7d"
+        case .last30Days:
+            return strings.language == .korean ? "30일" : "30d"
+        case .last90Days:
+            return strings.language == .korean ? "90일" : "90d"
+        case .custom:
+            return strings.language == .korean ? "직접" : "Custom"
+        }
+    }
+
     func contains(
         _ date: Date,
         customStartDate: Date,
@@ -365,45 +382,27 @@ private struct StatisticsPeriodControls: View {
     var strings: AppStrings
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            HStack(spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(strings.period)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-
-                Menu {
-                    ForEach(StatisticsPeriod.allCases) { period in
-                        Button {
-                            selectedPeriod = period
-                        } label: {
-                            if selectedPeriod == period {
-                                Text("✓ \(period.title(strings: strings))")
-                            } else {
-                                Text("  \(period.title(strings: strings))")
-                            }
-                        }
-                    }
-                } label: {
-                    HStack(spacing: 5) {
-                        Text(selectedPeriod.title(strings: strings))
-                            .font(.caption)
-                            .fontWeight(.semibold)
-
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .menuStyle(.borderlessButton)
-                .fixedSize()
-
-                Spacer(minLength: 8)
 
                 Text(rangeText)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+
+                Spacer(minLength: 8)
             }
+
+            Picker(strings.period, selection: $selectedPeriod) {
+                ForEach(StatisticsPeriod.allCases) { period in
+                    Text(period.shortTitle(strings: strings)).tag(period)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.segmented)
 
             if selectedPeriod == .custom {
                 HStack(spacing: 10) {
@@ -444,7 +443,7 @@ private struct StatisticsPeriodControls: View {
 
         let first = Self.statsDate(for: firstRecord)
         let latest = Self.statsDate(for: latestRecord)
-        return "\(Self.dateTimeFormatter.string(from: first)) - \(Self.dateTimeFormatter.string(from: latest))"
+        return "\(selectedPeriod.title(strings: strings)) · \(Self.dateTimeFormatter.string(from: first)) - \(Self.dateTimeFormatter.string(from: latest))"
     }
 
     private static let dateFormatter: DateFormatter = {

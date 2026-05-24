@@ -6,6 +6,9 @@ struct StudyView: View {
 
     var body: some View {
         let strings = appState.strings
+        let canSubmitAnswer = appState.currentQuestion != nil &&
+            !appState.lastAnswer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+            !appState.isGradingAnswer
 
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
@@ -118,32 +121,48 @@ struct StudyView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
-                    TextEditor(text: Binding(
-                        get: { appState.lastAnswer },
-                        set: { appState.updateAnswer($0) }
-                    ))
-                    .font(.body)
-                    .frame(minHeight: 96)
-                    .padding(6)
+                    ZStack(alignment: .topLeading) {
+                        TextEditor(text: Binding(
+                            get: { appState.lastAnswer },
+                            set: { appState.updateAnswer($0) }
+                        ))
+                        .font(.body)
+                        .frame(minHeight: 96)
+                        .padding(6)
+
+                        if appState.lastAnswer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            Text(strings.answerPlaceholder)
+                                .font(.body)
+                                .foregroundStyle(.secondary.opacity(0.72))
+                                .padding(.horizontal, 11)
+                                .padding(.vertical, 14)
+                                .allowsHitTesting(false)
+                        }
+                    }
                     .overlay {
                         RoundedRectangle(cornerRadius: 8)
                             .stroke(Color.secondary.opacity(0.24))
                     }
                 }
 
-                Button {
-                    Task {
-                        await appState.gradeCurrentAnswer()
+                HStack {
+                    Spacer()
+
+                    Button {
+                        Task {
+                            await appState.gradeCurrentAnswer()
+                        }
+                    } label: {
+                        if appState.isGradingAnswer {
+                            ProgressView()
+                                .controlSize(.small)
+                        } else {
+                            Label(strings.gradeAnswer, systemImage: "checkmark.seal")
+                        }
                     }
-                } label: {
-                    if appState.isGradingAnswer {
-                        ProgressView()
-                            .controlSize(.small)
-                    } else {
-                        Label(strings.gradeAnswer, systemImage: "checkmark.seal")
-                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!canSubmitAnswer)
                 }
-                .disabled(appState.currentQuestion == nil || appState.isGradingAnswer)
 
                 if let result = appState.gradingResult {
                     VStack(alignment: .leading, spacing: 8) {
