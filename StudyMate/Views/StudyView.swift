@@ -29,7 +29,7 @@ struct StudyView: View {
                             ProgressView()
                                 .controlSize(.small)
                         } else {
-                            Label(strings.newQuestion, systemImage: "sparkles")
+                            Label(strings.newQuestion, systemImage: "plus.circle")
                         }
                     }
                     .disabled(appState.isGeneratingQuestion)
@@ -149,7 +149,6 @@ struct StudyView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
                             Label(result.gradeTitle(strings: strings), systemImage: result.gradeIconName)
-                                .foregroundStyle(result.gradeColor)
                             Spacer()
                             Text("\(result.score)/100")
                                 .font(.headline)
@@ -162,7 +161,11 @@ struct StudyView: View {
                             .foregroundStyle(.secondary)
                     }
                     .padding(12)
-                    .background(Color.accentColor.opacity(0.1))
+                    .background(Color.secondary.opacity(0.045))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color.secondary.opacity(0.1), lineWidth: 1)
+                    }
                     .clipShape(RoundedRectangle(cornerRadius: 8))
                 }
             }
@@ -247,7 +250,7 @@ private struct PendingQuestionRow: View {
                 Text(isSelected ? strings.current : strings.openPendingQuestion)
                     .font(.caption)
                     .fontWeight(.semibold)
-                    .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+                    .foregroundStyle(.secondary)
             }
 
             Text(record.question.question)
@@ -258,10 +261,10 @@ private struct PendingQuestionRow: View {
         }
         .padding(.vertical, 10)
         .padding(.horizontal, 12)
-        .background(isSelected ? Color.accentColor.opacity(0.11) : Color.secondary.opacity(0.06))
+        .background(isSelected ? Color.secondary.opacity(0.1) : Color.secondary.opacity(0.04))
         .overlay {
             RoundedRectangle(cornerRadius: 8)
-                .stroke(isSelected ? Color.accentColor.opacity(0.35) : Color.secondary.opacity(0.12), lineWidth: 1)
+                .stroke(isSelected ? Color.secondary.opacity(0.2) : Color.secondary.opacity(0.1), lineWidth: 1)
         }
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .contentShape(Rectangle())
@@ -290,17 +293,6 @@ private extension GradingResult {
             "exclamationmark.circle.fill"
         default:
             "xmark.circle.fill"
-        }
-    }
-
-    var gradeColor: Color {
-        switch score {
-        case 70...100:
-            .green
-        case 40..<70:
-            .orange
-        default:
-            .red
         }
     }
 }

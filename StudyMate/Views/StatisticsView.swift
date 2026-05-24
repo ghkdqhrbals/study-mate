@@ -104,10 +104,10 @@ struct StatisticsView: View {
                     ) {
                         StatBox(title: strings.responses, value: "\(scores.count)")
                         StatBox(title: strings.average, value: "\(averageScore)")
-                        StatBox(title: strings.latestScore, value: "\(scores.last ?? 0)", valueColor: scoreColor(scores.last ?? 0))
-                        StatBox(title: strings.best, value: "\(scores.max() ?? 0)", valueColor: scoreColor(scores.max() ?? 0))
-                        StatBox(title: strings.lowest, value: "\(scores.min() ?? 0)", valueColor: scoreColor(scores.min() ?? 0))
-                        StatBox(title: strings.trend, value: trendText, valueColor: trendColor)
+                        StatBox(title: strings.latestScore, value: "\(scores.last ?? 0)")
+                        StatBox(title: strings.best, value: "\(scores.max() ?? 0)")
+                        StatBox(title: strings.lowest, value: "\(scores.min() ?? 0)")
+                        StatBox(title: strings.trend, value: trendText)
                     }
 
                     DateRangeSummary(records: gradedRecords, strings: strings)
@@ -180,35 +180,8 @@ struct StatisticsView: View {
         return "\(trendValue)"
     }
 
-    private var trendColor: Color {
-        guard let trendValue else {
-            return .secondary
-        }
-
-        if trendValue > 0 {
-            return .green
-        }
-
-        if trendValue < 0 {
-            return .orange
-        }
-
-        return .secondary
-    }
-
     private func statsDate(for record: StudyRecord) -> Date {
         record.answeredAt ?? record.question.createdAt
-    }
-
-    private func scoreColor(_ score: Int) -> Color {
-        switch score {
-        case 80...100:
-            return .green
-        case 50..<80:
-            return .orange
-        default:
-            return .red
-        }
     }
 }
 
@@ -437,7 +410,11 @@ private struct StatisticsPeriodControls: View {
             }
         }
         .padding(10)
-        .background(Color.secondary.opacity(0.06))
+        .background(Color.secondary.opacity(0.04))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.secondary.opacity(0.1), lineWidth: 1)
+        }
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
@@ -488,7 +465,11 @@ private struct DifficultyStatsSection: View {
                         }
                     }
                     .padding(10)
-                    .background(Color.secondary.opacity(0.07))
+                    .background(Color.secondary.opacity(0.045))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color.secondary.opacity(0.1), lineWidth: 1)
+                    }
                     .clipShape(RoundedRectangle(cornerRadius: 8))
                 }
             }
@@ -502,10 +483,10 @@ private struct ScoreDistributionSection: View {
 
     private var buckets: [ScoreBucket] {
         [
-            ScoreBucket(title: strings.excellentScores, count: count(in: 90...100), color: .green),
-            ScoreBucket(title: strings.goodScores, count: count(in: 70...89), color: .blue),
-            ScoreBucket(title: strings.partialScores, count: count(in: 40...69), color: .orange),
-            ScoreBucket(title: strings.lowScores, count: count(in: 0...39), color: .red)
+            ScoreBucket(title: strings.excellentScores, count: count(in: 90...100)),
+            ScoreBucket(title: strings.goodScores, count: count(in: 70...89)),
+            ScoreBucket(title: strings.partialScores, count: count(in: 40...69)),
+            ScoreBucket(title: strings.lowScores, count: count(in: 0...39))
         ]
     }
 
@@ -524,7 +505,7 @@ private struct ScoreDistributionSection: View {
                             .frame(width: 54, alignment: .leading)
 
                         ProgressView(value: Double(bucket.count), total: Double(max(records.count, 1)))
-                            .tint(bucket.color)
+                            .tint(Color.secondary.opacity(0.65))
 
                         Text("\(bucket.count)")
                             .font(.caption)
@@ -534,7 +515,11 @@ private struct ScoreDistributionSection: View {
                 }
             }
             .padding(10)
-            .background(Color.secondary.opacity(0.07))
+            .background(Color.secondary.opacity(0.045))
+            .overlay {
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color.secondary.opacity(0.1), lineWidth: 1)
+            }
             .clipShape(RoundedRectangle(cornerRadius: 8))
         }
     }
@@ -553,7 +538,6 @@ private struct ScoreDistributionSection: View {
 private struct ScoreBucket: Identifiable {
     var title: String
     var count: Int
-    var color: Color
 
     var id: String { title }
 }
@@ -578,7 +562,6 @@ private struct MiniMetric: View {
 private struct StatBox: View {
     var title: String
     var value: String
-    var valueColor: Color = .primary
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -588,11 +571,14 @@ private struct StatBox: View {
             Text(value)
                 .font(.title3)
                 .fontWeight(.semibold)
-                .foregroundStyle(valueColor)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(10)
-        .background(Color.secondary.opacity(0.08))
+        .background(Color.secondary.opacity(0.045))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.secondary.opacity(0.1), lineWidth: 1)
+        }
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
@@ -622,7 +608,11 @@ private struct DateRangeSummary: View {
         .lineLimit(1)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(10)
-        .background(Color.secondary.opacity(0.06))
+        .background(Color.secondary.opacity(0.04))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.secondary.opacity(0.1), lineWidth: 1)
+        }
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
@@ -671,11 +661,10 @@ private struct ScoreRecordRow: View {
 
             Text("\(record.gradingResult?.score ?? 0)")
                 .font(.headline)
-                .foregroundStyle(scoreColor(record.gradingResult?.score ?? 0))
         }
         .contentShape(Rectangle())
         .padding(9)
-        .background(Color.secondary.opacity(0.07))
+        .background(Color.secondary.opacity(0.04))
         .overlay {
             RoundedRectangle(cornerRadius: 8)
                 .stroke(Color.secondary.opacity(0.1), lineWidth: 1)
@@ -694,16 +683,6 @@ private struct ScoreRecordRow: View {
         record.answeredAt ?? record.question.createdAt
     }
 
-    private func scoreColor(_ score: Int) -> Color {
-        switch score {
-        case 80...100:
-            return .green
-        case 50..<80:
-            return .orange
-        default:
-            return .red
-        }
-    }
 }
 
 private struct ScoreLineChart: View {
@@ -719,7 +698,11 @@ private struct ScoreLineChart: View {
 
             ZStack(alignment: .topLeading) {
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(Color.secondary.opacity(0.08))
+                    .fill(Color.secondary.opacity(0.04))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color.secondary.opacity(0.1), lineWidth: 1)
+                    }
 
                 Path { path in
                     guard let first = points.first else {
@@ -731,12 +714,12 @@ private struct ScoreLineChart: View {
                         path.addLine(to: point)
                     }
                 }
-                .stroke(Color.accentColor, style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
+                .stroke(Color.secondary.opacity(0.85), style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
 
                 ForEach(Array(points.enumerated()), id: \.offset) { _, point in
                     Circle()
-                        .fill(Color.accentColor)
-                        .frame(width: 7, height: 7)
+                        .fill(Color.secondary)
+                        .frame(width: 5, height: 5)
                         .position(point)
                 }
 
