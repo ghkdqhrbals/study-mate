@@ -167,7 +167,8 @@ private struct GeneralSettingsSection: View {
                 )
             ) {
                 ForEach(AppLanguage.allCases) { language in
-                    Text(language.displayName).tag(language)
+                    Text(appState.settings.appLanguage == language ? "✓ \(language.displayName)" : language.displayName)
+                        .tag(language)
                 }
             }
             .pickerStyle(.menu)

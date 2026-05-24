@@ -428,7 +428,7 @@ struct AppStrings {
     var aboutStudyMate: String { text("StudyMate 정보", "About StudyMate") }
     func timerTitle(minutes: Int) -> String { text("타이머: \(minutes)분", "Timer: \(minutes) min") }
     func minuteLabel(_ minutes: Int) -> String { text("\(minutes)분", "\(minutes) min") }
-    var languageMenu: String { "Language" }
+    var languageMenu: String { text("언어", "Language") }
     var pause: String { text("일시정지", "Pause") }
     var resume: String { text("재개", "Resume") }
     var quit: String { text("StudyMate 종료", "Quit StudyMate") }
@@ -468,7 +468,7 @@ struct AppStrings {
     var notificationSound: String { text("알림음", "Notification sound") }
     var notificationSoundHelp: String { text("질문 알림을 받을 때 소리를 낼지 선택합니다.", "Choose whether question notifications play a sound.") }
     var studySettings: String { text("학습 설정", "Study Settings") }
-    var appLanguage: String { "Language" }
+    var appLanguage: String { text("언어", "Language") }
     var studyTopic: String { text("공부할 주제", "Study topic") }
     var difficulty: String { text("난이도", "Difficulty") }
     func questionInterval(minutes: Int) -> String { text("질문 간격: \(minutes)분", "Question interval: \(minutes) min") }
@@ -504,6 +504,8 @@ struct AppStrings {
     var noQuestionDescription: String { text("설정을 저장한 뒤 새 질문을 생성하세요.", "Save settings, then create a new question.") }
     var answer: String { text("답변", "Answer") }
     var gradeAnswer: String { text("채점 받기", "Grade Answer") }
+    var skipQuestion: String { text("넘기기", "Skip") }
+    var skipQuestionHelp: String { text("현재 미제출 질문을 넘기고 대기 중인 다음 질문으로 이동합니다.", "Skip the current ungraded question and move to the next pending one.") }
     var showHint: String { text("힌트 보기", "Show Hint") }
     var hideHint: String { text("힌트 숨기기", "Hide Hint") }
     var correct: String { text("정답", "Correct") }
@@ -522,13 +524,33 @@ struct AppStrings {
     var stats: String { text("통계", "Stats") }
     var noScores: String { text("점수 없음", "No Scores") }
     var noScoresDescription: String { text("답변을 채점하면 점수 그래프가 표시됩니다.", "A score graph appears after you grade answers.") }
+    var noScoresInPeriod: String { text("선택한 기간에 점수 없음", "No Scores in This Period") }
+    var noScoresInPeriodDescription: String {
+        text("기간을 넓히거나 새 답변을 채점하면 통계가 표시됩니다.", "Widen the period or grade a new answer to show stats.")
+    }
     var responses: String { text("응답", "Responses") }
     var average: String { text("평균", "Avg") }
     var best: String { text("최고", "Best") }
+    var lowest: String { text("최저", "Low") }
+    var latestScore: String { text("최근", "Latest") }
+    var trend: String { text("변화", "Trend") }
     var period: String { text("기간", "Period") }
     var firstRecord: String { text("처음", "First") }
     var latestRecord: String { text("최근", "Latest") }
+    var startDate: String { text("시작", "Start") }
+    var endDate: String { text("끝", "End") }
+    var allPeriods: String { text("전체", "All") }
+    var today: String { text("오늘", "Today") }
+    var last7Days: String { text("최근 7일", "Last 7 Days") }
+    var last30Days: String { text("최근 30일", "Last 30 Days") }
+    var last90Days: String { text("최근 90일", "Last 90 Days") }
+    var customPeriod: String { text("직접 설정", "Custom") }
     var scoreByQuestion: String { text("문제별 점수", "Scores by Question") }
+    var scoreDistribution: String { text("점수 분포", "Score Distribution") }
+    var excellentScores: String { text("90-100", "90-100") }
+    var goodScores: String { text("70-89", "70-89") }
+    var partialScores: String { text("40-69", "40-69") }
+    var lowScores: String { text("0-39", "0-39") }
     var problem: String { text("문제", "Question") }
     var hint: String { text("힌트", "Hint") }
     var feedback: String { text("피드백", "Feedback") }

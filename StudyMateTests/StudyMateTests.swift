@@ -412,6 +412,48 @@ final class StudyMateTests: XCTestCase {
         XCTAssertEqual(appState.pendingStudyRecords.count, 1)
     }
 
+    @MainActor
+    func testSkippingCurrentQuestionDeletesUngradedRecordAndOpensNextPending() {
+        let suiteName = "StudyMateTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = SettingsStore(defaults: defaults)
+        let settings = StudySettings(
+            topic: "Redis",
+            difficulty: .intermediate,
+            customPrompt: "짧게",
+            intervalMinutes: 15
+        )
+        let olderQuestion = QuestionItem(
+            question: "Stream ID는 어떤 의미인가요?",
+            expectedAnswerHint: nil,
+            createdAt: Date(timeIntervalSince1970: 100)
+        )
+        let newerQuestion = QuestionItem(
+            question: "MAXLEN ~ 옵션은 언제 쓰나요?",
+            expectedAnswerHint: nil,
+            createdAt: Date(timeIntervalSince1970: 200)
+        )
+
+        store.appendStudyRecord(question: olderQuestion, settings: settings)
+        store.appendStudyRecord(question: newerQuestion, settings: settings)
+
+        let newerRecord = store.loadStudyRecords().last!
+        let appState = AppState(settingsStore: store, openAIClient: SpyOpenAIClient())
+        appState.selectStudyRecord(newerRecord)
+
+        appState.skipCurrentQuestion()
+
+        let records = store.loadStudyRecords()
+        XCTAssertEqual(records.count, 1)
+        XCTAssertEqual(records.first?.question.question, olderQuestion.question)
+        XCTAssertEqual(appState.currentQuestion?.question, olderQuestion.question)
+        XCTAssertEqual(appState.pendingStudyRecords.count, 1)
+    }
+
     func testQuestionPromptIncludesRecentQuestionsToAvoid() {
         let settings = StudySettings(
             topic: "Swift Concurrency",

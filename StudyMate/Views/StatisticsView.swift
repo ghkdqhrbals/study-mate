@@ -3,15 +3,32 @@ import SwiftUI
 struct StatisticsView: View {
     @EnvironmentObject private var appState: AppState
     @State private var selectedRecord: StudyRecord?
+    @State private var selectedPeriod: StatisticsPeriod = .all
+    @State private var customStartDate = Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date()
+    @State private var customEndDate = Date()
 
-    private var gradedRecords: [StudyRecord] {
+    private var allGradedRecords: [StudyRecord] {
         appState.studyRecords
             .filter { $0.gradingResult != nil }
-            .sorted { $0.question.createdAt < $1.question.createdAt }
+            .sorted { statsDate(for: $0) < statsDate(for: $1) }
+    }
+
+    private var gradedRecords: [StudyRecord] {
+        allGradedRecords.filter {
+            selectedPeriod.contains(
+                statsDate(for: $0),
+                customStartDate: customStartDate,
+                customEndDate: customEndDate
+            )
+        }
     }
 
     private var listedGradedRecords: [StudyRecord] {
         Array(gradedRecords.reversed())
+    }
+
+    private var allScores: [Int] {
+        allGradedRecords.compactMap { $0.gradingResult?.score }
     }
 
     private var scores: [Int] {
@@ -40,59 +57,88 @@ struct StatisticsView: View {
     var body: some View {
         let strings = appState.strings
 
-        Group {
-            if scores.isEmpty {
-                VStack(alignment: .leading, spacing: 14) {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .firstTextBaseline) {
                     Text(strings.stats)
                         .font(.headline)
 
+                    Spacer()
+
+                    if !scores.isEmpty {
+                        Text(strings.itemCount(scores.count))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                StatisticsPeriodControls(
+                    selectedPeriod: $selectedPeriod,
+                    customStartDate: $customStartDate,
+                    customEndDate: $customEndDate,
+                    strings: strings
+                )
+
+                if allScores.isEmpty {
                     ContentUnavailableView(
                         strings.noScores,
                         systemImage: "chart.xyaxis.line",
                         description: Text(strings.noScoresDescription)
                     )
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
-            } else {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 8) {
-                        Text(strings.stats)
-                            .font(.headline)
-                            .padding(.bottom, 6)
-
-                        HStack(spacing: 10) {
-                            StatBox(title: strings.responses, value: "\(scores.count)")
-                            StatBox(title: strings.average, value: "\(averageScore)")
-                            StatBox(title: strings.best, value: "\(scores.max() ?? 0)")
-                        }
-
-                        DateRangeSummary(records: gradedRecords, strings: strings)
-                            .padding(.bottom, 4)
-
-                        DifficultyStatsSection(stats: difficultyStats, strings: strings)
-                            .padding(.top, 4)
-
-                        ScoreLineChart(records: gradedRecords)
-                            .frame(height: 160)
-                            .padding(.vertical, 8)
-
-                        Text(strings.scoreByQuestion)
-                            .font(.subheadline)
-                            .fontWeight(.semibold)
-                            .padding(.top, 4)
-
-                        ForEach(Array(listedGradedRecords.enumerated()), id: \.element.id) { index, record in
-                            Button {
-                                selectedRecord = record
-                            } label: {
-                                ScoreRecordRow(index: listedGradedRecords.count - index, record: record, strings: strings)
-                            }
-                            .buttonStyle(.plain)
-                        }
+                    .frame(maxWidth: .infinity, minHeight: 280)
+                } else if scores.isEmpty {
+                    ContentUnavailableView(
+                        strings.noScoresInPeriod,
+                        systemImage: "calendar.badge.exclamationmark",
+                        description: Text(strings.noScoresInPeriodDescription)
+                    )
+                    .frame(maxWidth: .infinity, minHeight: 280)
+                } else {
+                    LazyVGrid(
+                        columns: [
+                            GridItem(.flexible(minimum: 120), spacing: 8),
+                            GridItem(.flexible(minimum: 120), spacing: 8),
+                            GridItem(.flexible(minimum: 120), spacing: 8)
+                        ],
+                        spacing: 8
+                    ) {
+                        StatBox(title: strings.responses, value: "\(scores.count)")
+                        StatBox(title: strings.average, value: "\(averageScore)")
+                        StatBox(title: strings.latestScore, value: "\(scores.last ?? 0)", valueColor: scoreColor(scores.last ?? 0))
+                        StatBox(title: strings.best, value: "\(scores.max() ?? 0)", valueColor: scoreColor(scores.max() ?? 0))
+                        StatBox(title: strings.lowest, value: "\(scores.min() ?? 0)", valueColor: scoreColor(scores.min() ?? 0))
+                        StatBox(title: strings.trend, value: trendText, valueColor: trendColor)
                     }
-                    .padding(.bottom, 16)
+
+                    DateRangeSummary(records: gradedRecords, strings: strings)
+                        .padding(.bottom, 2)
+
+                    ScoreLineChart(records: gradedRecords)
+                        .frame(height: 170)
+                        .padding(.vertical, 4)
+
+                    ScoreDistributionSection(records: gradedRecords, strings: strings)
+                        .padding(.top, 4)
+
+                    DifficultyStatsSection(stats: difficultyStats, strings: strings)
+                        .padding(.top, 4)
+
+                    Text(strings.scoreByQuestion)
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .padding(.top, 4)
+
+                    ForEach(Array(listedGradedRecords.enumerated()), id: \.element.id) { index, record in
+                        Button {
+                            selectedRecord = record
+                        } label: {
+                            ScoreRecordRow(index: listedGradedRecords.count - index, record: record, strings: strings)
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
             }
+            .padding(.bottom, 16)
         }
         .padding(.top, 10)
         .frame(maxHeight: .infinity, alignment: .top)
@@ -110,6 +156,59 @@ struct StatisticsView: View {
         }
 
         return Int((Double(scores.reduce(0, +)) / Double(scores.count)).rounded())
+    }
+
+    private var trendValue: Int? {
+        guard scores.count >= 2,
+              let latest = scores.last,
+              let previous = scores.dropLast().last else {
+            return nil
+        }
+
+        return latest - previous
+    }
+
+    private var trendText: String {
+        guard let trendValue else {
+            return "-"
+        }
+
+        if trendValue > 0 {
+            return "+\(trendValue)"
+        }
+
+        return "\(trendValue)"
+    }
+
+    private var trendColor: Color {
+        guard let trendValue else {
+            return .secondary
+        }
+
+        if trendValue > 0 {
+            return .green
+        }
+
+        if trendValue < 0 {
+            return .orange
+        }
+
+        return .secondary
+    }
+
+    private func statsDate(for record: StudyRecord) -> Date {
+        record.answeredAt ?? record.question.createdAt
+    }
+
+    private func scoreColor(_ score: Int) -> Color {
+        switch score {
+        case 80...100:
+            return .green
+        case 50..<80:
+            return .orange
+        default:
+            return .red
+        }
     }
 }
 
@@ -236,6 +335,113 @@ private struct DetailSection: View {
     }
 }
 
+private enum StatisticsPeriod: String, CaseIterable, Identifiable {
+    case all
+    case today
+    case last7Days
+    case last30Days
+    case last90Days
+    case custom
+
+    var id: String { rawValue }
+
+    func title(strings: AppStrings) -> String {
+        switch self {
+        case .all:
+            return strings.allPeriods
+        case .today:
+            return strings.today
+        case .last7Days:
+            return strings.last7Days
+        case .last30Days:
+            return strings.last30Days
+        case .last90Days:
+            return strings.last90Days
+        case .custom:
+            return strings.customPeriod
+        }
+    }
+
+    func contains(
+        _ date: Date,
+        customStartDate: Date,
+        customEndDate: Date,
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) -> Bool {
+        switch self {
+        case .all:
+            return true
+        case .today:
+            let start = calendar.startOfDay(for: now)
+            let end = calendar.date(byAdding: .day, value: 1, to: start) ?? now
+            return date >= start && date < end
+        case .last7Days:
+            return date >= (calendar.date(byAdding: .day, value: -7, to: now) ?? now)
+        case .last30Days:
+            return date >= (calendar.date(byAdding: .day, value: -30, to: now) ?? now)
+        case .last90Days:
+            return date >= (calendar.date(byAdding: .day, value: -90, to: now) ?? now)
+        case .custom:
+            let lowerDate = min(customStartDate, customEndDate)
+            let upperDate = max(customStartDate, customEndDate)
+            let start = calendar.startOfDay(for: lowerDate)
+            let upperStart = calendar.startOfDay(for: upperDate)
+            let end = calendar.date(byAdding: .day, value: 1, to: upperStart) ?? upperDate
+            return date >= start && date < end
+        }
+    }
+}
+
+private struct StatisticsPeriodControls: View {
+    @Binding var selectedPeriod: StatisticsPeriod
+    @Binding var customStartDate: Date
+    @Binding var customEndDate: Date
+    var strings: AppStrings
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                Label(strings.period, systemImage: "calendar")
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.secondary)
+
+                Spacer()
+
+                Picker(strings.period, selection: $selectedPeriod) {
+                    ForEach(StatisticsPeriod.allCases) { period in
+                        Text(period.title(strings: strings)).tag(period)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .frame(width: 150)
+            }
+
+            if selectedPeriod == .custom {
+                HStack(spacing: 12) {
+                    DatePicker(
+                        strings.startDate,
+                        selection: $customStartDate,
+                        displayedComponents: .date
+                    )
+
+                    DatePicker(
+                        strings.endDate,
+                        selection: $customEndDate,
+                        displayedComponents: .date
+                    )
+                }
+                .font(.caption)
+            }
+        }
+        .padding(10)
+        .background(Color.secondary.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+}
+
 private struct DifficultyStat: Identifiable {
     var difficulty: Difficulty
     var count: Int
@@ -290,6 +496,68 @@ private struct DifficultyStatsSection: View {
     }
 }
 
+private struct ScoreDistributionSection: View {
+    var records: [StudyRecord]
+    var strings: AppStrings
+
+    private var buckets: [ScoreBucket] {
+        [
+            ScoreBucket(title: strings.excellentScores, count: count(in: 90...100), color: .green),
+            ScoreBucket(title: strings.goodScores, count: count(in: 70...89), color: .blue),
+            ScoreBucket(title: strings.partialScores, count: count(in: 40...69), color: .orange),
+            ScoreBucket(title: strings.lowScores, count: count(in: 0...39), color: .red)
+        ]
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(strings.scoreDistribution)
+                .font(.subheadline)
+                .fontWeight(.semibold)
+
+            VStack(spacing: 7) {
+                ForEach(buckets) { bucket in
+                    HStack(spacing: 8) {
+                        Text(bucket.title)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .frame(width: 54, alignment: .leading)
+
+                        ProgressView(value: Double(bucket.count), total: Double(max(records.count, 1)))
+                            .tint(bucket.color)
+
+                        Text("\(bucket.count)")
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .frame(width: 24, alignment: .trailing)
+                    }
+                }
+            }
+            .padding(10)
+            .background(Color.secondary.opacity(0.07))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+        }
+    }
+
+    private func count(in range: ClosedRange<Int>) -> Int {
+        records.filter { record in
+            guard let score = record.gradingResult?.score else {
+                return false
+            }
+
+            return range.contains(score)
+        }.count
+    }
+}
+
+private struct ScoreBucket: Identifiable {
+    var title: String
+    var count: Int
+    var color: Color
+
+    var id: String { title }
+}
+
 private struct MiniMetric: View {
     var title: String
     var value: String
@@ -310,6 +578,7 @@ private struct MiniMetric: View {
 private struct StatBox: View {
     var title: String
     var value: String
+    var valueColor: Color = .primary
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -319,6 +588,7 @@ private struct StatBox: View {
             Text(value)
                 .font(.title3)
                 .fontWeight(.semibold)
+                .foregroundStyle(valueColor)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(10)
@@ -338,8 +608,10 @@ private struct DateRangeSummary: View {
                 .fontWeight(.semibold)
                 .foregroundStyle(.secondary)
 
-            if let first = records.first?.question.createdAt,
-               let latest = records.last?.question.createdAt {
+            if let firstRecord = records.first,
+               let latestRecord = records.last {
+                let first = Self.statsDate(for: firstRecord)
+                let latest = Self.statsDate(for: latestRecord)
                 Text("\(strings.firstRecord) \(first, formatter: Self.dateFormatter)")
                 Text("·")
                     .foregroundStyle(.secondary)
@@ -360,6 +632,10 @@ private struct DateRangeSummary: View {
         formatter.timeStyle = .short
         return formatter
     }()
+
+    private static func statsDate(for record: StudyRecord) -> Date {
+        record.answeredAt ?? record.question.createdAt
+    }
 }
 
 private struct ScoreRecordRow: View {
@@ -377,7 +653,7 @@ private struct ScoreRecordRow: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
-                    Text(record.question.createdAt, formatter: Self.dateFormatter)
+                    Text(Self.statsDate(for: record), formatter: Self.dateFormatter)
                     Text("·")
                     Text(record.topic.isEmpty ? strings.studyFallback : record.topic)
                     Text("·")
@@ -395,6 +671,7 @@ private struct ScoreRecordRow: View {
 
             Text("\(record.gradingResult?.score ?? 0)")
                 .font(.headline)
+                .foregroundStyle(scoreColor(record.gradingResult?.score ?? 0))
         }
         .contentShape(Rectangle())
         .padding(9)
@@ -412,6 +689,21 @@ private struct ScoreRecordRow: View {
         formatter.timeStyle = .short
         return formatter
     }()
+
+    private static func statsDate(for record: StudyRecord) -> Date {
+        record.answeredAt ?? record.question.createdAt
+    }
+
+    private func scoreColor(_ score: Int) -> Color {
+        switch score {
+        case 80...100:
+            return .green
+        case 50..<80:
+            return .orange
+        default:
+            return .red
+        }
+    }
 }
 
 private struct ScoreLineChart: View {
@@ -467,14 +759,16 @@ private struct ScoreLineChart: View {
                     Spacer()
 
                     HStack {
-                        if let first = records.first?.question.createdAt {
+                        if let firstRecord = records.first {
+                            let first = Self.statsDate(for: firstRecord)
                             Text(first, formatter: Self.axisDateFormatter)
                         }
 
                         Spacer()
 
                         if records.count > 1,
-                           let latest = records.last?.question.createdAt {
+                           let latestRecord = records.last {
+                            let latest = Self.statsDate(for: latestRecord)
                             Text(latest, formatter: Self.axisDateFormatter)
                         }
                     }
@@ -511,4 +805,8 @@ private struct ScoreLineChart: View {
         formatter.dateFormat = "M/d HH:mm"
         return formatter
     }()
+
+    private static func statsDate(for record: StudyRecord) -> Date {
+        record.answeredAt ?? record.question.createdAt
+    }
 }

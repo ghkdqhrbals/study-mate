@@ -63,6 +63,14 @@ final class AppState: ObservableObject {
             .sorted { $0.question.createdAt > $1.question.createdAt }
     }
 
+    var canSkipCurrentQuestion: Bool {
+        guard let currentRecord = studyRecord(matching: currentQuestion) else {
+            return currentQuestion != nil
+        }
+
+        return currentRecord.gradingResult == nil
+    }
+
     init(
         settingsStore: SettingsStore = SettingsStore(),
         openAIClient: OpenAIClientProtocol? = nil,
@@ -439,6 +447,40 @@ final class AppState: ObservableObject {
         isGradingAnswer = false
     }
 
+    func skipCurrentQuestion() {
+        guard let currentQuestion else {
+            return
+        }
+
+        let skippedRecord = studyRecord(matching: currentQuestion)
+        if let skippedRecord, skippedRecord.gradingResult == nil {
+            settingsStore.deleteStudyRecord(skippedRecord)
+        }
+
+        studyRecords = settingsStore.loadStudyRecords()
+
+        if let nextRecord = pendingStudyRecords.first {
+            self.currentQuestion = nextRecord.question
+            lastAnswer = nextRecord.answer ?? ""
+            gradingResult = nil
+            settingsStore.saveQuestion(nextRecord.question)
+            settingsStore.saveLastAnswer(nextRecord.answer ?? "")
+            settingsStore.saveGradingResult(nil)
+            statusMessage = "질문을 넘기고 다음 미제출 질문을 열었습니다."
+        } else {
+            self.currentQuestion = nil
+            lastAnswer = ""
+            gradingResult = nil
+            settingsStore.saveQuestion(nil)
+            settingsStore.saveLastAnswer("")
+            settingsStore.saveGradingResult(nil)
+            statusMessage = "질문을 넘겼습니다."
+        }
+
+        errorMessage = nil
+        log(.info, "현재 미제출 질문을 넘겼습니다.")
+    }
+
     func updateAnswer(_ answer: String) {
         lastAnswer = answer
         settingsStore.saveLastAnswer(answer)
@@ -595,6 +637,18 @@ final class AppState: ObservableObject {
 
         return studyRecords.last {
             abs($0.question.createdAt.timeIntervalSince1970 - questionCreatedAt) < 0.001
+        }
+    }
+
+    private func studyRecord(matching question: QuestionItem?) -> StudyRecord? {
+        guard let question else {
+            return nil
+        }
+
+        let normalizedQuestion = SettingsStore.normalizedQuestionText(question.question)
+        return studyRecords.last {
+            $0.question.createdAt == question.createdAt ||
+                SettingsStore.normalizedQuestionText($0.question.question) == normalizedQuestion
         }
     }
 

@@ -90,9 +90,9 @@ private struct MenuBarMenuView: View {
                     appState.setAppLanguage(language)
                 } label: {
                     if appState.settings.appLanguage == language {
-                        Label(language.displayName, systemImage: "checkmark")
+                        Text("✓ \(language.displayName)")
                     } else {
-                        Text(language.displayName)
+                        Text("  \(language.displayName)")
                     }
                 }
             }

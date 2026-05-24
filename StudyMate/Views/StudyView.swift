@@ -52,9 +52,25 @@ struct StudyView: View {
                 Group {
                     if let question = appState.currentQuestion {
                         VStack(alignment: .leading, spacing: 8) {
-                            Text(strings.question)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                            HStack(alignment: .firstTextBaseline) {
+                                Text(strings.question)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+
+                                Spacer()
+
+                                if appState.canSkipCurrentQuestion {
+                                    Button {
+                                        appState.skipCurrentQuestion()
+                                    } label: {
+                                        Label(strings.skipQuestion, systemImage: "forward.end.fill")
+                                    }
+                                    .buttonStyle(.borderless)
+                                    .font(.caption)
+                                    .help(strings.skipQuestionHelp)
+                                }
+                            }
+
                             Text(question.question)
                                 .font(.body)
                                 .textSelection(.enabled)
