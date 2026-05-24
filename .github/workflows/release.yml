@@ -192,12 +192,29 @@ jobs:
 
           echo "${APPSTORE_CONNECT_PRIVATE_KEY_BASE64}" | base64 --decode > "${PRIVATE_KEY_PATH}"
 
+          NOTARY_JSON="${RUNNER_TEMP}/notary-submit.json"
           xcrun notarytool submit "${DMG_PATH}" \
             --key "${PRIVATE_KEY_PATH}" \
             --key-id "${APPSTORE_CONNECT_KEY_ID}" \
             --issuer "${APPSTORE_CONNECT_ISSUER_ID}" \
             --team-id "${APPLE_TEAM_ID}" \
-            --wait
+            --wait \
+            --output-format json | tee "${NOTARY_JSON}"
+
+          SUBMISSION_ID="$(/usr/bin/python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("id", ""))' "${NOTARY_JSON}")"
+          STATUS="$(/usr/bin/python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("status", ""))' "${NOTARY_JSON}")"
+
+          if [ "${STATUS}" != "Accepted" ]; then
+            echo "Notarization failed with status: ${STATUS}" >&2
+            if [ -n "${SUBMISSION_ID}" ]; then
+              xcrun notarytool log "${SUBMISSION_ID}" \
+                --key "${PRIVATE_KEY_PATH}" \
+                --key-id "${APPSTORE_CONNECT_KEY_ID}" \
+                --issuer "${APPSTORE_CONNECT_ISSUER_ID}" \
+                --team-id "${APPLE_TEAM_ID}" || true
+            fi
+            exit 1
+          fi
 
           xcrun stapler staple "${DMG_PATH}"
           xcrun stapler validate "${DMG_PATH}"
