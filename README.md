@@ -37,6 +37,10 @@ StudyMate was built to help you keep that knowledge fresh through small, repeate
 
 The app runs as a menu bar utility and does not show a Dock icon.
 
+## Install
+
+Download the DMG, open it, and drag `StudyMate.app` to `Applications` before launching it. Sparkle automatic updates only work from `Applications` or `~/Applications`; running the app directly from the DMG is read-only and cannot be updated.
+
 ## Test
 
 ```sh
@@ -48,8 +52,8 @@ xcodebuild test -project StudyMate.xcodeproj -scheme StudyMate -destination 'pla
 GitHub Actions builds a DMG when a version tag is pushed.
 
 ```sh
-git tag v1.0.10
-git push origin v1.0.10
+git tag v1.0.11
+git push origin v1.0.11
 ```
 
 The release DMG includes:

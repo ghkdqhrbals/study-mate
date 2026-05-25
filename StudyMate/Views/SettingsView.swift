@@ -221,6 +221,13 @@ private struct GeneralSettingsSection: View {
                 .font(.subheadline)
                 .fontWeight(.semibold)
 
+            if !updateService.canUseUpdates {
+                Text(strings.updateInstallHelp)
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             Toggle(
                 strings.automaticallyCheckForUpdates,
                 isOn: Binding(
@@ -228,6 +235,7 @@ private struct GeneralSettingsSection: View {
                     set: { updateService.setAutomaticallyChecksForUpdates($0) }
                 )
             )
+            .disabled(!updateService.canUseUpdates)
 
             Toggle(
                 strings.automaticallyDownloadUpdates,
@@ -236,14 +244,14 @@ private struct GeneralSettingsSection: View {
                     set: { updateService.setAutomaticallyDownloadsUpdates($0) }
                 )
             )
-            .disabled(!updateService.automaticallyChecksForUpdates)
+            .disabled(!updateService.canUseUpdates || !updateService.automaticallyChecksForUpdates)
 
             Button {
                 updateService.checkForUpdates()
             } label: {
                 Label(strings.checkForUpdates, systemImage: "arrow.triangle.2.circlepath")
             }
-            .disabled(!updateService.canCheckForUpdates)
+            .disabled(!updateService.canUseUpdates || !updateService.canCheckForUpdates)
 
             Text(strings.updateHelp)
                 .font(.caption)

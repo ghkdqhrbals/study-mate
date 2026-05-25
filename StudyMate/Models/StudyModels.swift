@@ -474,6 +474,12 @@ struct AppStrings {
     var updateHelp: String {
         text("GitHub Releases에 새 DMG가 올라오면 StudyMate가 업데이트를 안내합니다.", "StudyMate checks GitHub Releases and offers updates when a new DMG is available.")
     }
+    var updateInstallHelp: String {
+        text(
+            "DMG 안이나 임시 위치에서 실행 중이면 업데이트할 수 없습니다. StudyMate.app을 Applications 폴더로 옮긴 뒤 다시 실행하세요.",
+            "Updates are unavailable when StudyMate is running from a DMG or temporary location. Move StudyMate.app to Applications and relaunch it."
+        )
+    }
     var uninstall: String { text("StudyMate 제거", "Uninstall StudyMate") }
     var uninstallHelp: String {
         text("앱을 휴지통으로 이동하고 로컬 설정과 캐시를 삭제합니다.", "Move the app to Trash and delete local settings and caches.")

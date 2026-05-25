@@ -35,7 +35,6 @@ final class StudyMateAppDelegate: NSObject, NSApplicationDelegate {
 
 private struct MenuBarMenuView: View {
     @EnvironmentObject private var appState: AppState
-    @ObservedObject private var updateService = UpdateService.shared
 
     private let timerOptions = [1, 5, 10, 15, 30, 45, 60, 120]
 
@@ -69,13 +68,6 @@ private struct MenuBarMenuView: View {
         } label: {
             Label(strings.aboutStudyMate, systemImage: "info.circle")
         }
-
-        Button {
-            updateService.checkForUpdates()
-        } label: {
-            Label(strings.checkForUpdates, systemImage: "arrow.triangle.2.circlepath")
-        }
-        .disabled(!updateService.canCheckForUpdates)
 
         Menu(strings.timerTitle(minutes: appState.settings.sanitizedIntervalMinutes)) {
             ForEach(timerOptions, id: \.self) { minutes in
@@ -112,16 +104,34 @@ private struct MenuBarMenuView: View {
             appState.setRunning(!appState.isRunning)
             NSApp.activate(ignoringOtherApps: true)
         } label: {
-            Text(appState.isRunning ? "Ⅱ  \(strings.pause)" : "▶  \(strings.resume)")
+            MenuActionLabel(
+                title: appState.isRunning ? strings.pause : strings.resume,
+                systemImage: appState.isRunning ? "pause.fill" : "play.fill"
+            )
         }
         .keyboardShortcut("p", modifiers: .command)
 
         Button {
             NSApp.terminate(nil)
         } label: {
-            Text("⏻  \(strings.quit)")
+            MenuActionLabel(title: strings.quit, systemImage: "power")
         }
         .keyboardShortcut("q", modifiers: .command)
+    }
+}
+
+private struct MenuActionLabel: View {
+    var title: String
+    var systemImage: String
+
+    var body: some View {
+        Label {
+            Text(title)
+        } icon: {
+            Image(systemName: systemImage)
+                .font(.system(size: 12, weight: .semibold))
+                .frame(width: 15, alignment: .center)
+        }
     }
 }
 
