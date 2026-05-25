@@ -757,6 +757,37 @@ final class StudyMateTests: XCTestCase {
         XCTAssertEqual(normalized.score, 100)
         XCTAssertTrue(normalized.isCorrect)
     }
+
+    func testTopicLevelRangePrioritizesHighestDifficulty() throws {
+        let intermediateRecord = StudyRecord(
+            question: QuestionItem(question: "Redis Stream은 무엇인가요?", expectedAnswerHint: nil, createdAt: Date()),
+            answer: "이벤트 로그입니다.",
+            gradingResult: GradingResult(score: 96, isCorrect: true, feedback: "좋아요.", explanation: "충분합니다."),
+            topic: "Redis",
+            difficulty: .intermediate
+        )
+        let advancedRecord = StudyRecord(
+            question: QuestionItem(question: "Consumer lag를 어떻게 해석하나요?", expectedAnswerHint: nil, createdAt: Date()),
+            answer: "대략적인 지연입니다.",
+            gradingResult: GradingResult(score: 62, isCorrect: false, feedback: "부분적입니다.", explanation: "핵심 근거가 부족합니다."),
+            topic: "Redis",
+            difficulty: .advanced
+        )
+
+        let range = try XCTUnwrap(TopicLevelRange.calculate(records: [intermediateRecord, advancedRecord]))
+
+        XCTAssertEqual(range.level, .advanced)
+        XCTAssertEqual(range.average, 62)
+    }
+
+    func testTopicLevelRangeHighScoreExtendsTowardNextDifficulty() {
+        let range = TopicLevelRange.calculate(level: .advanced, average: 91, sampleCount: 3)
+
+        XCTAssertEqual(range.level, .advanced)
+        XCTAssertEqual(range.startDifficulty, .advanced)
+        XCTAssertEqual(range.endDifficulty, .expert)
+        XCTAssertGreaterThan(range.upperBound, range.lowerBound)
+    }
 }
 
 @MainActor

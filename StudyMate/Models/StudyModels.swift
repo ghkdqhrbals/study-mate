@@ -611,6 +611,15 @@ struct AppStrings {
     var insight: String { text("인사이트", "Insight") }
     var strongestTopic: String { text("강점 주제", "Strong Topic") }
     var weakestTopic: String { text("보완 주제", "Focus Topic") }
+    func currentTopicLevel(_ level: String) -> String {
+        text("현재 도전 레벨: \(level)", "Current level: \(level)")
+    }
+    func topicLevelRange(_ start: String, _ end: String, average: Int, count: Int) -> String {
+        text(
+            "추정 위치: \(start) - \(end) · \(average)점 · \(count)개",
+            "Estimated range: \(start) - \(end) · \(average) pts · \(count)"
+        )
+    }
     var notEnoughStats: String { text("통계를 만들려면 채점 기록이 더 필요합니다.", "Grade more answers to build insights.") }
     func itemCount(_ count: Int) -> String { text("\(count)개", "\(count)") }
     var correctRate: String { text("정답", "Correct") }

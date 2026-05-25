@@ -56,21 +56,36 @@ struct StatisticsView: View {
 
     private var topicStats: [TopicStat] {
         Dictionary(grouping: gradedRecords, by: normalizedTopic)
-            .map { topic, records in
+            .compactMap { topic, records in
                 let scores = records.compactMap { $0.gradingResult?.score }
+                guard !scores.isEmpty,
+                      let levelRange = TopicLevelRange.calculate(records: records) else {
+                    return nil
+                }
+
                 let correctCount = records.filter { $0.gradingResult?.isCorrect == true }.count
                 return TopicStat(
                     topic: topic,
                     count: scores.count,
                     average: Int((Double(scores.reduce(0, +)) / Double(max(scores.count, 1))).rounded()),
                     best: scores.max() ?? 0,
-                    correctRate: Int((Double(correctCount) / Double(max(records.count, 1)) * 100).rounded())
+                    correctRate: Int((Double(correctCount) / Double(max(records.count, 1)) * 100).rounded()),
+                    levelRange: levelRange
                 )
             }
             .sorted { lhs, rhs in
+                if lhs.levelRange.level.levelIndex != rhs.levelRange.level.levelIndex {
+                    return lhs.levelRange.level.levelIndex > rhs.levelRange.level.levelIndex
+                }
+
+                if lhs.levelRange.average != rhs.levelRange.average {
+                    return lhs.levelRange.average > rhs.levelRange.average
+                }
+
                 if lhs.average == rhs.average {
                     return lhs.count > rhs.count
                 }
+
                 return lhs.average > rhs.average
             }
     }
@@ -214,6 +229,14 @@ private struct StatisticsInsightSection: View {
 
     private var strongest: TopicStat? {
         stats.max { lhs, rhs in
+            if lhs.levelRange.level.levelIndex != rhs.levelRange.level.levelIndex {
+                return lhs.levelRange.level.levelIndex < rhs.levelRange.level.levelIndex
+            }
+
+            if lhs.levelRange.average != rhs.levelRange.average {
+                return lhs.levelRange.average < rhs.levelRange.average
+            }
+
             if lhs.average == rhs.average {
                 return lhs.count < rhs.count
             }
@@ -276,6 +299,8 @@ private struct StatisticsInsightSection: View {
             Text("\(stat.average)/100 · \(stat.count)")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+            LevelRangeSummary(stat: stat, strings: strings)
+            LevelRangeBar(range: stat.levelRange, strings: strings)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(10)
@@ -581,8 +606,85 @@ private struct TopicStat: Identifiable {
     var average: Int
     var best: Int
     var correctRate: Int
+    var levelRange: TopicLevelRange
 
     var id: String { topic }
+}
+
+struct TopicLevelRange: Equatable {
+    var level: Difficulty
+    var average: Int
+    var sampleCount: Int
+    var lowerBound: Double
+    var upperBound: Double
+
+    var startDifficulty: Difficulty {
+        difficulty(at: lowerBound)
+    }
+
+    var endDifficulty: Difficulty {
+        difficulty(at: min(upperBound, 0.999_999))
+    }
+
+    static func calculate(records: [StudyRecord]) -> TopicLevelRange? {
+        let recordsByDifficulty = Dictionary(
+            grouping: records.filter { $0.gradingResult != nil },
+            by: \.difficulty
+        )
+
+        for difficulty in Difficulty.allCases.reversed() {
+            let scores = recordsByDifficulty[difficulty]?.compactMap { $0.gradingResult?.score } ?? []
+            guard !scores.isEmpty else {
+                continue
+            }
+
+            let average = Int((Double(scores.reduce(0, +)) / Double(scores.count)).rounded())
+            return calculate(level: difficulty, average: average, sampleCount: scores.count)
+        }
+
+        return nil
+    }
+
+    static func calculate(level: Difficulty, average: Int, sampleCount: Int) -> TopicLevelRange {
+        let segment = 1.0 / Double(Difficulty.allCases.count)
+        let start = Double(level.levelIndex) * segment
+        let hasPreviousLevel = level.levelIndex > 0
+        let clampedAverage = min(max(average, 0), 100)
+        let lowerOffset: Double
+        let upperOffset: Double
+
+        switch clampedAverage {
+        case 85...100:
+            lowerOffset = 0.68
+            upperOffset = level == Difficulty.allCases.last ? 1.0 : 1.18
+        case 70..<85:
+            lowerOffset = 0.35
+            upperOffset = 0.82
+        case 50..<70:
+            lowerOffset = 0.08
+            upperOffset = 0.58
+        default:
+            lowerOffset = hasPreviousLevel ? -0.22 : 0.0
+            upperOffset = 0.25
+        }
+
+        let lowerBound = max(0, min(1, start + segment * lowerOffset))
+        let upperBound = max(lowerBound + 0.025, min(1, start + segment * upperOffset))
+
+        return TopicLevelRange(
+            level: level,
+            average: clampedAverage,
+            sampleCount: sampleCount,
+            lowerBound: lowerBound,
+            upperBound: min(1, upperBound)
+        )
+    }
+
+    private func difficulty(at progress: Double) -> Difficulty {
+        let clampedProgress = min(max(progress, 0), 0.999_999)
+        let index = Int((clampedProgress * Double(Difficulty.allCases.count)).rounded(.down))
+        return Difficulty.allCases[min(max(index, 0), Difficulty.allCases.count - 1)]
+    }
 }
 
 private struct TopicStatsSection: View {
@@ -620,6 +722,10 @@ private struct TopicStatsSection: View {
                             MiniMetric(title: strings.best, value: "\(stat.best)")
                             MiniMetric(title: strings.correctRate, value: "\(stat.correctRate)%")
                         }
+
+                        LevelRangeSummary(stat: stat, strings: strings)
+
+                        LevelRangeBar(range: stat.levelRange, strings: strings)
                     }
                     .padding(10)
                     .background(Color.secondary.opacity(0.045))
@@ -631,6 +737,77 @@ private struct TopicStatsSection: View {
                 }
             }
         }
+    }
+}
+
+private struct LevelRangeSummary: View {
+    var stat: TopicStat
+    var strings: AppStrings
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(strings.currentTopicLevel(stat.levelRange.level.displayName(language: strings.language)))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+
+            Text(
+                strings.topicLevelRange(
+                    stat.levelRange.startDifficulty.displayName(language: strings.language),
+                    stat.levelRange.endDifficulty.displayName(language: strings.language),
+                    average: stat.levelRange.average,
+                    count: stat.levelRange.sampleCount
+                )
+            )
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .lineLimit(2)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
+private struct LevelRangeBar: View {
+    var range: TopicLevelRange
+    var strings: AppStrings
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    HStack(spacing: 2) {
+                        ForEach(Difficulty.allCases) { difficulty in
+                            RoundedRectangle(cornerRadius: 3)
+                                .fill(difficulty == range.level ? Color.accentColor.opacity(0.16) : Color.secondary.opacity(0.12))
+                        }
+                    }
+
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color.accentColor.opacity(0.72))
+                        .frame(width: max(4, proxy.size.width * (range.upperBound - range.lowerBound)))
+                        .offset(x: proxy.size.width * range.lowerBound)
+                }
+            }
+            .frame(height: 10)
+
+            HStack(spacing: 2) {
+                ForEach(Difficulty.allCases) { difficulty in
+                    Text(difficulty.shortDisplayName(language: strings.language))
+                        .font(.system(size: 8, weight: difficulty == range.level ? .semibold : .regular))
+                        .foregroundStyle(difficulty == range.level ? .primary : .secondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                        .frame(maxWidth: .infinity)
+                }
+            }
+        }
+        .accessibilityLabel(
+            strings.topicLevelRange(
+                range.startDifficulty.displayName(language: strings.language),
+                range.endDifficulty.displayName(language: strings.language),
+                average: range.average,
+                count: range.sampleCount
+            )
+        )
     }
 }
 
@@ -747,6 +924,51 @@ private struct ScoreDistributionSection: View {
 
             return range.contains(score)
         }.count
+    }
+}
+
+private extension Difficulty {
+    var levelIndex: Int {
+        Difficulty.allCases.firstIndex(of: self) ?? 0
+    }
+
+    func shortDisplayName(language: AppLanguage) -> String {
+        switch language {
+        case .korean:
+            switch self {
+            case .novice:
+                return "완입"
+            case .beginner:
+                return "입문"
+            case .elementary:
+                return "초급"
+            case .intermediate:
+                return "중급"
+            case .upperIntermediate:
+                return "중상"
+            case .advanced:
+                return "고급"
+            case .expert:
+                return "전문"
+            }
+        case .english:
+            switch self {
+            case .novice:
+                return "N"
+            case .beginner:
+                return "B"
+            case .elementary:
+                return "E"
+            case .intermediate:
+                return "I"
+            case .upperIntermediate:
+                return "UI"
+            case .advanced:
+                return "A"
+            case .expert:
+                return "X"
+            }
+        }
     }
 }
 
