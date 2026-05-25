@@ -54,6 +54,27 @@ struct StatisticsView: View {
         }
     }
 
+    private var topicStats: [TopicStat] {
+        Dictionary(grouping: gradedRecords, by: normalizedTopic)
+            .map { topic, records in
+                let scores = records.compactMap { $0.gradingResult?.score }
+                let correctCount = records.filter { $0.gradingResult?.isCorrect == true }.count
+                return TopicStat(
+                    topic: topic,
+                    count: scores.count,
+                    average: Int((Double(scores.reduce(0, +)) / Double(max(scores.count, 1))).rounded()),
+                    best: scores.max() ?? 0,
+                    correctRate: Int((Double(correctCount) / Double(max(records.count, 1)) * 100).rounded())
+                )
+            }
+            .sorted { lhs, rhs in
+                if lhs.average == rhs.average {
+                    return lhs.count > rhs.count
+                }
+                return lhs.average > rhs.average
+            }
+    }
+
     var body: some View {
         let strings = appState.strings
 
@@ -104,13 +125,16 @@ struct StatisticsView: View {
                         MetricItem(title: strings.trend, value: trendText)
                     ])
 
-                    StatisticsInsightSection(stats: difficultyStats, strings: strings)
+                    StatisticsInsightSection(stats: topicStats, strings: strings)
 
                     ScoreLineChart(records: gradedRecords)
                         .frame(height: 150)
                         .padding(.vertical, 4)
 
                     ScoreDistributionSection(records: gradedRecords, strings: strings)
+                        .padding(.top, 4)
+
+                    TopicStatsSection(stats: topicStats, strings: strings)
                         .padding(.top, 4)
 
                     DifficultyStatsSection(stats: difficultyStats, strings: strings)
@@ -177,13 +201,18 @@ struct StatisticsView: View {
     private func statsDate(for record: StudyRecord) -> Date {
         record.answeredAt ?? record.question.createdAt
     }
+
+    private func normalizedTopic(for record: StudyRecord) -> String {
+        let topic = record.topic.trimmingCharacters(in: .whitespacesAndNewlines)
+        return topic.isEmpty ? appState.strings.studyFallback : topic
+    }
 }
 
 private struct StatisticsInsightSection: View {
-    var stats: [DifficultyStat]
+    var stats: [TopicStat]
     var strings: AppStrings
 
-    private var strongest: DifficultyStat? {
+    private var strongest: TopicStat? {
         stats.max { lhs, rhs in
             if lhs.average == rhs.average {
                 return lhs.count < rhs.count
@@ -192,7 +221,7 @@ private struct StatisticsInsightSection: View {
         }
     }
 
-    private var weakest: DifficultyStat? {
+    private var weakest: TopicStat? {
         stats.min { lhs, rhs in
             if lhs.average == rhs.average {
                 return lhs.count < rhs.count
@@ -207,18 +236,21 @@ private struct StatisticsInsightSection: View {
                 .font(.subheadline)
                 .fontWeight(.semibold)
 
-            if let strongest, let weakest {
+            if let strongest {
                 HStack(spacing: 8) {
                     insightCard(
-                        title: strings.strongestDifficulty,
+                        title: strings.strongestTopic,
                         stat: strongest,
                         systemImage: "arrow.up.circle"
                     )
-                    insightCard(
-                        title: strings.weakestDifficulty,
-                        stat: weakest,
-                        systemImage: "target"
-                    )
+
+                    if stats.count > 1, let weakest {
+                        insightCard(
+                            title: strings.weakestTopic,
+                            stat: weakest,
+                            systemImage: "target"
+                        )
+                    }
                 }
             } else {
                 Text(strings.notEnoughStats)
@@ -232,12 +264,12 @@ private struct StatisticsInsightSection: View {
         }
     }
 
-    private func insightCard(title: String, stat: DifficultyStat, systemImage: String) -> some View {
+    private func insightCard(title: String, stat: TopicStat, systemImage: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Label(title, systemImage: systemImage)
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            Text(stat.difficulty.displayName(language: strings.language))
+            Text(stat.topic)
                 .font(.callout)
                 .fontWeight(.semibold)
                 .lineLimit(1)
@@ -538,8 +570,67 @@ private struct StatisticsPeriodControls: View {
         return formatter
     }()
 
-    private static func statsDate(for record: StudyRecord) -> Date {
+private static func statsDate(for record: StudyRecord) -> Date {
         record.answeredAt ?? record.question.createdAt
+    }
+}
+
+private struct TopicStat: Identifiable {
+    var topic: String
+    var count: Int
+    var average: Int
+    var best: Int
+    var correctRate: Int
+
+    var id: String { topic }
+}
+
+private struct TopicStatsSection: View {
+    var stats: [TopicStat]
+    var strings: AppStrings
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(strings.statsByTopic)
+                .font(.subheadline)
+                .fontWeight(.semibold)
+
+            LazyVGrid(
+                columns: [
+                    GridItem(.flexible(minimum: 150), spacing: 8),
+                    GridItem(.flexible(minimum: 150), spacing: 8)
+                ],
+                spacing: 8
+            ) {
+                ForEach(Array(stats.prefix(6))) { stat in
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text(stat.topic)
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                                .lineLimit(1)
+                            Spacer()
+                            Text(strings.itemCount(stat.count))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        HStack(spacing: 10) {
+                            MiniMetric(title: strings.average, value: "\(stat.average)")
+                            MiniMetric(title: strings.best, value: "\(stat.best)")
+                            MiniMetric(title: strings.correctRate, value: "\(stat.correctRate)%")
+                        }
+                    }
+                    .padding(10)
+                    .background(Color.secondary.opacity(0.045))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color.secondary.opacity(0.1), lineWidth: 1)
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
+            }
+        }
     }
 }
 

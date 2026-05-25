@@ -37,6 +37,7 @@ struct StudyView: View {
                         }
                     }
                     .disabled(appState.isGeneratingQuestion)
+                    .disabled(appState.hasReachedPendingQuestionLimit)
                 }
 
                 StudyOverviewSection(
@@ -48,6 +49,12 @@ struct StudyView: View {
                         appState.openOldestPendingQuestion()
                     }
                 )
+
+                if appState.hasReachedPendingQuestionLimit {
+                    PendingLimitValidationView(strings: strings) {
+                        appState.openOldestPendingQuestion()
+                    }
+                }
 
                 Divider()
 
@@ -291,6 +298,44 @@ private struct StudyOverviewSection: View {
         }
 
         return "\(score)"
+    }
+}
+
+private struct PendingLimitValidationView: View {
+    var strings: AppStrings
+    var onContinue: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.orange)
+                .frame(width: 18, height: 18)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(strings.pendingQuestionLimitTitle)
+                    .font(.caption)
+                    .fontWeight(.semibold)
+
+                Text(strings.pendingQuestionLimitMessage)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 8)
+
+            Button(strings.continueOldestPending, action: onContinue)
+                .buttonStyle(.borderless)
+                .font(.caption)
+        }
+        .padding(10)
+        .background(Color.orange.opacity(0.08))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.orange.opacity(0.18), lineWidth: 1)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
 

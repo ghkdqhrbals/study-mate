@@ -477,6 +477,43 @@ final class StudyMateTests: XCTestCase {
         XCTAssertEqual(appState.pendingStudyRecords.count, 1)
     }
 
+    @MainActor
+    func testPendingQuestionLimitPreventsNewQuestionGeneration() async {
+        let suiteName = "StudyMateTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = SettingsStore(defaults: defaults)
+        let settings = StudySettings(
+            topic: "Redis",
+            difficulty: .intermediate,
+            customPrompt: "짧게",
+            intervalMinutes: 15
+        )
+        store.saveSettings(settings)
+
+        for index in 0..<3 {
+            let question = QuestionItem(
+                question: "미채점 질문 \(index)",
+                expectedAnswerHint: nil,
+                createdAt: Date(timeIntervalSince1970: Double(index))
+            )
+            store.appendStudyRecord(question: question, settings: settings)
+        }
+
+        let client = SpyOpenAIClient()
+        let appState = AppState(settingsStore: store, openAIClient: client)
+
+        await appState.generateQuestion()
+
+        XCTAssertTrue(appState.hasReachedPendingQuestionLimit)
+        XCTAssertEqual(appState.statusMessage, appState.strings.pendingQuestionLimitTitle)
+        XCTAssertEqual(client.generateCallCount, 0)
+        XCTAssertEqual(appState.pendingStudyRecords.count, 3)
+    }
+
     func testQuestionPromptIncludesRecentQuestionsToAvoid() {
         let settings = StudySettings(
             topic: "Swift Concurrency",
@@ -726,6 +763,7 @@ final class StudyMateTests: XCTestCase {
 private final class SpyOpenAIClient: OpenAIClientProtocol {
     var validateCallCount = 0
     var validatedAPIKeys: [String] = []
+    var generateCallCount = 0
 
     func validateAPIKey(_ apiKey: String) async throws {
         validateCallCount += 1
@@ -738,6 +776,7 @@ private final class SpyOpenAIClient: OpenAIClientProtocol {
         previousResponseID: String?,
         apiKey: String
     ) async throws -> GeneratedQuestionResult {
+        generateCallCount += 1
         throw OpenAIClientError.invalidResponse
     }
 

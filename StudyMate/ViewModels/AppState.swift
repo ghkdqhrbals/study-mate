@@ -58,6 +58,10 @@ final class AppState: ObservableObject {
         studyRecords.filter { $0.gradingResult == nil }.count
     }
 
+    var hasReachedPendingQuestionLimit: Bool {
+        pendingQuestionCount >= 3
+    }
+
     var pendingStudyRecords: [StudyRecord] {
         studyRecords
             .filter { $0.gradingResult == nil }
@@ -269,8 +273,8 @@ final class AppState: ObservableObject {
             return
         }
 
-        guard pendingQuestionCount < 3 else {
-            statusMessage = "미채점 질문이 3개 쌓여 있어 새 질문을 만들지 않습니다."
+        guard !hasReachedPendingQuestionLimit else {
+            statusMessage = strings.pendingQuestionLimitTitle
             errorMessage = nil
             log(.warning, "미채점 질문이 3개라 새 질문 생성을 건너뛰었습니다.")
             return

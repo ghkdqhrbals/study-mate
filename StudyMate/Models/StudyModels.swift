@@ -532,6 +532,13 @@ struct AppStrings {
     var copiedToClipboard: String { text("클립보드에 복사했습니다.", "Copied to clipboard.") }
     var pendingQuestions: String { text("미제출 질문", "Pending Questions") }
     func pendingQuestionCount(_ count: Int) -> String { text("\(count)개 대기 중", "\(count) pending") }
+    var pendingQuestionLimitTitle: String { text("미채점 질문이 3개입니다.", "There are 3 ungraded questions.") }
+    var pendingQuestionLimitMessage: String {
+        text(
+            "미채점 질문을 답변하거나 넘기기/기록 삭제로 제거한 뒤 다시 새 질문 생성을 실행하세요.",
+            "Answer, skip, or delete an ungraded question, then run New Question again."
+        )
+    }
     var current: String { text("현재", "Current") }
     var openPendingQuestion: String { text("답변하기", "Answer") }
     var question: String { text("질문", "Question") }
@@ -600,9 +607,10 @@ struct AppStrings {
     var feedback: String { text("피드백", "Feedback") }
     var explanation: String { text("해설", "Explanation") }
     var statsByDifficulty: String { text("난이도별 통계", "Stats by Difficulty") }
+    var statsByTopic: String { text("주제별 통계", "Stats by Topic") }
     var insight: String { text("인사이트", "Insight") }
-    var strongestDifficulty: String { text("강점 난이도", "Strongest") }
-    var weakestDifficulty: String { text("보완 난이도", "Needs Focus") }
+    var strongestTopic: String { text("강점 주제", "Strong Topic") }
+    var weakestTopic: String { text("보완 주제", "Focus Topic") }
     var notEnoughStats: String { text("통계를 만들려면 채점 기록이 더 필요합니다.", "Grade more answers to build insights.") }
     func itemCount(_ count: Int) -> String { text("\(count)개", "\(count)") }
     var correctRate: String { text("정답", "Correct") }
