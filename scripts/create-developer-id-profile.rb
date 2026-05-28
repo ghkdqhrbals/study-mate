@@ -10,25 +10,12 @@ require "time"
 require "uri"
 
 BUNDLE_IDENTIFIER = "io.github.ghkdqhrbals.StudyMate"
-ICLOUD_CONTAINER_IDENTIFIER = "iCloud.io.github.ghkdqhrbals.StudyMate"
 PROFILE_TYPE = "MAC_APP_DIRECT"
 ICLOUD_SETTINGS = [
   {
     key: "ICLOUD_VERSION",
     options: [
       { key: "XCODE_6", enabled: true }
-    ]
-  },
-  {
-    key: "ICLOUD_SERVICES",
-    options: [
-      { key: "CLOUDKIT", enabled: true }
-    ]
-  },
-  {
-    key: "ICLOUD_CONTAINER_IDENTIFIERS",
-    options: [
-      { key: ICLOUD_CONTAINER_IDENTIFIER, enabled: true }
     ]
   }
 ].freeze
