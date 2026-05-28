@@ -145,6 +145,7 @@ jobs:
           fi
 
           APP_PATH="build/StudyMate.xcarchive/Products/Applications/StudyMate.app"
+          ENTITLEMENTS_PATH="StudyMate/StudyMate.entitlements"
           DMG_ROOT="build/dmg-root"
           DMG_PATH="dist/StudyMate-${VERSION}.dmg"
 
@@ -154,10 +155,14 @@ jobs:
             codesign --force \
               --deep \
               --options runtime \
+              --entitlements "${ENTITLEMENTS_PATH}" \
               --sign "Developer ID Application" \
               --timestamp \
               "${APP_PATH}"
             codesign --verify --deep --strict --verbose=2 "${APP_PATH}"
+            codesign -d --entitlements :- "${APP_PATH}" > "${RUNNER_TEMP}/app-entitlements.plist"
+            grep -q "iCloud.io.github.ghkdqhrbals.StudyMate" "${RUNNER_TEMP}/app-entitlements.plist"
+            grep -q "com.apple.developer.icloud-services" "${RUNNER_TEMP}/app-entitlements.plist"
           fi
 
           rm -rf "${DMG_ROOT}" dist

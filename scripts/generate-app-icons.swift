@@ -9,6 +9,21 @@ struct IconImage {
 }
 
 let images = [
+    IconImage(filename: "icon_20x20.png", pixels: 20),
+    IconImage(filename: "icon_20x20@2x.png", pixels: 40),
+    IconImage(filename: "icon_20x20@3x.png", pixels: 60),
+    IconImage(filename: "icon_29x29.png", pixels: 29),
+    IconImage(filename: "icon_29x29@2x.png", pixels: 58),
+    IconImage(filename: "icon_29x29@3x.png", pixels: 87),
+    IconImage(filename: "icon_40x40.png", pixels: 40),
+    IconImage(filename: "icon_40x40@2x.png", pixels: 80),
+    IconImage(filename: "icon_40x40@3x.png", pixels: 120),
+    IconImage(filename: "icon_60x60@2x.png", pixels: 120),
+    IconImage(filename: "icon_60x60@3x.png", pixels: 180),
+    IconImage(filename: "icon_76x76.png", pixels: 76),
+    IconImage(filename: "icon_76x76@2x.png", pixels: 152),
+    IconImage(filename: "icon_83_5x83_5@2x.png", pixels: 167),
+    IconImage(filename: "icon_1024x1024.png", pixels: 1024),
     IconImage(filename: "icon_16x16.png", pixels: 16),
     IconImage(filename: "icon_16x16@2x.png", pixels: 32),
     IconImage(filename: "icon_32x32.png", pixels: 32),

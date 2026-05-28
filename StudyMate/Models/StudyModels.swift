@@ -1,52 +1,106 @@
 import Foundation
 
-enum Difficulty: String, CaseIterable, Codable, Identifiable {
-    case novice
-    case beginner
-    case elementary
-    case intermediate
-    case upperIntermediate
-    case advanced
-    case expert
+enum Difficulty: Int, CaseIterable, Codable, Identifiable {
+    case level1 = 1
+    case level2 = 2
+    case level3 = 3
+    case level4 = 4
+    case level5 = 5
+    case level6 = 6
+    case level7 = 7
+    case level8 = 8
+    case level9 = 9
+    case level10 = 10
 
-    var id: String { rawValue }
+    var id: Int { rawValue }
+    var level: Int { rawValue }
+
+    init(level: Int) {
+        self = Difficulty(rawValue: min(max(level, 1), 10)) ?? .level5
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+
+        if let level = try? container.decode(Int.self) {
+            self.init(level: level)
+            return
+        }
+
+        let rawValue = try container.decode(String.self)
+        if let level = Int(rawValue) {
+            self.init(level: level)
+            return
+        }
+
+        if let legacyDifficulty = Self.legacyMap[rawValue] {
+            self = legacyDifficulty
+            return
+        }
+
+        if rawValue.hasPrefix("level"),
+           let level = Int(rawValue.dropFirst("level".count)) {
+            self.init(level: level)
+            return
+        }
+
+        self = .level5
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
+
+    static var novice: Difficulty { .level1 }
+    static var beginner: Difficulty { .level2 }
+    static var elementary: Difficulty { .level4 }
+    static var intermediate: Difficulty { .level5 }
+    static var upperIntermediate: Difficulty { .level7 }
+    static var advanced: Difficulty { .level9 }
+    static var expert: Difficulty { .level10 }
+
+    private static let legacyMap: [String: Difficulty] = [
+        "novice": .novice,
+        "beginner": .beginner,
+        "elementary": .elementary,
+        "intermediate": .intermediate,
+        "upperIntermediate": .upperIntermediate,
+        "upper-intermediate": .upperIntermediate,
+        "advanced": .advanced,
+        "expert": .expert
+    ]
 
     var displayName: String {
-        switch self {
-        case .novice:
-            "완전 입문"
-        case .beginner:
-            "입문"
-        case .elementary:
-            "초급"
-        case .intermediate:
-            "중급"
-        case .upperIntermediate:
-            "중상급"
-        case .advanced:
-            "고급"
-        case .expert:
-            "전문가"
-        }
+        "레벨 \(level)/10"
     }
 
     var promptLabel: String {
-        switch self {
-        case .novice:
-            "absolute beginner"
-        case .beginner:
-            "beginner"
-        case .elementary:
-            "elementary"
-        case .intermediate:
-            "intermediate"
-        case .upperIntermediate:
-            "upper-intermediate"
-        case .advanced:
-            "advanced"
-        case .expert:
-            "expert"
+        let descriptor: String
+        switch level {
+        case 1:
+            descriptor = "absolute beginner"
+        case 2:
+            descriptor = "introductory"
+        case 3:
+            descriptor = "basic"
+        case 4:
+            descriptor = "elementary"
+        case 5:
+            descriptor = "intermediate"
+        case 6:
+            descriptor = "solid intermediate"
+        case 7:
+            descriptor = "upper-intermediate"
+        case 8:
+            descriptor = "advanced"
+        case 9:
+            descriptor = "very advanced"
+        default:
+            descriptor = "expert"
         }
+
+        return "level \(level) out of 10 (\(descriptor))"
     }
 }
 
@@ -260,7 +314,7 @@ struct StudySettings: Codable, Equatable {
     }
 
     var sanitizedMaxHistoryCount: Int {
-        min(max(maxHistoryCount, 10), 500)
+        min(max(maxHistoryCount, 10), 10_000)
     }
 
     var sanitizedOpenAIModel: String {
@@ -288,6 +342,66 @@ struct OpenAIModelOption: Identifiable, Equatable {
 
     static func supportsTextVerbosity(modelID: String) -> Bool {
         all.first { $0.id == modelID }?.supportsTextVerbosity ?? false
+    }
+}
+
+struct OpenAIUsage: Codable, Equatable {
+    var inputTokens: Int
+    var cachedInputTokens: Int
+    var outputTokens: Int
+    var totalTokens: Int
+}
+
+struct OpenAIUsageStatus: Codable, Equatable {
+    var inputTokens: Int
+    var cachedInputTokens: Int
+    var outputTokens: Int
+    var requestCount: Int
+    var periodStart: Date
+    var periodEnd: Date
+    var checkedAt: Date
+    var sourcePageCount: Int? = nil
+    var sourceBucketCount: Int? = nil
+    var sourceResultCount: Int? = nil
+
+    var totalTokens: Int {
+        inputTokens + outputTokens
+    }
+
+    var formattedRequestCount: String {
+        Self.formatNumber(requestCount)
+    }
+
+    var formattedTotalTokens: String {
+        Self.formatNumber(totalTokens)
+    }
+
+    private static func formatNumber(_ value: Int) -> String {
+        NumberFormatter.localizedString(from: NSNumber(value: value), number: .decimal)
+    }
+}
+
+struct OpenAIBillingStatus: Codable, Equatable {
+    var spentAmount: Double
+    var currency: String
+    var periodStart: Date
+    var periodEnd: Date
+    var checkedAt: Date
+    var sourcePageCount: Int? = nil
+    var sourceBucketCount: Int? = nil
+    var sourceResultCount: Int? = nil
+
+    var formattedSpentAmount: String {
+        let normalizedCurrency = currency.uppercased()
+        if normalizedCurrency == "USD" {
+            if spentAmount > 0 && spentAmount < 0.01 {
+                return "< $0.01"
+            }
+
+            return String(format: "$%.2f", max(spentAmount, 0))
+        }
+
+        return "\(String(format: "%.2f", max(spentAmount, 0))) \(normalizedCurrency)"
     }
 }
 
@@ -332,6 +446,46 @@ struct StudyRecord: Codable, Equatable, Identifiable {
     }
 }
 
+struct CloudSyncSnapshot: Codable, Equatable {
+    var schemaVersion: Int
+    var updatedAt: Date
+    var apiKey: String?
+    var settings: StudySettings
+    var currentQuestion: QuestionItem?
+    var questionHistory: [QuestionItem]
+    var lastAnswer: String
+    var gradingResult: GradingResult?
+    var isRunning: Bool
+    var hasCompletedOnboarding: Bool
+    var studyRecords: [StudyRecord]
+
+    init(
+        schemaVersion: Int = 1,
+        updatedAt: Date,
+        apiKey: String? = nil,
+        settings: StudySettings,
+        currentQuestion: QuestionItem?,
+        questionHistory: [QuestionItem],
+        lastAnswer: String,
+        gradingResult: GradingResult?,
+        isRunning: Bool,
+        hasCompletedOnboarding: Bool,
+        studyRecords: [StudyRecord]
+    ) {
+        self.schemaVersion = schemaVersion
+        self.updatedAt = updatedAt
+        self.apiKey = apiKey
+        self.settings = settings
+        self.currentQuestion = currentQuestion
+        self.questionHistory = questionHistory
+        self.lastAnswer = lastAnswer
+        self.gradingResult = gradingResult
+        self.isRunning = isRunning
+        self.hasCompletedOnboarding = hasCompletedOnboarding
+        self.studyRecords = studyRecords
+    }
+}
+
 struct AppLogEntry: Codable, Equatable, Identifiable {
     var id: String
     var createdAt: Date
@@ -348,6 +502,18 @@ struct AppLogEntry: Codable, Equatable, Identifiable {
         self.createdAt = createdAt
         self.level = level
         self.message = message
+    }
+}
+
+struct AppLogPage: Equatable {
+    var entries: [AppLogEntry]
+    var totalCount: Int
+    var page: Int
+    var pageSize: Int
+
+    var pageCount: Int {
+        let sanitizedPageSize = max(1, pageSize)
+        return max(1, (totalCount + sanitizedPageSize - 1) / sanitizedPageSize)
     }
 }
 
@@ -374,22 +540,7 @@ extension Difficulty {
         case .korean:
             return displayName
         case .english:
-            switch self {
-            case .novice:
-                return "Novice"
-            case .beginner:
-                return "Beginner"
-            case .elementary:
-                return "Elementary"
-            case .intermediate:
-                return "Intermediate"
-            case .upperIntermediate:
-                return "Upper Intermediate"
-            case .advanced:
-                return "Advanced"
-            case .expert:
-                return "Expert"
-            }
+            return "Level \(level)/10"
         }
     }
 }
@@ -409,6 +560,39 @@ struct AppStrings {
     var tabSettings: String { text("설정", "Settings") }
     var tabRecords: String { text("기록", "Records") }
     var tabStatistics: String { text("통계", "Stats") }
+    var onboardingTitle: String { text("StudyMate 시작하기", "Set Up StudyMate") }
+    var onboardingSubtitle: String {
+        text(
+            "AI를 더 잘 쓰려면 스스로의 지식도 필요합니다. StudyMate는 짧은 질문으로 그 지식을 계속 유지하게 돕습니다.",
+            "Better AI output still depends on what you know. StudyMate keeps that knowledge active with short questions."
+        )
+    }
+    var onboardingFreeNote: String {
+        text(
+            "앱은 무료입니다. OpenAI API 키만 있으면 바로 사용할 수 있습니다.",
+            "The app is free. You only need your own OpenAI API key."
+        )
+    }
+    var onboardingLanguage: String { text("언어", "Language") }
+    var onboardingOpenAI: String { text("OpenAI 연결", "OpenAI Connection") }
+    var onboardingStudySetup: String { text("학습 설정", "Study Setup") }
+    var onboardingAPIKeyHelp: String {
+        text(
+            "API 키는 이 Mac의 앱 설정에 저장됩니다. 나중에 Settings > Secrets에서 바꿀 수 있습니다.",
+            "The API key is stored in this Mac's app settings. You can change it later in Settings > Secrets."
+        )
+    }
+    var onboardingStart: String { text("시작하기", "Start") }
+    var onboardingSkip: String { text("나중에 설정", "Set Up Later") }
+    var onboardingCompleted: String { text("온보딩을 완료했습니다.", "Onboarding complete.") }
+    var onboardingSkipped: String { text("설정 탭에서 나중에 마저 설정하세요.", "Finish setup later in Settings.") }
+    var onboardingCompletedWithoutAPIKey: String {
+        text(
+            "API 키가 없어 타이머를 일시정지했습니다. Settings > Secrets에서 키를 입력하세요.",
+            "Timer paused because the API key is empty. Add it in Settings > Secrets."
+        )
+    }
+    var apiKeyCheckingAfterOnboarding: String { text("API 키를 확인 중입니다.", "Checking API key.") }
 
     func statusTitle(isRunning: Bool) -> String {
         if isRunning {
@@ -442,29 +626,222 @@ struct AppStrings {
     var checking: String { text("확인 중", "Checking") }
     var save: String { text("저장", "Save") }
     var saved: String { text("저장됨", "Saved") }
+    var done: String { text("완료", "Done") }
+    var refreshed: String { text("새로고침했습니다.", "Refreshed.") }
     var apiKey: String { text("API 키", "API key") }
+    var openAIAPIKey: String { text("OpenAI API 키", "OpenAI API key") }
+    var openAIAdminKey: String { text("OpenAI Admin 키", "OpenAI Admin key") }
     var hide: String { text("숨기기", "Hide") }
     var show: String { text("보기", "Show") }
     var apiKeyEmpty: String { text("API 키를 입력하세요.", "Enter an API key.") }
     var apiKeyCheck: String { text("API 키를 확인하세요.", "Check the API key.") }
     var apiKeyEmptyDetailed: String { text("API 키가 비어 있습니다. Settings > Secrets에서 OpenAI API 키를 입력하세요.", "API key is empty. Enter an OpenAI API key in Settings > Secrets.") }
     var apiKeyInvalidDetailed: String { text("API 키가 잘못되었습니다. Settings > Secrets에서 OpenAI API 키를 확인하세요.", "API key is invalid. Check your OpenAI API key in Settings > Secrets.") }
+    var openAIAPIKeyHelp: String {
+        text(
+            "질문 생성과 채점에 사용합니다. 일반 프로젝트 API 키를 입력하세요.",
+            "Used for question generation and grading. Enter a normal project API key."
+        )
+    }
+    var openAIAdminKeyHelp: String {
+        text(
+            "사용량/비용 조회에만 사용합니다. api.usage.read 권한이 있는 조직 Admin API 키를 입력하세요.",
+            "Used only for usage/cost checks. Enter an organization Admin API key with api.usage.read."
+        )
+    }
+    var openAIUsageScope: String { text("조회 범위", "Usage scope") }
+    var openAIProjectID: String { text("프로젝트 ID", "Project ID") }
+    var openAIUsageAPIKeyID: String { text("API Key ID", "API key ID") }
+    var openAIUsageScopeHelp: String {
+        text(
+            "비워두면 조직 전체를 조회합니다. 비용과 토큰 사용량 모두 프로젝트 ID와 API Key ID 기준으로 좁혀 봅니다.",
+            "Leave blank for organization-wide totals. Costs and token usage can both be narrowed by project ID and API key ID."
+        )
+    }
+    var openAIAdminKeyEmptyDetailed: String {
+        text(
+            "OpenAI Admin 키가 비어 있습니다. 사용량/비용 조회는 Admin 키가 필요합니다.",
+            "OpenAI Admin key is empty. Usage/cost checks require an Admin key."
+        )
+    }
     var openAIModel: String { text("모델", "Model") }
     var openAIModelHelp: String {
         text("질문 생성과 채점에 사용할 OpenAI 모델입니다.", "OpenAI model for question generation and grading.")
     }
+    var openAIBilling: String { text("OpenAI 사용량/결제", "OpenAI Usage / Billing") }
+    var openAIMonthlyCost: String { text("이번 달 API 비용", "API cost this month") }
+    var openAIMonthlyUsage: String { text("이번 달 API 사용량", "API usage this month") }
+    var openAIBillingNotChecked: String { text("아직 확인하지 않았습니다.", "Not checked yet.") }
+    var openAIUsageNotChecked: String { text("사용량을 아직 확인하지 않았습니다.", "Usage not checked yet.") }
+    var openAIBillingChecking: String { text("사용량/비용 확인 중", "Checking usage and costs") }
+    var refreshOpenAIBilling: String { text("사용량/비용 새로고침", "Refresh Usage / Costs") }
+    var openAIUsageAndCostsPage: String { text("사용량/비용 보기", "View Usage / Costs") }
+    var openAIBillingPage: String { text("빌링 추가", "Add Billing") }
+    var openAICreditGrantsPage: String { text("크레딧 잔액 보기", "View Credit Balance") }
+    var openAIAdminKeysPage: String { text("Admin Keys 열기", "Open Admin Keys") }
+    var openAIBillingUpdated: String { text("OpenAI 사용량/비용 정보를 업데이트했습니다.", "OpenAI usage and costs updated.") }
+    func openAIBillingProjectZeroButOrganizationHasCost(_ organizationCost: String) -> String {
+        text(
+            "현재 조회 범위 비용은 $0.00입니다. 조직 전체 비용은 \(organizationCost)입니다. 대시보드와 비교하려면 Project ID/API Key ID 또는 대시보드 필터를 확인하세요.",
+            "This scope shows $0.00, while the organization total is \(organizationCost). Check the Project ID/API key ID or dashboard filters when comparing."
+        )
+    }
+    var openAIUsageScopeChanged: String {
+        text(
+            "조회 범위가 바뀌었습니다. 새로고침하면 새 범위로 다시 조회합니다.",
+            "Usage scope changed. Refresh to check the new scope."
+        )
+    }
+    var openAIUsageScopeOrganization: String { text("범위: 조직 전체", "Scope: organization-wide") }
+    var openAIUsageScopeProject: String { text("범위: 프로젝트", "Scope: project") }
+    var openAIUsageScopeAPIKey: String { text("범위: API 키", "Scope: API key") }
+    var openAIUsageScopeProjectAndAPIKey: String { text("범위: 프로젝트 + API 키", "Scope: project + API key") }
+    var openAIBillingNeedsPermission: String {
+        text(
+            "Usage/Costs API는 api.usage.read 범위가 있는 조직 Admin API 키가 필요할 수 있습니다.",
+            "The Usage/Costs API may require an organization Admin API key with api.usage.read."
+        )
+    }
+    var openAIUsageScopeMissing: String {
+        text(
+            "OpenAI 응답: api.usage.read 범위가 없습니다. Usage/Costs 조회가 가능한 조직 Admin 키를 입력하세요.",
+            "OpenAI response: missing api.usage.read. Enter an organization Admin key that can read Usage/Costs."
+        )
+    }
+    func openAIBillingFetchFailed(_ reason: String) -> String {
+        text("OpenAI 사용량/비용 조회 실패: \(reason)", "OpenAI usage/cost fetch failed: \(reason)")
+    }
+    func openAIUsageSummary(requests: String, tokens: String) -> String {
+        text("\(requests) 요청 · \(tokens) 토큰", "\(requests) requests · \(tokens) tokens")
+    }
+    func openAIUsagePaginationSummary(pages: Int, buckets: Int, results: Int) -> String {
+        text(
+            "API 페이지 \(pages)개 · bucket \(buckets)개 · 결과 \(results)개",
+            "\(pages) API pages · \(buckets) buckets · \(results) results"
+        )
+    }
+    var openAIBillingHelp: String {
+        text(
+            "사용량, 비용, 빌링은 OpenAI Platform에서 직접 확인하세요.",
+            "Check usage, costs, and billing directly in OpenAI Platform."
+        )
+    }
+    var iCloudSync: String { text("iCloud 동기화", "iCloud Sync") }
+    var iCloudSyncHelp: String {
+        text(
+            "학습 설정, 현재 질문, 답변 초안, 기록, OpenAI API 키를 iPhone과 Mac 사이에 동기화합니다. Admin 키는 각 기기에 따로 저장됩니다.",
+            "Syncs study settings, the current question, answer drafts, records, and the OpenAI API key between iPhone and Mac. Admin keys stay on each device."
+        )
+    }
+    var iCloudSyncOn: String { text("동기화 켜짐", "Sync On") }
+    var iCloudSyncOff: String { text("동기화 꺼짐", "Sync Off") }
+    var syncNow: String { text("지금 동기화", "Sync Now") }
+    var syncing: String { text("동기화 중", "Syncing") }
+    var syncAlreadyInProgress: String { text("이미 동기화 중입니다.", "Sync is already in progress.") }
+    var syncUpdated: String { text("iCloud 동기화가 완료됐습니다.", "iCloud sync complete.") }
+    var syncPulledRemote: String { text("iCloud의 최신 데이터를 불러왔습니다.", "Loaded the latest iCloud data.") }
+    var syncMergedRemote: String {
+        text(
+            "iCloud 데이터를 불러오고 이 기기의 기록을 함께 병합했습니다.",
+            "Loaded iCloud data and merged this device's records."
+        )
+    }
+    var syncPushedLocal: String { text("이 기기의 데이터를 iCloud에 저장했습니다.", "Saved this device's data to iCloud.") }
+    var syncUnavailable: String {
+        text(
+            "iCloud 계정 또는 CloudKit 권한을 확인하세요.",
+            "Check the iCloud account or CloudKit permission."
+        )
+    }
+    var syncEntitlementMissing: String {
+        text(
+            "이 앱 빌드에 iCloud 권한이 없습니다. 최신 릴리즈를 다시 설치하세요.",
+            "This app build does not include iCloud entitlement. Reinstall the latest release."
+        )
+    }
+    var syncQuotaExceeded: String {
+        text(
+            "iCloud 저장 공간이 부족해 동기화하지 못했습니다. iCloud 공간을 확보한 뒤 다시 시도하세요.",
+            "iCloud storage is full, so sync could not finish. Free up iCloud storage and try again."
+        )
+    }
+    var syncNotAuthenticated: String {
+        text(
+            "iCloud 로그인이 필요합니다. 시스템 설정에서 iCloud 계정을 확인하세요.",
+            "iCloud sign-in is required. Check your iCloud account in System Settings."
+        )
+    }
+    var syncPermissionDenied: String {
+        text(
+            "iCloud 권한 또는 앱의 CloudKit 설정을 확인하세요.",
+            "Check iCloud permission or the app's CloudKit setup."
+        )
+    }
+    var syncNetworkUnavailable: String {
+        text(
+            "네트워크 연결 문제로 iCloud 동기화가 실패했습니다. 연결 후 다시 시도하세요.",
+            "iCloud sync failed because the network is unavailable. Reconnect and try again."
+        )
+    }
+    var syncServiceUnavailable: String {
+        text(
+            "iCloud 서비스가 일시적으로 응답하지 않습니다. 잠시 후 다시 시도하세요.",
+            "iCloud is temporarily unavailable. Try again later."
+        )
+    }
+    var syncRateLimited: String {
+        text(
+            "iCloud 요청이 너무 많아 잠시 대기 중입니다. 조금 뒤 다시 시도하세요.",
+            "iCloud is rate limiting requests. Try again shortly."
+        )
+    }
+    var syncLimitExceeded: String {
+        text(
+            "동기화 데이터가 iCloud 제한을 초과했습니다. 오래된 기록을 줄인 뒤 다시 시도하세요.",
+            "Sync data exceeded an iCloud limit. Reduce older records and try again."
+        )
+    }
+    var syncConflictRetry: String {
+        text(
+            "다른 기기와 동시에 변경되어 동기화가 실패했습니다. 다시 동기화하세요.",
+            "Sync conflicted with another device change. Sync again."
+        )
+    }
+    func syncFailed(_ reason: String) -> String {
+        text("iCloud 동기화 실패: \(reason)", "iCloud sync failed: \(reason)")
+    }
+    func lastSyncedAt(_ date: Date) -> String {
+        text(
+            "마지막 동기화: \(date.formatted(date: .abbreviated, time: .shortened))",
+            "Last synced: \(date.formatted(date: .abbreviated, time: .shortened))"
+        )
+    }
     var unsavedAPIKeyHelp: String {
         text("변경사항이 있습니다. 저장해도 API 키 검증 실패 시 값은 유지됩니다.", "You have unsaved changes. Values are kept even if API key validation fails.")
     }
-    var apiKeyStorageHelp: String { text("API 키는 앱 설정에 저장됩니다.", "The API key is stored in app settings.") }
+    var apiKeyStorageHelp: String { text("키는 앱 설정에 저장됩니다.", "Keys are stored in app settings.") }
 
     var generalSettings: String { text("일반", "General") }
     var appLanguageHelp: String { text("언어를 바꾸면 학습 언어도 같은 언어로 설정됩니다.", "Changing Language also sets the study language to match.") }
     var notifications: String { text("알림", "Notifications") }
     var notificationPermissionHelp: String {
-        text("macOS 설정에서 StudyMate 알림과 사운드 허용 여부를 직접 확인하세요.", "Check StudyMate notification and sound permissions directly in macOS Settings.")
+        text("시스템 설정에서 StudyMate 알림과 사운드 허용 여부를 직접 확인하세요.", "Check StudyMate notification and sound permissions directly in system settings.")
     }
     var openNotificationSettings: String { text("시스템 알림 설정 열기", "Open Notification Settings") }
+    var testNotification: String { text("테스트 알림", "Test Notification") }
+    var testNotificationBody: String {
+        text(
+            "알림이 보이면 StudyMate 알림 권한은 정상입니다.",
+            "If you see this, StudyMate notification permission is working."
+        )
+    }
+    var testNotificationSent: String { text("테스트 알림을 보냈습니다.", "Test notification sent.") }
+    var testNotificationFailed: String {
+        text(
+            "알림을 보내지 못했습니다. 시스템 알림 설정을 확인하세요.",
+            "Could not send a notification. Check system notification settings."
+        )
+    }
     var notificationSound: String { text("알림음", "Notification sound") }
     var notificationSoundHelp: String { text("질문 알림을 받을 때 소리를 낼지 선택합니다.", "Choose whether question notifications play a sound.") }
     var updates: String { text("업데이트", "Updates") }
@@ -495,6 +872,7 @@ struct AppStrings {
     var appLanguage: String { text("언어", "Language") }
     var studyTopic: String { text("공부할 주제", "Study topic") }
     var difficulty: String { text("난이도", "Difficulty") }
+    var difficultyScaleHint: String { text("1은 가장 쉬움, 10은 전문가 수준입니다.", "1 is easiest, 10 is expert-level.") }
     func questionInterval(minutes: Int) -> String { text("질문 간격: \(minutes)분", "Question interval: \(minutes) min") }
     var recommendedPrompt: String { text("추천 프롬프트", "Recommended Prompt") }
     var relatedPrompt: String { text("관련 프롬프트", "Prompt") }
@@ -507,7 +885,7 @@ struct AppStrings {
     var deleteRecords: String { text("기록 전체삭제", "Delete All Records") }
     var deleteRecordsHelp: String { text("저장된 질문, 답변, 채점 기록을 모두 삭제합니다.", "Delete all saved questions, answers, and grading results.") }
     var debuggingMode: String { text("디버깅 모드", "Debugging Mode") }
-    var debuggingHelp: String { text("켜면 왼쪽 메뉴에 Developer 탭이 표시되고 앱 로그를 확인할 수 있습니다.", "When enabled, the Developer tab appears in the left menu with app logs.") }
+    var debuggingHelp: String { text("켜면 Developer 로그를 확인할 수 있습니다.", "When enabled, Developer logs are available.") }
     var developerOptions: String { text("개발자 옵션", "Developer Options") }
     var apiStatus: String { text("API 상태", "API Status") }
     var apiKeyErrorDetected: String { text("API 키 오류가 감지됐습니다.", "An API key error was detected.") }
@@ -527,7 +905,6 @@ struct AppStrings {
     var draftSaved: String { text("초안 자동 저장됨", "Draft auto-saved") }
     var clearAnswer: String { text("답변 지우기", "Clear Answer") }
     var continueOldestPending: String { text("오래된 질문 이어하기", "Continue Oldest") }
-    var copyQuestion: String { text("질문 복사", "Copy Question") }
     var copyAnswer: String { text("답변 복사", "Copy Answer") }
     var copiedToClipboard: String { text("클립보드에 복사했습니다.", "Copied to clipboard.") }
     var pendingQuestions: String { text("미제출 질문", "Pending Questions") }
@@ -557,9 +934,6 @@ struct AppStrings {
 
     var clear: String { text("삭제", "Delete") }
     var searchRecords: String { text("기록 검색", "Search records") }
-    var recordFilterAll: String { text("전체", "All") }
-    var recordFilterGraded: String { text("채점됨", "Graded") }
-    var recordFilterUngraded: String { text("미채점", "Ungraded") }
     func filteredRecordCount(_ shown: Int, total: Int) -> String {
         text("\(shown)/\(total)개 표시", "\(shown)/\(total) shown")
     }
@@ -580,12 +954,42 @@ struct AppStrings {
         text("기간을 넓히거나 새 답변을 채점하면 통계가 표시됩니다.", "Widen the period or grade a new answer to show stats.")
     }
     var responses: String { text("응답", "Responses") }
+    var responsesShort: String { text("응답", "Resp") }
     var average: String { text("평균", "Avg") }
     var best: String { text("최고", "Best") }
     var lowest: String { text("최저", "Low") }
     var latestScore: String { text("최근", "Latest") }
     var trend: String { text("변화", "Trend") }
     var period: String { text("기간", "Period") }
+    var topicSearch: String { text("주제 검색", "Search Topics") }
+    var topicBrowser: String { text("주제 탐색", "Topic Browser") }
+    var topicRangeHelpTitle: String { text("Range 계산 방식", "How Range Works") }
+    var topicRangeHelpBody: String {
+        text(
+            "각 답변의 레벨과 점수를 능력 추정치로 바꾼 뒤, 표본 수와 답변 간 차이를 함께 반영해 범위를 계산합니다. 서로 먼 레벨에서 엇갈린 점수가 있으면 범위가 넓어지고, 같은 점수대의 질문을 더 많이 답하면 범위가 더 정확하게 좁아집니다.",
+            "StudyMate converts each answer's level and score into an ability estimate, then combines sample count and disagreement between answers. Mixed results across distant levels make the range wider. Answer more questions around that range to narrow it."
+        )
+    }
+    var topicTrend: String { text("주제 레벨 추세", "Topic Level Trend") }
+    var topicSummary: String { text("주제 통합 현황", "Topic Summary") }
+    var topicCount: String { text("주제", "Topics") }
+    var level: String { text("레벨", "Level") }
+    var range: String { text("범위", "Range") }
+    var levelPerformance: String { text("레벨별 성과", "Performance by Level") }
+    var sortTopics: String { text("정렬", "Sort") }
+    var sortByLevel: String { text("레벨순", "Level") }
+    var sortByRecent: String { text("최근순", "Recent") }
+    var sortByName: String { text("이름순", "Name") }
+    var sortByCount: String { text("응답순", "Count") }
+    var noMatchingTopics: String { text("일치하는 주제 없음", "No Matching Topics") }
+    var noMatchingTopicsDescription: String {
+        text("검색어를 줄이거나 기간을 넓혀보세요.", "Try a broader search or a wider period.")
+    }
+    var previousPage: String { text("이전 페이지", "Previous Page") }
+    var nextPage: String { text("다음 페이지", "Next Page") }
+    func topicPageStatus(start: Int, end: Int, total: Int) -> String {
+        text("\(start)-\(end)/\(total)", "\(start)-\(end)/\(total)")
+    }
     var firstRecord: String { text("처음", "First") }
     var latestRecord: String { text("최근", "Latest") }
     var startDate: String { text("시작", "Start") }
@@ -596,7 +1000,7 @@ struct AppStrings {
     var last30Days: String { text("최근 30일", "Last 30 Days") }
     var last90Days: String { text("최근 90일", "Last 90 Days") }
     var customPeriod: String { text("직접 설정", "Custom") }
-    var scoreByQuestion: String { text("문제별 점수", "Scores by Question") }
+    var scoreByQuestion: String { text("문제별 기록", "Question Records") }
     var scoreDistribution: String { text("점수 분포", "Score Distribution") }
     var excellentScores: String { text("90-100", "90-100") }
     var goodScores: String { text("70-89", "70-89") }
@@ -606,20 +1010,17 @@ struct AppStrings {
     var hint: String { text("힌트", "Hint") }
     var feedback: String { text("피드백", "Feedback") }
     var explanation: String { text("해설", "Explanation") }
-    var statsByDifficulty: String { text("난이도별 통계", "Stats by Difficulty") }
     var statsByTopic: String { text("주제별 통계", "Stats by Topic") }
-    var insight: String { text("인사이트", "Insight") }
-    var strongestTopic: String { text("강점 주제", "Strong Topic") }
-    var weakestTopic: String { text("보완 주제", "Focus Topic") }
     func currentTopicLevel(_ level: String) -> String {
-        text("현재 도전 레벨: \(level)", "Current level: \(level)")
+        text("레벨: \(level)", "Level: \(level)")
     }
     func topicLevelRange(_ start: String, _ end: String, average: Int, count: Int) -> String {
         text(
-            "추정 위치: \(start) - \(end) · \(average)점 · \(count)개",
-            "Estimated range: \(start) - \(end) · \(average) pts · \(count)"
+            "범위: \(start)-\(end) · \(count)개",
+            "Range: \(start)-\(end) · \(count)"
         )
     }
+    func topicDifficultySummary(_ summary: String) -> String { text("난이도: \(summary)", "Difficulty: \(summary)") }
     var notEnoughStats: String { text("통계를 만들려면 채점 기록이 더 필요합니다.", "Grade more answers to build insights.") }
     func itemCount(_ count: Int) -> String { text("\(count)개", "\(count)") }
     var correctRate: String { text("정답", "Correct") }

@@ -4,6 +4,9 @@ struct StudyView: View {
     @EnvironmentObject private var appState: AppState
     @State private var showsHint = false
     @State private var draftAnswer = ""
+    #if os(iOS)
+    @FocusState private var isAnswerEditorFocused: Bool
+    #endif
 
     var body: some View {
         let strings = appState.strings
@@ -26,18 +29,23 @@ struct StudyView: View {
 
                     Button {
                         Task {
-                            await appState.generateQuestion()
+                            if appState.hasReachedPendingQuestionLimit {
+                                appState.openOldestPendingQuestion()
+                            } else {
+                                await appState.generateQuestion()
+                            }
                         }
                     } label: {
                         if appState.isGeneratingQuestion {
                             ProgressView()
                                 .controlSize(.small)
+                        } else if appState.hasReachedPendingQuestionLimit {
+                            Label(strings.continueOldestPending, systemImage: "arrow.uturn.down.circle")
                         } else {
                             Label(strings.newQuestion, systemImage: "plus.circle")
                         }
                     }
                     .disabled(appState.isGeneratingQuestion)
-                    .disabled(appState.hasReachedPendingQuestionLimit)
                 }
 
                 StudyOverviewSection(
@@ -79,14 +87,6 @@ struct StudyView: View {
                                     .foregroundStyle(.secondary)
 
                                 Spacer()
-
-                                Button {
-                                    appState.copyToClipboard(question.question)
-                                } label: {
-                                    Label(strings.copyQuestion, systemImage: "doc.on.doc")
-                                }
-                                .buttonStyle(.borderless)
-                                .font(.caption)
 
                                 if appState.canSkipCurrentQuestion {
                                     Button {
@@ -169,10 +169,7 @@ struct StudyView: View {
                         }
                     }
 
-                    AnswerEditor(
-                        text: $draftAnswer,
-                        minHeight: 96
-                    )
+                    answerEditor(strings: strings)
                 }
 
                 HStack {
@@ -180,7 +177,7 @@ struct StudyView: View {
 
                     Button {
                         Task {
-                            await appState.gradeCurrentAnswer()
+                            await appState.gradeCurrentAnswer(answer: draftAnswer)
                         }
                     } label: {
                         if appState.isGradingAnswer {
@@ -223,6 +220,12 @@ struct StudyView: View {
             .padding(.bottom, 22)
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
+        #if os(iOS)
+        .scrollDismissesKeyboard(.interactively)
+        #endif
+        .refreshable {
+            await appState.refreshVisibleData()
+        }
         .onAppear {
             draftAnswer = appState.lastAnswer
         }
@@ -257,6 +260,24 @@ struct StudyView: View {
         }
 
         return Int((Double(scores.reduce(0, +)) / Double(scores.count)).rounded())
+    }
+
+    @ViewBuilder
+    private func answerEditor(strings: AppStrings) -> some View {
+        #if os(iOS)
+        AnswerEditor(
+            text: $draftAnswer,
+            minHeight: 96,
+            doneTitle: strings.done,
+            isFocused: $isAnswerEditorFocused
+        )
+        #else
+        AnswerEditor(
+            text: $draftAnswer,
+            minHeight: 96,
+            doneTitle: strings.done
+        )
+        #endif
     }
 }
 
@@ -367,11 +388,15 @@ private struct StudyOverviewMetric: View {
 private struct AnswerEditor: View {
     @Binding var text: String
     var minHeight: CGFloat
+    var doneTitle: String
+    #if os(iOS)
+    var isFocused: FocusState<Bool>.Binding
+    #endif
 
     private let editorInset = EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 8)
 
     var body: some View {
-        TextEditor(text: $text)
+        let editor = TextEditor(text: $text)
             .font(.body)
             .scrollContentBackground(.hidden)
             .padding(editorInset)
@@ -380,6 +405,21 @@ private struct AnswerEditor: View {
                 RoundedRectangle(cornerRadius: 8)
                     .stroke(Color.secondary.opacity(0.24))
             }
+
+        #if os(iOS)
+        editor
+            .focused(isFocused)
+            .toolbar {
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button(doneTitle) {
+                        isFocused.wrappedValue = false
+                    }
+                }
+            }
+        #else
+        editor
+        #endif
     }
 }
 

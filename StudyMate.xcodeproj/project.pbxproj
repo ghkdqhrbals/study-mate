@@ -17,10 +17,9 @@
 		110000000000000000000109 /* StudyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000009 /* StudyView.swift */; };
 		11000000000000000000010A /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000000A /* SettingsView.swift */; };
 		11000000000000000000010B /* UpdateService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000000D /* UpdateService.swift */; };
+		11000000000000000000010C /* StudyMateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000000C /* StudyMateTests.swift */; };
 		11000000000000000000010E /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000000E /* HistoryView.swift */; };
 		11000000000000000000010F /* StatisticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000000F /* StatisticsView.swift */; };
-		11000000000000000000010C /* StudyMateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000000C /* StudyMateTests.swift */; };
-		11000000000000000000010D /* StudyMate.app in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 110000000000000000000020 /* StudyMate.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		110000000000000000000150 /* study_ping.wav in Resources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000145 /* study_ping.wav */; };
 		110000000000000000000151 /* study_chime.wav in Resources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000146 /* study_chime.wav */; };
 		110000000000000000000152 /* study_pop.wav in Resources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000147 /* study_pop.wav */; };
@@ -28,6 +27,24 @@
 		110000000000000000000154 /* study_tap.wav in Resources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000149 /* study_tap.wav */; };
 		110000000000000000000155 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000014A /* Assets.xcassets */; };
 		11000000000000000000016A /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 110000000000000000000169 /* Sparkle */; };
+		110000000000000000000170 /* CloudSyncService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000016 /* CloudSyncService.swift */; };
+		120000000000000000000101 /* StudyMateiOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 120000000000000000000001 /* StudyMateiOSApp.swift */; };
+		120000000000000000000102 /* StudyModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000002 /* StudyModels.swift */; };
+		120000000000000000000104 /* SettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000004 /* SettingsStore.swift */; };
+		120000000000000000000105 /* OpenAIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000005 /* OpenAIClient.swift */; };
+		120000000000000000000106 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000006 /* NotificationService.swift */; };
+		120000000000000000000107 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000007 /* AppState.swift */; };
+		120000000000000000000109 /* StudyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000009 /* StudyView.swift */; };
+		12000000000000000000010E /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000000E /* HistoryView.swift */; };
+		12000000000000000000010F /* StatisticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000000F /* StatisticsView.swift */; };
+		120000000000000000000110 /* CloudSyncService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000016 /* CloudSyncService.swift */; };
+		120000000000000000000111 /* MobileRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 120000000000000000000003 /* MobileRootView.swift */; };
+		120000000000000000000150 /* study_ping.wav in Resources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000145 /* study_ping.wav */; };
+		120000000000000000000151 /* study_chime.wav in Resources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000146 /* study_chime.wav */; };
+		120000000000000000000152 /* study_pop.wav in Resources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000147 /* study_pop.wav */; };
+		120000000000000000000153 /* study_bell.wav in Resources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000148 /* study_bell.wav */; };
+		120000000000000000000154 /* study_tap.wav in Resources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000149 /* study_tap.wav */; };
+		120000000000000000000155 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000014A /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -63,11 +80,13 @@
 		110000000000000000000008 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		110000000000000000000009 /* StudyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudyView.swift; sourceTree = "<group>"; };
 		11000000000000000000000A /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		11000000000000000000000B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		11000000000000000000000C /* StudyMateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudyMateTests.swift; sourceTree = "<group>"; };
 		11000000000000000000000D /* UpdateService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateService.swift; sourceTree = "<group>"; };
 		11000000000000000000000E /* HistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryView.swift; sourceTree = "<group>"; };
 		11000000000000000000000F /* StatisticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatisticsView.swift; sourceTree = "<group>"; };
-		11000000000000000000000B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		11000000000000000000000C /* StudyMateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudyMateTests.swift; sourceTree = "<group>"; };
+		110000000000000000000016 /* CloudSyncService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudSyncService.swift; sourceTree = "<group>"; };
+		110000000000000000000017 /* StudyMate.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = StudyMate.entitlements; sourceTree = "<group>"; };
 		110000000000000000000020 /* StudyMate.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = StudyMate.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		110000000000000000000021 /* StudyMateTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = StudyMateTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		110000000000000000000145 /* study_ping.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = study_ping.wav; sourceTree = "<group>"; };
@@ -76,6 +95,9 @@
 		110000000000000000000148 /* study_bell.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = study_bell.wav; sourceTree = "<group>"; };
 		110000000000000000000149 /* study_tap.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = study_tap.wav; sourceTree = "<group>"; };
 		11000000000000000000014A /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		120000000000000000000001 /* StudyMateiOSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudyMateiOSApp.swift; sourceTree = "<group>"; };
+		120000000000000000000003 /* MobileRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileRootView.swift; sourceTree = "<group>"; };
+		120000000000000000000020 /* StudyMate.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = StudyMate.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -88,6 +110,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		110000000000000000000051 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		120000000000000000000050 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -110,11 +139,13 @@
 			isa = PBXGroup;
 			children = (
 				110000000000000000000001 /* StudyMateApp.swift */,
+				120000000000000000000001 /* StudyMateiOSApp.swift */,
 				110000000000000000000063 /* Models */,
 				110000000000000000000064 /* Services */,
 				110000000000000000000065 /* ViewModels */,
 				110000000000000000000067 /* Views */,
 				110000000000000000000068 /* Resources */,
+				110000000000000000000017 /* StudyMate.entitlements */,
 				11000000000000000000000B /* Info.plist */,
 			);
 			path = StudyMate;
@@ -124,6 +155,7 @@
 			isa = PBXGroup;
 			children = (
 				110000000000000000000020 /* StudyMate.app */,
+				120000000000000000000020 /* StudyMate.app */,
 				110000000000000000000021 /* StudyMateTests.xctest */,
 			);
 			name = Products;
@@ -143,6 +175,7 @@
 				110000000000000000000004 /* SettingsStore.swift */,
 				110000000000000000000005 /* OpenAIClient.swift */,
 				110000000000000000000006 /* NotificationService.swift */,
+				110000000000000000000016 /* CloudSyncService.swift */,
 				11000000000000000000000D /* UpdateService.swift */,
 			);
 			path = Services;
@@ -172,6 +205,7 @@
 				11000000000000000000000E /* HistoryView.swift */,
 				11000000000000000000000F /* StatisticsView.swift */,
 				11000000000000000000000A /* SettingsView.swift */,
+				120000000000000000000003 /* MobileRootView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -239,6 +273,25 @@
 			productReference = 110000000000000000000021 /* StudyMateTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		120000000000000000000040 /* StudyMateiOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 120000000000000000000090 /* Build configuration list for PBXNativeTarget "StudyMateiOS" */;
+			buildPhases = (
+				120000000000000000000070 /* Sources */,
+				120000000000000000000050 /* Frameworks */,
+				120000000000000000000071 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = StudyMateiOS;
+			packageProductDependencies = (
+			);
+			productName = StudyMate;
+			productReference = 120000000000000000000020 /* StudyMate.app */;
+			productType = "com.apple.product-type.application";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -255,6 +308,9 @@
 					110000000000000000000041 = {
 						CreatedOnToolsVersion = 26.0.1;
 						TestTargetID = 110000000000000000000040;
+					};
+					120000000000000000000040 = {
+						CreatedOnToolsVersion = 26.0.1;
 					};
 				};
 			};
@@ -276,6 +332,7 @@
 			projectRoot = "";
 			targets = (
 				110000000000000000000040 /* StudyMate */,
+				120000000000000000000040 /* StudyMateiOS */,
 				110000000000000000000041 /* StudyMateTests */,
 			);
 		};
@@ -302,6 +359,19 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		120000000000000000000071 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				120000000000000000000150 /* study_ping.wav in Resources */,
+				120000000000000000000151 /* study_chime.wav in Resources */,
+				120000000000000000000152 /* study_pop.wav in Resources */,
+				120000000000000000000153 /* study_bell.wav in Resources */,
+				120000000000000000000154 /* study_tap.wav in Resources */,
+				120000000000000000000155 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -320,6 +390,7 @@
 				11000000000000000000010E /* HistoryView.swift in Sources */,
 				11000000000000000000010F /* StatisticsView.swift in Sources */,
 				11000000000000000000010A /* SettingsView.swift in Sources */,
+				110000000000000000000170 /* CloudSyncService.swift in Sources */,
 				11000000000000000000010B /* UpdateService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -329,6 +400,24 @@
 			buildActionMask = 2147483647;
 			files = (
 				11000000000000000000010C /* StudyMateTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		120000000000000000000070 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				120000000000000000000101 /* StudyMateiOSApp.swift in Sources */,
+				120000000000000000000102 /* StudyModels.swift in Sources */,
+				120000000000000000000104 /* SettingsStore.swift in Sources */,
+				120000000000000000000105 /* OpenAIClient.swift in Sources */,
+				120000000000000000000106 /* NotificationService.swift in Sources */,
+				120000000000000000000107 /* AppState.swift in Sources */,
+				120000000000000000000109 /* StudyView.swift in Sources */,
+				12000000000000000000010E /* HistoryView.swift in Sources */,
+				12000000000000000000010F /* StatisticsView.swift in Sources */,
+				120000000000000000000110 /* CloudSyncService.swift in Sources */,
+				120000000000000000000111 /* MobileRootView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -455,9 +544,11 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = StudyMate/StudyMate.entitlements;
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 13;
-				DEVELOPMENT_TEAM = "";
+				CURRENT_PROJECT_VERSION = 14;
+				DEVELOPMENT_TEAM = 4CL25TC734;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = StudyMate/Info.plist;
@@ -465,7 +556,11 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.13;
+				MARKETING_VERSION = 1.0.14;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-lsqlite3",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = io.github.ghkdqhrbals.StudyMate;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = macosx;
@@ -478,9 +573,11 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = StudyMate/StudyMate.entitlements;
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 13;
-				DEVELOPMENT_TEAM = "";
+				CURRENT_PROJECT_VERSION = 14;
+				DEVELOPMENT_TEAM = 4CL25TC734;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = StudyMate/Info.plist;
@@ -488,7 +585,11 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.13;
+				MARKETING_VERSION = 1.0.14;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-lsqlite3",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = io.github.ghkdqhrbals.StudyMate;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = macosx;
@@ -502,7 +603,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 13;
+				CURRENT_PROJECT_VERSION = 14;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -510,7 +611,7 @@
 					"@executable_path/../Frameworks",
 					"@loader_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.13;
+				MARKETING_VERSION = 1.0.14;
 				PRODUCT_BUNDLE_IDENTIFIER = io.github.ghkdqhrbals.StudyMateTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = macosx;
@@ -524,7 +625,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 13;
+				CURRENT_PROJECT_VERSION = 14;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -532,12 +633,77 @@
 					"@executable_path/../Frameworks",
 					"@loader_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.13;
+				MARKETING_VERSION = 1.0.14;
 				PRODUCT_BUNDLE_IDENTIFIER = io.github.ghkdqhrbals.StudyMateTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = macosx;
 				SWIFT_VERSION = 6.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/StudyMate.app/Contents/MacOS/StudyMate";
+			};
+			name = Release;
+		};
+		1200000000000000000000A2 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = StudyMate/StudyMate.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 14;
+				DEVELOPMENT_TEAM = 4CL25TC734;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = StudyMate;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UIRequiresFullScreen = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0.14;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-lsqlite3",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.ghkdqhrbals.StudyMate.iOS;
+				PRODUCT_NAME = StudyMate;
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		1200000000000000000000A3 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = StudyMate/StudyMate.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 14;
+				DEVELOPMENT_TEAM = 4CL25TC734;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = StudyMate;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UIRequiresFullScreen = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0.14;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-lsqlite3",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.ghkdqhrbals.StudyMate.iOS;
+				PRODUCT_NAME = StudyMate;
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
 		};
@@ -567,6 +733,15 @@
 			buildConfigurations = (
 				1100000000000000000000A4 /* Debug */,
 				1100000000000000000000A5 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		120000000000000000000090 /* Build configuration list for PBXNativeTarget "StudyMateiOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1200000000000000000000A2 /* Debug */,
+				1200000000000000000000A3 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

@@ -1,5 +1,11 @@
 import Foundation
+#if os(macOS)
 import AppKit
+#elseif os(iOS)
+import AudioToolbox
+import AVFoundation
+import UIKit
+#endif
 import SwiftUI
 @preconcurrency import UserNotifications
 
@@ -13,7 +19,11 @@ enum StudyNotificationAction {
 
 @MainActor
 final class NotificationService {
+    #if os(macOS)
     private var previewSound: NSSound?
+    #elseif os(iOS)
+    private var previewPlayer: AVAudioPlayer?
+    #endif
 
     func requestAuthorizationIfNeeded(language: AppLanguage) async -> Bool {
         let center = UNUserNotificationCenter.current()
@@ -27,7 +37,7 @@ final class NotificationService {
             return false
         case .notDetermined:
             do {
-                return try await center.requestAuthorization(options: [.alert, .sound])
+                return try await center.requestAuthorization(options: [.alert, .sound, .badge])
             } catch {
                 return false
             }
@@ -39,31 +49,53 @@ final class NotificationService {
     }
 
     func openSystemNotificationSettings() {
+        #if os(macOS)
         guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.notifications") else {
             return
         }
 
         NSWorkspace.shared.open(url)
+        #elseif os(iOS)
+        guard let url = URL(string: UIApplication.openSettingsURLString) else {
+            return
+        }
+
+        UIApplication.shared.open(url)
+        #endif
     }
 
     func playPreview(sound: NotificationSoundOption) {
+        #if os(macOS)
         previewSound?.stop()
         previewSound = nil
+        #elseif os(iOS)
+        previewPlayer?.stop()
+        previewPlayer = nil
+        #endif
 
         switch sound {
         case .defaultSound:
+            #if os(macOS)
             NSSound.beep()
+            #elseif os(iOS)
+            AudioServicesPlaySystemSound(1007)
+            #endif
         case .none:
             return
         case .softPing, .chime, .pop, .bell, .tap:
             guard let fileName = sound.bundledFileName else {
+                #if os(macOS)
                 NSSound.beep()
+                #elseif os(iOS)
+                AudioServicesPlaySystemSound(1007)
+                #endif
                 return
             }
 
             let resourceName = NSString(string: fileName).deletingPathExtension
             let fileExtension = NSString(string: fileName).pathExtension
 
+            #if os(macOS)
             guard let url = Bundle.main.url(forResource: resourceName, withExtension: fileExtension),
                   let sound = NSSound(contentsOf: url, byReference: false) else {
                 NSSound.beep()
@@ -72,18 +104,33 @@ final class NotificationService {
 
             previewSound = sound
             sound.play()
+            #elseif os(iOS)
+            guard let url = Bundle.main.url(forResource: resourceName, withExtension: fileExtension) else {
+                AudioServicesPlaySystemSound(1007)
+                return
+            }
+
+            do {
+                let player = try AVAudioPlayer(contentsOf: url)
+                previewPlayer = player
+                player.play()
+            } catch {
+                AudioServicesPlaySystemSound(1007)
+            }
+            #endif
         }
     }
 
+    @discardableResult
     func showQuestionNotification(
         question: QuestionItem,
         title: String,
         subtitle: String?,
         sound: NotificationSoundOption,
         language: AppLanguage
-    ) async {
+    ) async -> Bool {
         guard await requestAuthorizationIfNeeded(language: language) else {
-            return
+            return false
         }
 
         let content = UNMutableNotificationContent()
@@ -93,7 +140,9 @@ final class NotificationService {
         content.sound = sound.userNotificationSound
         content.categoryIdentifier = StudyNotificationAction.category
         content.threadIdentifier = "StudyMate.question"
+        #if os(macOS)
         content.summaryArgument = question.question
+        #endif
         content.userInfo = [
             StudyNotificationAction.questionCreatedAt: question.createdAt.timeIntervalSince1970
         ]
@@ -104,7 +153,12 @@ final class NotificationService {
             trigger: nil
         )
 
-        try? await UNUserNotificationCenter.current().add(request)
+        do {
+            try await UNUserNotificationCenter.current().add(request)
+            return true
+        } catch {
+            return false
+        }
     }
 }
 
@@ -204,20 +258,28 @@ final class StudyNotificationDelegate: NSObject, UNUserNotificationCenterDelegat
 
         case StudyNotificationAction.reply:
             appState.openRecordFromNotification(questionCreatedAt: questionCreatedAt, replyText: replyText)
+            #if os(macOS)
             StudyWindowPresenter.shared.show(appState: appState)
+            #endif
 
         case StudyNotificationAction.otherAnswer:
             appState.openRecordFromNotification(questionCreatedAt: questionCreatedAt)
             appState.statusMessage = "다른 응답을 입력하세요."
+            #if os(macOS)
             StudyWindowPresenter.shared.show(appState: appState)
+            #endif
 
         case UNNotificationDefaultActionIdentifier:
             appState.openRecordFromNotification(questionCreatedAt: questionCreatedAt)
+            #if os(macOS)
             StudyWindowPresenter.shared.show(appState: appState)
+            #endif
 
         default:
             appState.openRecordFromNotification(questionCreatedAt: questionCreatedAt)
+            #if os(macOS)
             StudyWindowPresenter.shared.show(appState: appState)
+            #endif
         }
     }
 
@@ -236,6 +298,7 @@ final class StudyNotificationDelegate: NSObject, UNUserNotificationCenterDelegat
     }
 }
 
+#if os(macOS)
 @MainActor
 final class StudyWindowPresenter {
     static let shared = StudyWindowPresenter()
@@ -324,3 +387,4 @@ final class StudyWindowPresenter {
         }
     }
 }
+#endif

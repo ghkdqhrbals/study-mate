@@ -9,7 +9,7 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        let strings = appState.strings
+        let strings = appState.settingsEditorStrings
 
         HStack(spacing: 0) {
             VStack(spacing: 0) {
@@ -106,6 +106,12 @@ struct SettingsView: View {
                 selection = .general
             }
         }
+        .onAppear {
+            appState.beginSettingsEditing()
+        }
+        .onDisappear {
+            appState.cancelSettingsEditing()
+        }
     }
 }
 
@@ -161,18 +167,18 @@ private struct GeneralSettingsSection: View {
     @State private var showsUninstallConfirmation = false
 
     var body: some View {
-        let strings = appState.strings
+        let strings = appState.settingsEditorStrings
 
         SettingsPanel(title: strings.generalSettings) {
             Picker(
                 strings.appLanguage,
                 selection: Binding(
-                    get: { appState.settings.appLanguage },
-                    set: { appState.updateAppLanguage($0) }
+                    get: { appState.draftSettings.appLanguage },
+                    set: { appState.updateDraftAppLanguage($0) }
                 )
             ) {
                 ForEach(AppLanguage.allCases) { language in
-                    Text(appState.settings.appLanguage == language ? "✓ \(language.displayName)" : language.displayName)
+                    Text(appState.draftSettings.appLanguage == language ? "✓ \(language.displayName)" : language.displayName)
                         .tag(language)
                 }
             }
@@ -181,6 +187,56 @@ private struct GeneralSettingsSection: View {
             Text(strings.appLanguageHelp)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+
+            Divider()
+
+            Text(strings.iCloudSync)
+                .font(.subheadline)
+                .fontWeight(.semibold)
+
+            Toggle(
+                strings.iCloudSync,
+                isOn: Binding(
+                    get: { appState.isCloudSyncEnabled },
+                    set: { appState.setCloudSyncEnabled($0) }
+                )
+            )
+
+            HStack(spacing: 8) {
+                Button {
+                    Task {
+                        await appState.syncCloudNow()
+                    }
+                } label: {
+                    if appState.isCloudSyncing {
+                        HStack(spacing: 6) {
+                            ProgressView()
+                                .controlSize(.small)
+                            Text(strings.syncing)
+                        }
+                    } else {
+                        Label(strings.syncNow, systemImage: "arrow.triangle.2.circlepath")
+                    }
+                }
+                .disabled(!appState.isCloudSyncEnabled || appState.isCloudSyncing)
+
+                if let cloudLastSyncedAt = appState.cloudLastSyncedAt {
+                    Text(strings.lastSyncedAt(cloudLastSyncedAt))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if let cloudSyncMessage = appState.cloudSyncMessage {
+                Text(cloudSyncMessage)
+                    .font(.caption)
+                    .foregroundColor(appState.hasCloudSyncError ? .orange : .secondary)
+            }
+
+            Text(strings.iCloudSyncHelp)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
 
             Divider()
 
@@ -194,6 +250,14 @@ private struct GeneralSettingsSection: View {
                 Label(strings.openNotificationSettings, systemImage: "bell.badge")
             }
 
+            Button {
+                Task {
+                    await appState.sendTestNotification()
+                }
+            } label: {
+                Label(strings.testNotification, systemImage: "paperplane")
+            }
+
             Text(strings.notificationPermissionHelp)
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -201,12 +265,12 @@ private struct GeneralSettingsSection: View {
             Picker(
                 strings.notificationSound,
                 selection: Binding(
-                    get: { appState.settings.notificationSound },
-                    set: { appState.setNotificationSound($0) }
+                    get: { appState.draftSettings.notificationSound },
+                    set: { appState.setDraftNotificationSound($0) }
                 )
             ) {
                 ForEach(NotificationSoundOption.allCases) { sound in
-                    Text(sound.displayName(language: appState.settings.appLanguage)).tag(sound)
+                    Text(sound.displayName(language: appState.draftSettings.appLanguage)).tag(sound)
                 }
             }
             .pickerStyle(.menu)
@@ -302,31 +366,41 @@ private struct SecretsSettingsSection: View {
     @State private var showsAPIKey = false
 
     var body: some View {
-        let strings = appState.strings
+        let strings = appState.settingsEditorStrings
 
         SettingsPanel(title: "OpenAI") {
-            HStack(spacing: 8) {
-                Group {
-                    if showsAPIKey {
-                        TextField(strings.apiKey, text: $appState.apiKey)
-                    } else {
-                        SecureField(strings.apiKey, text: $appState.apiKey)
+            VStack(alignment: .leading, spacing: 8) {
+                Text(strings.openAIAPIKey)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                HStack(spacing: 8) {
+                    Group {
+                        if showsAPIKey {
+                            TextField(strings.openAIAPIKey, text: $appState.draftAPIKey)
+                        } else {
+                            SecureField(strings.openAIAPIKey, text: $appState.draftAPIKey)
+                        }
+                    }
+                    .textFieldStyle(.roundedBorder)
+
+                    Button {
+                        showsAPIKey.toggle()
+                    } label: {
+                        Label(showsAPIKey ? strings.hide : strings.show, systemImage: showsAPIKey ? "eye.slash" : "eye")
                     }
                 }
-                .textFieldStyle(.roundedBorder)
 
-                Button {
-                    showsAPIKey.toggle()
-                } label: {
-                    Label(showsAPIKey ? strings.hide : strings.show, systemImage: showsAPIKey ? "eye.slash" : "eye")
+                if let validationMessage = appState.apiKeyValidationMessage {
+                    Text(validationMessage)
+                        .font(.caption2)
+                        .foregroundStyle(.red)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-            }
 
-            if let validationMessage = appState.apiKeyValidationMessage {
-                Text(validationMessage)
-                    .font(.caption2)
-                    .foregroundStyle(.red)
-                    .fixedSize(horizontal: false, vertical: true)
+                Text(strings.openAIAPIKeyHelp)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Text(appState.hasUnsavedSettingsChanges ? strings.unsavedAPIKeyHelp : strings.apiKeyStorageHelp)
@@ -340,7 +414,7 @@ private struct SecretsSettingsSection: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                Picker(strings.openAIModel, selection: $appState.settings.openAIModel) {
+                Picker(strings.openAIModel, selection: $appState.draftSettings.openAIModel) {
                     ForEach(OpenAIModelOption.all) { option in
                         Text(option.displayName).tag(option.id)
                     }
@@ -352,6 +426,39 @@ private struct SecretsSettingsSection: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 10) {
+                Text(strings.openAIBilling)
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+
+                Text(strings.openAIBillingHelp)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack(spacing: 12) {
+                    Button {
+                        appState.openOpenAIUsageDashboardPage()
+                    } label: {
+                        Text(strings.openAIUsageAndCostsPage)
+                            .foregroundStyle(.blue)
+                    }
+                    .buttonStyle(.plain)
+                    .help(strings.openAIUsageAndCostsPage)
+
+                    Button {
+                        appState.openOpenAIBillingPage()
+                    } label: {
+                        Text(strings.openAIBillingPage)
+                            .foregroundStyle(.blue)
+                    }
+                    .buttonStyle(.plain)
+                    .help(strings.openAIBillingPage)
+                }
+            }
         }
     }
 }
@@ -360,31 +467,63 @@ private struct StudySettingsSection: View {
     @EnvironmentObject private var appState: AppState
 
     var body: some View {
-        let strings = appState.strings
+        let strings = appState.settingsEditorStrings
 
         SettingsPanel(title: strings.studySettings) {
-            TextField(strings.studyTopic, text: $appState.settings.topic)
+            TextField(strings.studyTopic, text: $appState.draftSettings.topic)
                 .textFieldStyle(.roundedBorder)
 
-            Picker(strings.difficulty, selection: $appState.settings.difficulty) {
-                ForEach(Difficulty.allCases) { difficulty in
-                    Text(difficulty.displayName(language: appState.settings.appLanguage)).tag(difficulty)
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text(strings.difficulty)
+                    Spacer()
+                    Stepper(
+                        value: Binding(
+                            get: { appState.draftSettings.difficulty.level },
+                            set: { appState.draftSettings.difficulty = Difficulty(level: $0) }
+                        ),
+                        in: 1...10
+                    ) {
+                        Text(appState.draftSettings.difficulty.displayName(language: appState.draftSettings.appLanguage))
+                            .fontWeight(.semibold)
+                            .monospacedDigit()
+                    }
                 }
+
+                Slider(
+                    value: Binding(
+                        get: { Double(appState.draftSettings.difficulty.level) },
+                        set: { appState.draftSettings.difficulty = Difficulty(level: Int($0.rounded())) }
+                    ),
+                    in: 1...10,
+                    step: 1
+                )
+
+                HStack {
+                    Text("1")
+                    Spacer()
+                    Text("10")
+                }
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+
+                Text(strings.difficultyScaleHint)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
-            .pickerStyle(.menu)
 
             Stepper(
-                value: $appState.settings.intervalMinutes,
+                value: $appState.draftSettings.intervalMinutes,
                 in: 1...240,
                 step: 1
             ) {
-                Text(strings.questionInterval(minutes: appState.settings.sanitizedIntervalMinutes))
+                Text(strings.questionInterval(minutes: appState.draftSettings.sanitizedIntervalMinutes))
             }
 
             Menu {
                 ForEach(RecommendedPrompt.allCases) { prompt in
-                    Button(prompt.title(language: appState.settings.appLanguage)) {
-                        appState.settings.customPrompt = prompt.text(language: appState.settings.appLanguage)
+                    Button(prompt.title(language: appState.draftSettings.appLanguage)) {
+                        appState.draftSettings.customPrompt = prompt.text(language: appState.draftSettings.appLanguage)
                     }
                 }
             } label: {
@@ -396,7 +535,7 @@ private struct StudySettingsSection: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                TextEditor(text: $appState.settings.customPrompt)
+                TextEditor(text: $appState.draftSettings.customPrompt)
                     .frame(minHeight: 150)
                     .padding(6)
                     .overlay {
@@ -408,12 +547,163 @@ private struct StudySettingsSection: View {
     }
 }
 
+private struct OpenAIPlatformStatusView: View {
+    var billingStatus: OpenAIBillingStatus?
+    var usageStatus: OpenAIUsageStatus?
+    var message: String?
+    var scopeDescription: String
+    var strings: AppStrings
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(scopeDescription)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+
+            if let periodDescription {
+                Text(periodDescription)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            if let paginationDescription {
+                Text(paginationDescription)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            HStack(alignment: .top, spacing: 12) {
+                OpenAIPlatformMetricView(
+                    title: strings.openAIMonthlyCost,
+                    value: billingStatus?.formattedSpentAmount ?? strings.openAIBillingNotChecked
+                )
+
+                OpenAIPlatformMetricView(
+                    title: strings.openAIMonthlyUsage,
+                    value: usageSummary
+                )
+
+                if let checkedAt {
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text(strings.checkedAt)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        Text(checkedAt.formatted(date: .omitted, time: .shortened))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+                    .frame(minWidth: 54, alignment: .trailing)
+                }
+            }
+
+            if let message {
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(message == strings.openAIBillingUpdated ? Color.secondary : Color.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if billingStatus == nil && usageStatus == nil {
+                Text(strings.openAIBillingNeedsPermission)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(10)
+        .background(Color.secondary.opacity(0.045))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.secondary.opacity(0.1), lineWidth: 1)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var usageSummary: String {
+        guard let usageStatus else {
+            return strings.openAIUsageNotChecked
+        }
+
+        return strings.openAIUsageSummary(
+            requests: usageStatus.formattedRequestCount,
+            tokens: usageStatus.formattedTotalTokens
+        )
+    }
+
+    private var checkedAt: Date? {
+        [billingStatus?.checkedAt, usageStatus?.checkedAt]
+            .compactMap { $0 }
+            .max()
+    }
+
+    private var periodDescription: String? {
+        guard let periodStart = billingStatus?.periodStart ?? usageStatus?.periodStart,
+              let periodEnd = billingStatus?.periodEnd ?? usageStatus?.periodEnd else {
+            return nil
+        }
+
+        let startText = periodStart.formatted(date: .abbreviated, time: .omitted)
+        let endText = periodEnd.formatted(date: .abbreviated, time: .omitted)
+        return "\(strings.period): \(startText) - \(endText)"
+    }
+
+    private var paginationDescription: String? {
+        let pageCount = max(billingStatus?.sourcePageCount ?? 0, usageStatus?.sourcePageCount ?? 0)
+        let bucketCount = max(billingStatus?.sourceBucketCount ?? 0, usageStatus?.sourceBucketCount ?? 0)
+        let resultCount = (billingStatus?.sourceResultCount ?? 0) + (usageStatus?.sourceResultCount ?? 0)
+
+        guard pageCount > 0 || bucketCount > 0 else {
+            return nil
+        }
+
+        return strings.openAIUsagePaginationSummary(
+            pages: max(pageCount, 1),
+            buckets: bucketCount,
+            results: resultCount
+        )
+    }
+}
+
+private struct OpenAIPlatformMetricView: View {
+    var title: String
+    var value: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+
+            Text(value)
+                .font(.headline)
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.82)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private extension AppStrings {
+    var checkedAt: String {
+        switch language {
+        case .korean:
+            "확인"
+        case .english:
+            "Checked"
+        }
+    }
+}
+
 private struct RecordsSettingsSection: View {
     @EnvironmentObject private var appState: AppState
     @State private var showsDeleteConfirmation = false
 
     var body: some View {
-        let strings = appState.strings
+        let strings = appState.settingsEditorStrings
 
         SettingsPanel(title: strings.records) {
             HStack(spacing: 10) {
@@ -421,7 +711,7 @@ private struct RecordsSettingsSection: View {
 
                 TextField(
                     "100",
-                    value: $appState.settings.maxHistoryCount,
+                    value: $appState.draftSettings.maxHistoryCount,
                     format: .number
                 )
                 .textFieldStyle(.roundedBorder)
@@ -429,9 +719,9 @@ private struct RecordsSettingsSection: View {
 
                 Stepper(
                     "",
-                    value: $appState.settings.maxHistoryCount,
-                    in: 10...500,
-                    step: 10
+                    value: $appState.draftSettings.maxHistoryCount,
+                    in: 10...10_000,
+                    step: 100
                 )
                 .labelsHidden()
 
@@ -439,7 +729,7 @@ private struct RecordsSettingsSection: View {
                     .foregroundStyle(.secondary)
             }
 
-            Text(strings.recordLimitHelp(limit: appState.settings.sanitizedMaxHistoryCount, count: appState.studyRecords.count))
+            Text(strings.recordLimitHelp(limit: appState.draftSettings.sanitizedMaxHistoryCount, count: appState.studyRecords.count))
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -468,7 +758,8 @@ private struct DeveloperSettingsSection: View {
     @EnvironmentObject private var appState: AppState
 
     var body: some View {
-        let strings = appState.strings
+        let strings = appState.settingsEditorStrings
+        let visibleLogs = appState.appLogs
 
         SettingsPanel(title: strings.developerOptions) {
             VStack(alignment: .leading, spacing: 8) {
@@ -483,25 +774,53 @@ private struct DeveloperSettingsSection: View {
             Divider()
 
             HStack {
-                Text(strings.logs)
+                Text("\(strings.logs) · \(pageStatus(strings: strings))")
                     .font(.subheadline)
                     .fontWeight(.semibold)
 
                 Spacer()
+
+                if appState.appLogPageCount > 1 {
+                    HStack(spacing: 6) {
+                        Button {
+                            appState.loadAppLogPage(appState.appLogPage - 1)
+                        } label: {
+                            Image(systemName: "chevron.left")
+                        }
+                        .buttonStyle(.borderless)
+                        .disabled(appState.appLogPage == 0)
+                        .help(strings.previousPage)
+
+                        Text("\(appState.appLogPage + 1)/\(appState.appLogPageCount)")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                            .lineLimit(1)
+
+                        Button {
+                            appState.loadAppLogPage(appState.appLogPage + 1)
+                        } label: {
+                            Image(systemName: "chevron.right")
+                        }
+                        .buttonStyle(.borderless)
+                        .disabled(appState.appLogPage >= appState.appLogPageCount - 1)
+                        .help(strings.nextPage)
+                    }
+                }
 
                 Button(role: .destructive) {
                     appState.clearAppLogs()
                 } label: {
                     Label(strings.deleteLogs, systemImage: "trash")
                 }
-                .disabled(appState.appLogs.isEmpty)
+                .disabled(appState.appLogTotalCount == 0)
             }
 
             Text(strings.logLimitHelp)
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            if appState.appLogs.isEmpty {
+            if visibleLogs.isEmpty {
                 ContentUnavailableView(
                     strings.noLogs,
                     systemImage: "doc.text.magnifyingglass",
@@ -511,16 +830,31 @@ private struct DeveloperSettingsSection: View {
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 8) {
-                        ForEach(appState.appLogs.reversed()) { entry in
+                        ForEach(visibleLogs) { entry in
                             LogRow(entry: entry)
                         }
                     }
                     .padding(.trailing, 8)
                     .padding(.bottom, 12)
                 }
-                .frame(minHeight: 260)
+                .frame(height: 320)
             }
         }
+        .onAppear {
+            appState.loadAppLogPage(0)
+        }
+    }
+
+    private func pageStatus(strings: AppStrings) -> String {
+        guard appState.appLogTotalCount > 0 else {
+            return strings.itemCount(0)
+        }
+
+        return strings.topicPageStatus(
+            start: appState.appLogPageStart,
+            end: appState.appLogPageEnd,
+            total: appState.appLogTotalCount
+        )
     }
 }
 
@@ -547,7 +881,9 @@ private struct LogRow: View {
 
             Text(entry.message)
                 .font(.caption)
-                .textSelection(.enabled)
+                .lineLimit(3)
+                .truncationMode(.tail)
+                .help(entry.message)
         }
         .padding(8)
         .frame(maxWidth: .infinity, alignment: .leading)

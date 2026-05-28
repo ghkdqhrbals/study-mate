@@ -6,6 +6,12 @@ struct StatisticsView: View {
     @State private var selectedPeriod: StatisticsPeriod = .all
     @State private var customStartDate = Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date()
     @State private var customEndDate = Date()
+    @State private var topicSearch = ""
+    @State private var selectedTopicID: String?
+    @State private var topicSort: TopicSort = .level
+    @State private var topicPage = 0
+
+    private static let topicPageSize = 8
 
     private var allGradedRecords: [StudyRecord] {
         appState.studyRecords
@@ -23,10 +29,6 @@ struct StatisticsView: View {
         }
     }
 
-    private var listedGradedRecords: [StudyRecord] {
-        Array(gradedRecords.reversed())
-    }
-
     private var allScores: [Int] {
         allGradedRecords.compactMap { $0.gradingResult?.score }
     }
@@ -35,59 +37,49 @@ struct StatisticsView: View {
         gradedRecords.compactMap { $0.gradingResult?.score }
     }
 
-    private var difficultyStats: [DifficultyStat] {
-        Difficulty.allCases.compactMap { difficulty in
-            let records = gradedRecords.filter { $0.difficulty == difficulty }
-            let scores = records.compactMap { $0.gradingResult?.score }
-            guard !scores.isEmpty else {
-                return nil
-            }
-
-            let correctCount = records.filter { $0.gradingResult?.isCorrect == true }.count
-            return DifficultyStat(
-                difficulty: difficulty,
-                count: scores.count,
-                average: Int((Double(scores.reduce(0, +)) / Double(scores.count)).rounded()),
-                best: scores.max() ?? 0,
-                correctRate: Int((Double(correctCount) / Double(records.count) * 100).rounded())
-            )
-        }
-    }
-
     private var topicStats: [TopicStat] {
         Dictionary(grouping: gradedRecords, by: normalizedTopic)
-            .compactMap { topic, records in
-                let scores = records.compactMap { $0.gradingResult?.score }
-                guard !scores.isEmpty,
-                      let levelRange = TopicLevelRange.calculate(records: records) else {
-                    return nil
-                }
+            .compactMap(makeTopicStat(topic:records:))
+            .sorted(by: defaultTopicSort)
+    }
 
-                let correctCount = records.filter { $0.gradingResult?.isCorrect == true }.count
-                return TopicStat(
-                    topic: topic,
-                    count: scores.count,
-                    average: Int((Double(scores.reduce(0, +)) / Double(max(scores.count, 1))).rounded()),
-                    best: scores.max() ?? 0,
-                    correctRate: Int((Double(correctCount) / Double(max(records.count, 1)) * 100).rounded()),
-                    levelRange: levelRange
-                )
-            }
-            .sorted { lhs, rhs in
-                if lhs.levelRange.level.levelIndex != rhs.levelRange.level.levelIndex {
-                    return lhs.levelRange.level.levelIndex > rhs.levelRange.level.levelIndex
-                }
+    private var filteredTopicStats: [TopicStat] {
+        let query = topicSearch.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let filtered = query.isEmpty ? topicStats : topicStats.filter { $0.topic.lowercased().contains(query) }
+        return filtered.sorted { topicSort.areInIncreasingOrder($0, $1) }
+    }
 
-                if lhs.levelRange.average != rhs.levelRange.average {
-                    return lhs.levelRange.average > rhs.levelRange.average
-                }
+    private var selectedTopicStat: TopicStat? {
+        if let selectedTopicID,
+           let selected = pagedTopicStats.first(where: { $0.id == selectedTopicID }) {
+            return selected
+        }
 
-                if lhs.average == rhs.average {
-                    return lhs.count > rhs.count
-                }
+        return pagedTopicStats.first
+    }
 
-                return lhs.average > rhs.average
-            }
+    private var topicPageCount: Int {
+        max(1, (filteredTopicStats.count + Self.topicPageSize - 1) / Self.topicPageSize)
+    }
+
+    private var boundedTopicPage: Int {
+        min(max(topicPage, 0), topicPageCount - 1)
+    }
+
+    private var topicPageStartIndex: Int {
+        boundedTopicPage * Self.topicPageSize
+    }
+
+    private var pagedTopicStats: [TopicStat] {
+        Array(filteredTopicStats.dropFirst(topicPageStartIndex).prefix(Self.topicPageSize))
+    }
+
+    private var selectedTopicRecords: [StudyRecord] {
+        selectedTopicStat?.records ?? []
+    }
+
+    private var listedSelectedTopicRecords: [StudyRecord] {
+        Array(selectedTopicRecords.reversed())
     }
 
     var body: some View {
@@ -131,42 +123,56 @@ struct StatisticsView: View {
                     )
                     .frame(maxWidth: .infinity, minHeight: 280)
                 } else {
-                    KeyMetricsStrip(metrics: [
-                        MetricItem(title: strings.responses, value: "\(scores.count)"),
-                        MetricItem(title: strings.average, value: "\(averageScore)"),
-                        MetricItem(title: strings.latestScore, value: "\(scores.last ?? 0)"),
-                        MetricItem(title: strings.best, value: "\(scores.max() ?? 0)"),
-                        MetricItem(title: strings.lowest, value: "\(scores.min() ?? 0)"),
-                        MetricItem(title: strings.trend, value: trendText)
-                    ])
+                    TopicPortfolioSummary(stats: topicStats, responseCount: scores.count, strings: strings)
 
-                    StatisticsInsightSection(stats: topicStats, strings: strings)
-
-                    ScoreLineChart(records: gradedRecords)
-                        .frame(height: 150)
-                        .padding(.vertical, 4)
-
-                    ScoreDistributionSection(records: gradedRecords, strings: strings)
-                        .padding(.top, 4)
-
-                    TopicStatsSection(stats: topicStats, strings: strings)
-                        .padding(.top, 4)
-
-                    DifficultyStatsSection(stats: difficultyStats, strings: strings)
-                        .padding(.top, 4)
-
-                    Text(strings.scoreByQuestion)
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .padding(.top, 4)
-
-                    ForEach(Array(listedGradedRecords.enumerated()), id: \.element.id) { index, record in
-                        Button {
-                            selectedRecord = record
-                        } label: {
-                            ScoreRecordRow(index: listedGradedRecords.count - index, record: record, strings: strings)
+                    TopicBrowserSection(
+                        stats: pagedTopicStats,
+                        totalCount: filteredTopicStats.count,
+                        pageStartIndex: topicPageStartIndex,
+                        currentPage: boundedTopicPage,
+                        pageCount: topicPageCount,
+                        selectedTopicID: selectedTopicStat?.id,
+                        topicSearch: $topicSearch,
+                        topicSort: $topicSort,
+                        strings: strings,
+                        onPreviousPage: {
+                            topicPage = max(boundedTopicPage - 1, 0)
+                            selectedTopicID = nil
+                        },
+                        onNextPage: {
+                            topicPage = min(boundedTopicPage + 1, topicPageCount - 1)
+                            selectedTopicID = nil
+                        },
+                        onSelect: { stat in
+                            selectedTopicID = stat.id
                         }
-                        .buttonStyle(.plain)
+                    )
+
+                    if let selectedTopicStat {
+                        SelectedTopicSection(stat: selectedTopicStat, records: selectedTopicRecords, strings: strings)
+                            .padding(.top, 4)
+
+                        Text(strings.scoreByQuestion)
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .lineLimit(1)
+                            .padding(.top, 4)
+
+                        ForEach(Array(listedSelectedTopicRecords.enumerated()), id: \.element.id) { index, record in
+                            Button {
+                                selectedRecord = record
+                            } label: {
+                                ScoreRecordRow(index: listedSelectedTopicRecords.count - index, record: record, strings: strings)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    } else {
+                        ContentUnavailableView(
+                            strings.noMatchingTopics,
+                            systemImage: "line.3.horizontal.decrease.circle",
+                            description: Text(strings.noMatchingTopicsDescription)
+                        )
+                        .frame(maxWidth: .infinity, minHeight: 220)
                     }
                 }
             }
@@ -175,42 +181,25 @@ struct StatisticsView: View {
         }
         .padding(.top, 10)
         .frame(maxHeight: .infinity, alignment: .top)
-        .popover(item: $selectedRecord, arrowEdge: .trailing) { record in
-            StudyRecordDetailView(record: record)
-                .frame(width: 420)
-                .frame(minHeight: 360)
-                .padding()
+        .refreshable {
+            await appState.refreshVisibleData()
         }
-    }
-
-    private var averageScore: Int {
-        guard !scores.isEmpty else {
-            return 0
+        .recordDetailPresentation(selectedRecord: $selectedRecord, strings: strings)
+        .onChange(of: topicSearch) {
+            resetTopicPaging()
         }
-
-        return Int((Double(scores.reduce(0, +)) / Double(scores.count)).rounded())
-    }
-
-    private var trendValue: Int? {
-        guard scores.count >= 2,
-              let latest = scores.last,
-              let previous = scores.dropLast().last else {
-            return nil
+        .onChange(of: topicSort) {
+            resetTopicPaging()
         }
-
-        return latest - previous
-    }
-
-    private var trendText: String {
-        guard let trendValue else {
-            return "-"
+        .onChange(of: selectedPeriod) {
+            resetTopicPaging()
         }
-
-        if trendValue > 0 {
-            return "+\(trendValue)"
+        .onChange(of: customStartDate) {
+            resetTopicPaging()
         }
-
-        return "\(trendValue)"
+        .onChange(of: customEndDate) {
+            resetTopicPaging()
+        }
     }
 
     private func statsDate(for record: StudyRecord) -> Date {
@@ -221,95 +210,88 @@ struct StatisticsView: View {
         let topic = record.topic.trimmingCharacters(in: .whitespacesAndNewlines)
         return topic.isEmpty ? appState.strings.studyFallback : topic
     }
+
+    private func topicDifficultyStats(records: [StudyRecord]) -> [DifficultyStat] {
+        Difficulty.allCases.compactMap { difficulty in
+            let difficultyRecords = records.filter { $0.difficulty == difficulty }
+            let scores = difficultyRecords.compactMap { $0.gradingResult?.score }
+            guard !scores.isEmpty else {
+                return nil
+            }
+
+            let correctCount = difficultyRecords.filter { $0.gradingResult?.isCorrect == true }.count
+            return DifficultyStat(
+                difficulty: difficulty,
+                count: scores.count,
+                average: Int((Double(scores.reduce(0, +)) / Double(scores.count)).rounded()),
+                best: scores.max() ?? 0,
+                correctRate: Int((Double(correctCount) / Double(difficultyRecords.count) * 100).rounded())
+            )
+        }
+    }
+
+    private func makeTopicStat(topic: String, records: [StudyRecord]) -> TopicStat? {
+        let sortedRecords = records.sorted { statsDate(for: $0) < statsDate(for: $1) }
+        let recordScores = sortedRecords.compactMap { $0.gradingResult?.score }
+        guard !recordScores.isEmpty,
+              let levelRange = TopicLevelRange.calculate(records: sortedRecords) else {
+            return nil
+        }
+
+        let correctCount = sortedRecords.filter { $0.gradingResult?.isCorrect == true }.count
+        let averageScore = Int((Double(recordScores.reduce(0, +)) / Double(recordScores.count)).rounded())
+        let correctRate = Int((Double(correctCount) / Double(sortedRecords.count) * 100).rounded())
+
+        return TopicStat(
+            topic: topic,
+            count: recordScores.count,
+            average: averageScore,
+            best: recordScores.max() ?? 0,
+            correctRate: correctRate,
+            levelRange: levelRange,
+            difficultyStats: topicDifficultyStats(records: sortedRecords),
+            records: sortedRecords,
+            latestDate: sortedRecords.last.map(statsDate(for:)) ?? .distantPast
+        )
+    }
+
+    private func defaultTopicSort(_ lhs: TopicStat, _ rhs: TopicStat) -> Bool {
+        TopicSort.level.areInIncreasingOrder(lhs, rhs)
+    }
+
+    private func resetTopicPaging() {
+        topicPage = 0
+        selectedTopicID = nil
+    }
 }
 
-private struct StatisticsInsightSection: View {
-    var stats: [TopicStat]
-    var strings: AppStrings
-
-    private var strongest: TopicStat? {
-        stats.max { lhs, rhs in
-            if lhs.levelRange.level.levelIndex != rhs.levelRange.level.levelIndex {
-                return lhs.levelRange.level.levelIndex < rhs.levelRange.level.levelIndex
-            }
-
-            if lhs.levelRange.average != rhs.levelRange.average {
-                return lhs.levelRange.average < rhs.levelRange.average
-            }
-
-            if lhs.average == rhs.average {
-                return lhs.count < rhs.count
-            }
-            return lhs.average < rhs.average
-        }
-    }
-
-    private var weakest: TopicStat? {
-        stats.min { lhs, rhs in
-            if lhs.average == rhs.average {
-                return lhs.count < rhs.count
-            }
-            return lhs.average < rhs.average
-        }
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(strings.insight)
-                .font(.subheadline)
-                .fontWeight(.semibold)
-
-            if let strongest {
-                HStack(spacing: 8) {
-                    insightCard(
-                        title: strings.strongestTopic,
-                        stat: strongest,
-                        systemImage: "arrow.up.circle"
-                    )
-
-                    if stats.count > 1, let weakest {
-                        insightCard(
-                            title: strings.weakestTopic,
-                            stat: weakest,
-                            systemImage: "target"
-                        )
+private extension View {
+    @ViewBuilder
+    func recordDetailPresentation(selectedRecord: Binding<StudyRecord?>, strings: AppStrings) -> some View {
+        #if os(iOS)
+        sheet(item: selectedRecord) { record in
+            NavigationStack {
+                StudyRecordDetailView(record: record)
+                    .padding()
+                    .navigationTitle(strings.records)
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button(strings.done) {
+                                selectedRecord.wrappedValue = nil
+                            }
+                        }
                     }
-                }
-            } else {
-                Text(strings.notEnoughStats)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(10)
-                    .background(Color.secondary.opacity(0.045))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
             }
         }
-    }
-
-    private func insightCard(title: String, stat: TopicStat, systemImage: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Label(title, systemImage: systemImage)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Text(stat.topic)
-                .font(.callout)
-                .fontWeight(.semibold)
-                .lineLimit(1)
-            Text("\(stat.average)/100 · \(stat.count)")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            LevelRangeSummary(stat: stat, strings: strings)
-            LevelRangeBar(range: stat.levelRange, strings: strings)
+        #else
+        popover(item: selectedRecord, arrowEdge: .trailing) { record in
+            StudyRecordDetailView(record: record)
+                .frame(width: 420)
+                .frame(minHeight: 360)
+                .padding()
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(10)
-        .background(Color.secondary.opacity(0.045))
-        .overlay {
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(Color.secondary.opacity(0.1), lineWidth: 1)
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        #endif
     }
 }
 
@@ -332,17 +314,20 @@ struct StudyRecordDetailView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(displayedRecord.topic.isEmpty ? appState.strings.problem : displayedRecord.topic)
                         .font(.headline)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
                     Text(displayedRecord.difficulty.displayName(language: appState.settings.appLanguage))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-
-                Spacer()
+                .frame(maxWidth: .infinity, alignment: .leading)
 
                 if let score = displayedRecord.gradingResult?.score {
                     Text("\(score)/100")
                         .font(.title3)
                         .fontWeight(.semibold)
+                        .lineLimit(1)
+                        .layoutPriority(1)
                 }
             }
 
@@ -427,12 +412,50 @@ private struct DetailSection: View {
             Text(title)
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            Text(text)
+            Text(breakableText)
                 .textSelection(.enabled)
                 .lineLimit(nil)
                 .fixedSize(horizontal: false, vertical: true)
+                .multilineTextAlignment(.leading)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var breakableText: String {
+        text.breakingLongTokens()
+    }
+}
+
+private extension String {
+    func breakingLongTokens(every limit: Int = 28) -> String {
+        var result = ""
+        var token = ""
+
+        func appendToken() {
+            guard !token.isEmpty else {
+                return
+            }
+
+            for (index, character) in token.enumerated() {
+                if index > 0 && index % limit == 0 {
+                    result.append("\u{200B}")
+                }
+                result.append(character)
+            }
+            token = ""
+        }
+
+        for character in self {
+            if character.isWhitespace {
+                appendToken()
+                result.append(character)
+            } else {
+                token.append(character)
+            }
+        }
+
+        appendToken()
+        return result
     }
 }
 
@@ -595,7 +618,7 @@ private struct StatisticsPeriodControls: View {
         return formatter
     }()
 
-private static func statsDate(for record: StudyRecord) -> Date {
+    private static func statsDate(for record: StudyRecord) -> Date {
         record.answeredAt ?? record.question.createdAt
     }
 }
@@ -607,14 +630,65 @@ private struct TopicStat: Identifiable {
     var best: Int
     var correctRate: Int
     var levelRange: TopicLevelRange
+    var difficultyStats: [DifficultyStat]
+    var records: [StudyRecord]
+    var latestDate: Date
 
     var id: String { topic }
+}
+
+private enum TopicSort: String, CaseIterable, Identifiable {
+    case level
+    case recent
+    case name
+    case count
+
+    var id: String { rawValue }
+
+    func title(strings: AppStrings) -> String {
+        switch self {
+        case .level:
+            return strings.sortByLevel
+        case .recent:
+            return strings.sortByRecent
+        case .name:
+            return strings.sortByName
+        case .count:
+            return strings.sortByCount
+        }
+    }
+
+    func areInIncreasingOrder(_ lhs: TopicStat, _ rhs: TopicStat) -> Bool {
+        switch self {
+        case .level:
+            if lhs.levelRange.centerLevel != rhs.levelRange.centerLevel {
+                return lhs.levelRange.centerLevel > rhs.levelRange.centerLevel
+            }
+            if lhs.count != rhs.count {
+                return lhs.count > rhs.count
+            }
+            return lhs.topic.localizedCaseInsensitiveCompare(rhs.topic) == .orderedAscending
+        case .recent:
+            if lhs.latestDate != rhs.latestDate {
+                return lhs.latestDate > rhs.latestDate
+            }
+            return lhs.topic.localizedCaseInsensitiveCompare(rhs.topic) == .orderedAscending
+        case .name:
+            return lhs.topic.localizedCaseInsensitiveCompare(rhs.topic) == .orderedAscending
+        case .count:
+            if lhs.count != rhs.count {
+                return lhs.count > rhs.count
+            }
+            return lhs.topic.localizedCaseInsensitiveCompare(rhs.topic) == .orderedAscending
+        }
+    }
 }
 
 struct TopicLevelRange: Equatable {
     var level: Difficulty
     var average: Int
     var sampleCount: Int
+    var centerLevel: Double
     var lowerBound: Double
     var upperBound: Double
 
@@ -626,58 +700,107 @@ struct TopicLevelRange: Equatable {
         difficulty(at: min(upperBound, 0.999_999))
     }
 
-    static func calculate(records: [StudyRecord]) -> TopicLevelRange? {
-        let recordsByDifficulty = Dictionary(
-            grouping: records.filter { $0.gradingResult != nil },
-            by: \.difficulty
-        )
+    var compactRangeText: String {
+        "\(startDifficulty.level)-\(endDifficulty.level)"
+    }
 
-        for difficulty in Difficulty.allCases.reversed() {
-            let scores = recordsByDifficulty[difficulty]?.compactMap { $0.gradingResult?.score } ?? []
-            guard !scores.isEmpty else {
-                continue
+    var width: Double {
+        upperBound - lowerBound
+    }
+
+    static func calculate(records: [StudyRecord]) -> TopicLevelRange? {
+        let scoredRecords = records.compactMap { record -> (difficulty: Difficulty, score: Int)? in
+            guard let score = record.gradingResult?.score else {
+                return nil
             }
 
-            let average = Int((Double(scores.reduce(0, +)) / Double(scores.count)).rounded())
-            return calculate(level: difficulty, average: average, sampleCount: scores.count)
+            return (record.difficulty, min(max(score, 0), 100))
+        }
+        guard !scoredRecords.isEmpty else {
+            return nil
         }
 
-        return nil
+        let estimates = scoredRecords.map { estimatedLevel(difficulty: $0.difficulty, score: $0.score) }
+        let centerLevel = estimates.reduce(0, +) / Double(estimates.count)
+        let variance: Double
+        if estimates.count > 1 {
+            let sumOfSquares = estimates.reduce(0) { partialResult, estimate in
+                partialResult + pow(estimate - centerLevel, 2)
+            }
+            variance = sumOfSquares / Double(estimates.count - 1)
+        } else {
+            variance = 0
+        }
+
+        let averageScore = Int((Double(scoredRecords.map(\.score).reduce(0, +)) / Double(scoredRecords.count)).rounded())
+        let evidenceSpread = sqrt(variance)
+        let sampleUncertainty = 0.9 / sqrt(Double(scoredRecords.count))
+        let conflictUncertainty = evidenceSpread * 0.55
+        let minimumHalfWidth = minimumHalfWidth(sampleCount: scoredRecords.count)
+        let halfWidth = min(4.0, max(minimumHalfWidth, sampleUncertainty + conflictUncertainty))
+
+        return make(
+            centerLevel: centerLevel,
+            average: averageScore,
+            sampleCount: scoredRecords.count,
+            halfWidth: halfWidth
+        )
     }
 
     static func calculate(level: Difficulty, average: Int, sampleCount: Int) -> TopicLevelRange {
-        let segment = 1.0 / Double(Difficulty.allCases.count)
-        let start = Double(level.levelIndex) * segment
-        let hasPreviousLevel = level.levelIndex > 0
         let clampedAverage = min(max(average, 0), 100)
-        let lowerOffset: Double
-        let upperOffset: Double
+        let centerLevel = estimatedLevel(difficulty: level, score: clampedAverage)
+        let halfWidth = max(minimumHalfWidth(sampleCount: sampleCount), 0.9 / sqrt(Double(max(sampleCount, 1))))
 
-        switch clampedAverage {
-        case 85...100:
-            lowerOffset = 0.68
-            upperOffset = level == Difficulty.allCases.last ? 1.0 : 1.18
-        case 70..<85:
-            lowerOffset = 0.35
-            upperOffset = 0.82
-        case 50..<70:
-            lowerOffset = 0.08
-            upperOffset = 0.58
-        default:
-            lowerOffset = hasPreviousLevel ? -0.22 : 0.0
-            upperOffset = 0.25
-        }
-
-        let lowerBound = max(0, min(1, start + segment * lowerOffset))
-        let upperBound = max(lowerBound + 0.025, min(1, start + segment * upperOffset))
-
-        return TopicLevelRange(
-            level: level,
+        return make(
+            centerLevel: centerLevel,
             average: clampedAverage,
             sampleCount: sampleCount,
+            halfWidth: halfWidth
+        )
+    }
+
+    private static func make(
+        centerLevel: Double,
+        average: Int,
+        sampleCount: Int,
+        halfWidth: Double
+    ) -> TopicLevelRange {
+        let clampedCenter = min(max(centerLevel, 1), 10)
+        let lowerLevel = max(1, clampedCenter - halfWidth)
+        let upperLevel = min(10, clampedCenter + halfWidth)
+        let lowerBound = progress(forLevelValue: lowerLevel)
+        let upperBound = max(lowerBound + 0.025, progress(forLevelValue: upperLevel))
+
+        return TopicLevelRange(
+            level: Difficulty(level: Int(clampedCenter.rounded())),
+            average: average,
+            sampleCount: sampleCount,
+            centerLevel: clampedCenter,
             lowerBound: lowerBound,
             upperBound: min(1, upperBound)
         )
+    }
+
+    private static func estimatedLevel(difficulty: Difficulty, score: Int) -> Double {
+        let clampedScore = min(max(score, 0), 100)
+        let levelValue = Double(difficulty.level) + (Double(clampedScore) - 70) / 35
+        return min(max(levelValue, 1), 10)
+    }
+
+    private static func minimumHalfWidth(sampleCount: Int) -> Double {
+        switch sampleCount {
+        case 8...:
+            0.3
+        case 4...:
+            0.45
+        default:
+            0.65
+        }
+    }
+
+    private static func progress(forLevelValue levelValue: Double) -> Double {
+        min(max((levelValue - 0.5) / Double(Difficulty.allCases.count), 0), 1)
     }
 
     private func difficulty(at progress: Double) -> Difficulty {
@@ -687,57 +810,445 @@ struct TopicLevelRange: Equatable {
     }
 }
 
-private struct TopicStatsSection: View {
+private struct TopicPortfolioSummary: View {
     var stats: [TopicStat]
+    var responseCount: Int
     var strings: AppStrings
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(strings.statsByTopic)
+            Text(strings.topicSummary)
                 .font(.subheadline)
                 .fontWeight(.semibold)
+                .lineLimit(1)
 
-            LazyVGrid(
-                columns: [
-                    GridItem(.flexible(minimum: 150), spacing: 8),
-                    GridItem(.flexible(minimum: 150), spacing: 8)
-                ],
-                spacing: 8
-            ) {
-                ForEach(Array(stats.prefix(6))) { stat in
+            KeyMetricsStrip(metrics: [
+                MetricItem(title: strings.topicCount, value: "\(stats.count)"),
+                MetricItem(title: strings.responses, value: "\(responseCount)")
+            ])
+        }
+    }
+}
+
+private struct TopicBrowserSection: View {
+    @State private var showsRangeHelp = false
+
+    var stats: [TopicStat]
+    var totalCount: Int
+    var pageStartIndex: Int
+    var currentPage: Int
+    var pageCount: Int
+    var selectedTopicID: String?
+    @Binding var topicSearch: String
+    @Binding var topicSort: TopicSort
+    var strings: AppStrings
+    var onPreviousPage: () -> Void
+    var onNextPage: () -> Void
+    var onSelect: (TopicStat) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(strings.topicBrowser)
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .lineLimit(1)
+
+                Button {
+                    showsRangeHelp.toggle()
+                } label: {
+                    Image(systemName: "questionmark.circle")
+                }
+                .buttonStyle(.borderless)
+                .help(strings.topicRangeHelpTitle)
+                .popover(isPresented: $showsRangeHelp, arrowEdge: .bottom) {
                     VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text(stat.topic)
-                                .font(.subheadline)
-                                .fontWeight(.semibold)
-                                .lineLimit(1)
-                            Spacer()
-                            Text(strings.itemCount(stat.count))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-
-                        HStack(spacing: 10) {
-                            MiniMetric(title: strings.average, value: "\(stat.average)")
-                            MiniMetric(title: strings.best, value: "\(stat.best)")
-                            MiniMetric(title: strings.correctRate, value: "\(stat.correctRate)%")
-                        }
-
-                        LevelRangeSummary(stat: stat, strings: strings)
-
-                        LevelRangeBar(range: stat.levelRange, strings: strings)
+                        Text(strings.topicRangeHelpTitle)
+                            .font(.headline)
+                        Text(strings.topicRangeHelpBody)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
-                    .padding(10)
-                    .background(Color.secondary.opacity(0.045))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(Color.secondary.opacity(0.1), lineWidth: 1)
+                    .frame(width: 300, alignment: .leading)
+                    .padding(14)
+                }
+
+                Spacer()
+
+                HStack(spacing: 6) {
+                    Text(pageStatus)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+
+                    if pageCount > 1 {
+                        Button(action: onPreviousPage) {
+                            Image(systemName: "chevron.left")
+                        }
+                        .buttonStyle(.borderless)
+                        .disabled(currentPage == 0)
+                        .help(strings.previousPage)
+
+                        Text("\(currentPage + 1)/\(pageCount)")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                            .lineLimit(1)
+
+                        Button(action: onNextPage) {
+                            Image(systemName: "chevron.right")
+                        }
+                        .buttonStyle(.borderless)
+                        .disabled(currentPage >= pageCount - 1)
+                        .help(strings.nextPage)
                     }
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
+            }
+
+            HStack(spacing: 8) {
+                TextField(strings.topicSearch, text: $topicSearch)
+                    .textFieldStyle(.roundedBorder)
+
+                Picker(strings.sortTopics, selection: $topicSort) {
+                    ForEach(TopicSort.allCases) { sort in
+                        Text(sort.title(strings: strings)).tag(sort)
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 112)
+            }
+
+            HStack(spacing: 8) {
+                Text(strings.statsByTopic)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text(strings.level)
+                    .frame(width: 58, alignment: .leading)
+                Text(strings.range)
+                    .frame(width: 50, alignment: .trailing)
+                Text(strings.responsesShort)
+                    .frame(width: 44, alignment: .trailing)
+            }
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 10)
+
+            VStack(spacing: 6) {
+                ForEach(stats) { stat in
+                    Button {
+                        onSelect(stat)
+                    } label: {
+                        TopicStatRow(stat: stat, strings: strings, isSelected: stat.id == selectedTopicID)
+                    }
+                    .buttonStyle(.plain)
                 }
             }
         }
     }
+
+    private var pageStatus: String {
+        guard totalCount > 0 else {
+            return strings.itemCount(0)
+        }
+
+        return strings.topicPageStatus(
+            start: pageStartIndex + 1,
+            end: pageStartIndex + stats.count,
+            total: totalCount
+        )
+    }
+}
+
+private struct TopicStatRow: View {
+    var stat: TopicStat
+    var strings: AppStrings
+    var isSelected: Bool = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 8) {
+                Text(stat.topic)
+                    .font(.callout)
+                    .fontWeight(.semibold)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                Text("\(stat.levelRange.level.level)/10")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(width: 58, alignment: .leading)
+
+                Text(stat.levelRange.compactRangeText)
+                    .font(.callout)
+                    .fontWeight(.semibold)
+                    .lineLimit(1)
+                    .frame(width: 50, alignment: .trailing)
+
+                Text("\(stat.count)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .frame(width: 44, alignment: .trailing)
+            }
+
+            Text(strings.topicDifficultySummary(stat.difficultySummary(language: strings.language)))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+
+            CompactLevelRangeBar(range: stat.levelRange)
+        }
+        .padding(10)
+        .background(isSelected ? Color.accentColor.opacity(0.08) : Color.secondary.opacity(0.045))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(isSelected ? Color.accentColor.opacity(0.35) : Color.secondary.opacity(0.1), lineWidth: 1)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .contentShape(Rectangle())
+    }
+}
+
+private struct CompactLevelRangeBar: View {
+    var range: TopicLevelRange
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .leading) {
+                HStack(spacing: 2) {
+                    ForEach(Difficulty.allCases) { difficulty in
+                        RoundedRectangle(cornerRadius: 3)
+                            .fill(difficulty == range.level ? Color.accentColor.opacity(0.16) : Color.secondary.opacity(0.12))
+                    }
+                }
+
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(Color.accentColor.opacity(0.72))
+                    .frame(width: max(4, proxy.size.width * (range.upperBound - range.lowerBound)))
+                    .offset(x: proxy.size.width * range.lowerBound)
+            }
+        }
+        .frame(height: 8)
+    }
+}
+
+private struct SelectedTopicSection: View {
+    var stat: TopicStat
+    var records: [StudyRecord]
+    var strings: AppStrings
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(stat.topic)
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+
+                Spacer()
+
+                Text(strings.topicTrend)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            LevelRangeSummary(stat: stat, strings: strings)
+
+            LevelRangeBar(range: stat.levelRange, strings: strings)
+
+            TopicLevelTrendChart(records: records, strings: strings)
+                .frame(height: 150)
+
+            LevelPerformanceSection(stats: stat.difficultyStats, strings: strings)
+        }
+    }
+}
+
+private struct LevelPerformanceSection: View {
+    var stats: [DifficultyStat]
+    var strings: AppStrings
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(strings.levelPerformance)
+                .font(.subheadline)
+                .fontWeight(.semibold)
+                .lineLimit(1)
+
+            VStack(spacing: 6) {
+                ForEach(stats.sorted { $0.difficulty.level > $1.difficulty.level }) { stat in
+                    HStack(spacing: 8) {
+                        Text(stat.difficulty.displayName(language: strings.language))
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .lineLimit(1)
+                            .frame(width: 76, alignment: .leading)
+
+                        ProgressView(value: Double(stat.correctRate), total: 100)
+                            .tint(Color.secondary.opacity(0.72))
+
+                        Text("\(stat.correctRate)%")
+                            .font(.caption)
+                            .monospacedDigit()
+                            .lineLimit(1)
+                            .frame(width: 38, alignment: .trailing)
+
+                        Text(strings.itemCount(stat.count))
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .frame(width: 34, alignment: .trailing)
+                    }
+                    .padding(.vertical, 2)
+                }
+            }
+            .padding(10)
+            .background(Color.secondary.opacity(0.045))
+            .overlay {
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color.secondary.opacity(0.1), lineWidth: 1)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+        }
+    }
+}
+
+private struct TopicLevelTrendChart: View {
+    var records: [StudyRecord]
+    var strings: AppStrings
+
+    private var points: [LevelTrendPoint] {
+        var accumulated: [StudyRecord] = []
+        return records
+            .sorted { Self.statsDate(for: $0) < Self.statsDate(for: $1) }
+            .compactMap { record in
+                accumulated.append(record)
+                guard let range = TopicLevelRange.calculate(records: accumulated) else {
+                    return nil
+                }
+
+                return LevelTrendPoint(
+                    date: Self.statsDate(for: record),
+                    progress: (range.lowerBound + range.upperBound) / 2
+                )
+            }
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            let chartPoints = chartPoints(in: proxy.size)
+            let axisWidth: CGFloat = 28
+
+            ZStack(alignment: .topLeading) {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.secondary.opacity(0.04))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color.secondary.opacity(0.1), lineWidth: 1)
+                    }
+
+                Path { path in
+                    guard let first = chartPoints.first else {
+                        return
+                    }
+
+                    path.move(to: first)
+                    for point in chartPoints.dropFirst() {
+                        path.addLine(to: point)
+                    }
+                }
+                .stroke(Color.accentColor.opacity(0.78), style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+
+                ForEach(Array(chartPoints.enumerated()), id: \.offset) { _, point in
+                    Circle()
+                        .fill(Color.accentColor)
+                        .frame(width: 5, height: 5)
+                        .position(point)
+                }
+
+                VStack {
+                    HStack {
+                        Text("10")
+                            .frame(width: axisWidth, alignment: .leading)
+                        Spacer()
+                    }
+                    Spacer()
+                    HStack {
+                        Text("1")
+                            .frame(width: axisWidth, alignment: .leading)
+                        Spacer()
+                    }
+                }
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .padding(8)
+
+                VStack {
+                    Spacer()
+
+                    HStack {
+                        if let firstPoint = points.first {
+                            Text(firstPoint.date, formatter: Self.axisDateFormatter)
+                        }
+
+                        Spacer()
+
+                        if points.count > 1,
+                           let latestPoint = points.last {
+                            Text(latestPoint.date, formatter: Self.axisDateFormatter)
+                        }
+                    }
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .padding(.leading, axisWidth + 12)
+                    .padding(.trailing, 8)
+                    .padding(.bottom, 6)
+                }
+            }
+        }
+        .accessibilityLabel(strings.topicTrend)
+    }
+
+    private func chartPoints(in size: CGSize) -> [CGPoint] {
+        guard !points.isEmpty else {
+            return []
+        }
+
+        let leadingPadding: CGFloat = 42
+        let trailingPadding: CGFloat = 14
+        let topPadding: CGFloat = 18
+        let bottomPadding: CGFloat = 34
+        let width = max(size.width - leadingPadding - trailingPadding, 1)
+        let height = max(size.height - topPadding - bottomPadding, 1)
+        let denominator = max(points.count - 1, 1)
+
+        return points.enumerated().map { index, point in
+            let x = leadingPadding + width * CGFloat(index) / CGFloat(denominator)
+            let y = topPadding + height * (1 - CGFloat(min(max(point.progress, 0), 1)))
+            return CGPoint(x: x, y: y)
+        }
+    }
+
+    private static let axisDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "M/d HH:mm"
+        return formatter
+    }()
+
+    private static func statsDate(for record: StudyRecord) -> Date {
+        record.answeredAt ?? record.question.createdAt
+    }
+}
+
+private struct LevelTrendPoint {
+    var date: Date
+    var progress: Double
 }
 
 private struct LevelRangeSummary: View {
@@ -749,6 +1260,8 @@ private struct LevelRangeSummary: View {
             Text(strings.currentTopicLevel(stat.levelRange.level.displayName(language: strings.language)))
                 .font(.caption2)
                 .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.tail)
 
             Text(
                 strings.topicLevelRange(
@@ -760,8 +1273,8 @@ private struct LevelRangeSummary: View {
             )
             .font(.caption2)
             .foregroundStyle(.secondary)
-            .lineLimit(2)
-            .fixedSize(horizontal: false, vertical: true)
+            .lineLimit(1)
+            .truncationMode(.tail)
         }
     }
 }
@@ -821,51 +1334,12 @@ private struct DifficultyStat: Identifiable {
     var id: Difficulty { difficulty }
 }
 
-private struct DifficultyStatsSection: View {
-    var stats: [DifficultyStat]
-    var strings: AppStrings
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(strings.statsByDifficulty)
-                .font(.subheadline)
-                .fontWeight(.semibold)
-
-            LazyVGrid(
-                columns: [
-                    GridItem(.flexible(minimum: 120), spacing: 8),
-                    GridItem(.flexible(minimum: 120), spacing: 8)
-                ],
-                spacing: 8
-            ) {
-                ForEach(stats) { stat in
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text(stat.difficulty.displayName(language: strings.language))
-                                .font(.subheadline)
-                                .fontWeight(.semibold)
-                            Spacer()
-                            Text(strings.itemCount(stat.count))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-
-                        HStack(spacing: 10) {
-                            MiniMetric(title: strings.average, value: "\(stat.average)")
-                            MiniMetric(title: strings.best, value: "\(stat.best)")
-                            MiniMetric(title: strings.correctRate, value: "\(stat.correctRate)%")
-                        }
-                    }
-                    .padding(10)
-                    .background(Color.secondary.opacity(0.045))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(Color.secondary.opacity(0.1), lineWidth: 1)
-                    }
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                }
-            }
+private extension TopicStat {
+    func difficultySummary(language: AppLanguage) -> String {
+        difficultyStats.map { stat in
+            "\(stat.difficulty.shortDisplayName(language: language)) \(stat.average)(\(stat.count))"
         }
+        .joined(separator: " · ")
     }
 }
 
@@ -929,46 +1403,11 @@ private struct ScoreDistributionSection: View {
 
 private extension Difficulty {
     var levelIndex: Int {
-        Difficulty.allCases.firstIndex(of: self) ?? 0
+        level - 1
     }
 
     func shortDisplayName(language: AppLanguage) -> String {
-        switch language {
-        case .korean:
-            switch self {
-            case .novice:
-                return "완입"
-            case .beginner:
-                return "입문"
-            case .elementary:
-                return "초급"
-            case .intermediate:
-                return "중급"
-            case .upperIntermediate:
-                return "중상"
-            case .advanced:
-                return "고급"
-            case .expert:
-                return "전문"
-            }
-        case .english:
-            switch self {
-            case .novice:
-                return "N"
-            case .beginner:
-                return "B"
-            case .elementary:
-                return "E"
-            case .intermediate:
-                return "I"
-            case .upperIntermediate:
-                return "UI"
-            case .advanced:
-                return "A"
-            case .expert:
-                return "X"
-            }
-        }
+        "\(level)"
     }
 }
 
@@ -989,13 +1428,18 @@ private struct MetricItem: Identifiable {
 private struct KeyMetricsStrip: View {
     var metrics: [MetricItem]
 
+    private var columns: [GridItem] {
+        let count = max(1, min(metrics.count, 3))
+        return Array(
+            repeating: GridItem(.flexible(), spacing: 10, alignment: .leading),
+            count: count
+        )
+    }
+
     var body: some View {
         LazyVGrid(
-            columns: [
-                GridItem(.flexible(), spacing: 10),
-                GridItem(.flexible(), spacing: 10),
-                GridItem(.flexible(), spacing: 10)
-            ],
+            columns: columns,
+            alignment: .leading,
             spacing: 10
         ) {
             ForEach(metrics) { metric in
@@ -1021,9 +1465,13 @@ private struct MiniMetric: View {
             Text(title)
                 .font(.caption2)
                 .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.tail)
             Text(value)
                 .font(.callout)
                 .fontWeight(.semibold)
+                .lineLimit(1)
+                .truncationMode(.tail)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -1096,6 +1544,7 @@ private struct ScoreLineChart: View {
     var body: some View {
         GeometryReader { proxy in
             let points = chartPoints(in: proxy.size)
+            let axisWidth: CGFloat = 28
 
             ZStack(alignment: .topLeading) {
                 RoundedRectangle(cornerRadius: 8)
@@ -1127,11 +1576,13 @@ private struct ScoreLineChart: View {
                 VStack {
                     HStack {
                         Text("100")
+                            .frame(width: axisWidth, alignment: .leading)
                         Spacer()
                     }
                     Spacer()
                     HStack {
                         Text("0")
+                            .frame(width: axisWidth, alignment: .leading)
                         Spacer()
                     }
                 }
@@ -1158,7 +1609,8 @@ private struct ScoreLineChart: View {
                     }
                     .font(.caption2)
                     .foregroundStyle(.secondary)
-                    .padding(.horizontal, 8)
+                    .padding(.leading, axisWidth + 12)
+                    .padding(.trailing, 8)
                     .padding(.bottom, 6)
                 }
             }
@@ -1170,15 +1622,16 @@ private struct ScoreLineChart: View {
             return []
         }
 
-        let horizontalPadding: CGFloat = 22
+        let leadingPadding: CGFloat = 42
+        let trailingPadding: CGFloat = 14
         let topPadding: CGFloat = 18
-        let bottomPadding: CGFloat = 30
-        let width = max(size.width - horizontalPadding * 2, 1)
+        let bottomPadding: CGFloat = 34
+        let width = max(size.width - leadingPadding - trailingPadding, 1)
         let height = max(size.height - topPadding - bottomPadding, 1)
         let denominator = max(scores.count - 1, 1)
 
         return scores.enumerated().map { index, score in
-            let x = horizontalPadding + width * CGFloat(index) / CGFloat(denominator)
+            let x = leadingPadding + width * CGFloat(index) / CGFloat(denominator)
             let y = topPadding + height * (1 - CGFloat(min(max(score, 0), 100)) / 100)
             return CGPoint(x: x, y: y)
         }

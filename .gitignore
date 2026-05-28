@@ -2,5 +2,7 @@ DerivedData/
 build/
 dist/
 *.xcuserdata/
+xcuserdata/
+*.xcuserdatad/
 *.xcuserstate
 .DS_Store

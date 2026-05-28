@@ -14,6 +14,9 @@ struct StudyMateApp: App {
 
         Task { @MainActor in
             await appState.start()
+            if !appState.hasCompletedOnboarding {
+                StudyWindowPresenter.shared.show(appState: appState)
+            }
         }
     }
 

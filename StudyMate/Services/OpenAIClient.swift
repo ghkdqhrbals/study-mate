@@ -28,7 +28,11 @@ enum OpenAIClientError: LocalizedError, Equatable {
 
 @MainActor
 protocol OpenAIClientProtocol: AnyObject {
+    var lastUsage: OpenAIUsage? { get }
+
     func validateAPIKey(_ apiKey: String) async throws
+    func fetchBillingStatus(adminAPIKey: String, projectID: String?, apiKeyID: String?) async throws -> OpenAIBillingStatus
+    func fetchUsageStatus(adminAPIKey: String, projectID: String?, apiKeyID: String?) async throws -> OpenAIUsageStatus
 
     func generateQuestion(
         settings: StudySettings,
@@ -42,12 +46,22 @@ protocol OpenAIClientProtocol: AnyObject {
 
 @MainActor
 final class OpenAIClient: OpenAIClientProtocol {
+    private static let maxAdminPaginationPages = 100
+
     private let endpoint = URL(string: "https://api.openai.com/v1/responses")
     private let modelsEndpoint = URL(string: "https://api.openai.com/v1/models")
+    private let organizationCostsEndpoint = URL(string: "https://api.openai.com/v1/organization/costs")
+    private let organizationUsageEndpoint = URL(string: "https://api.openai.com/v1/organization/usage/completions")
     private let session: URLSession
+    private let requestDataLoader: (((URLRequest) async throws -> (Data, URLResponse)))?
+    private(set) var lastUsage: OpenAIUsage?
 
-    init(session: URLSession = .shared) {
+    init(
+        session: URLSession = .shared,
+        requestDataLoader: (((URLRequest) async throws -> (Data, URLResponse)))? = nil
+    ) {
         self.session = session
+        self.requestDataLoader = requestDataLoader
     }
 
     func validateAPIKey(_ apiKey: String) async throws {
@@ -64,7 +78,7 @@ final class OpenAIClient: OpenAIClientProtocol {
         request.httpMethod = "GET"
         request.setValue("Bearer \(trimmedAPIKey)", forHTTPHeaderField: "Authorization")
 
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await loadData(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
             throw OpenAIClientError.invalidResponse
         }
@@ -73,6 +87,84 @@ final class OpenAIClient: OpenAIClientProtocol {
             let body = String(data: data, encoding: .utf8) ?? "No response body"
             throw OpenAIClientError.httpError(httpResponse.statusCode, body)
         }
+    }
+
+    func fetchBillingStatus(adminAPIKey: String, projectID: String?, apiKeyID: String?) async throws -> OpenAIBillingStatus {
+        let trimmedAdminAPIKey = adminAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedAdminAPIKey.isEmpty else {
+            throw OpenAIClientError.missingAPIKey
+        }
+
+        guard let organizationCostsEndpoint else {
+            throw OpenAIClientError.invalidURL
+        }
+
+        let now = Date()
+        let calendar = Calendar(identifier: .gregorian)
+        let components = calendar.dateComponents([.year, .month], from: now)
+        let periodStart = calendar.date(from: components) ?? now
+
+        var queryItems = [
+            URLQueryItem(name: "start_time", value: "\(Int(periodStart.timeIntervalSince1970))"),
+            URLQueryItem(name: "end_time", value: "\(Int(now.timeIntervalSince1970))"),
+            URLQueryItem(name: "bucket_width", value: "1d"),
+            URLQueryItem(name: "limit", value: "31")
+        ]
+        Self.appendCostScopeQueryItems(to: &queryItems, projectID: projectID, apiKeyID: apiKeyID)
+
+        let data = try await fetchPagedAdminData(
+            endpoint: organizationCostsEndpoint,
+            adminAPIKey: trimmedAdminAPIKey,
+            queryItems: queryItems
+        )
+
+        return try Self.parseBillingStatus(
+            from: data,
+            periodStart: periodStart,
+            periodEnd: now,
+            checkedAt: now,
+            projectID: projectID,
+            apiKeyID: apiKeyID
+        )
+    }
+
+    func fetchUsageStatus(adminAPIKey: String, projectID: String?, apiKeyID: String?) async throws -> OpenAIUsageStatus {
+        let trimmedAdminAPIKey = adminAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedAdminAPIKey.isEmpty else {
+            throw OpenAIClientError.missingAPIKey
+        }
+
+        guard let organizationUsageEndpoint else {
+            throw OpenAIClientError.invalidURL
+        }
+
+        let now = Date()
+        let calendar = Calendar(identifier: .gregorian)
+        let components = calendar.dateComponents([.year, .month], from: now)
+        let periodStart = calendar.date(from: components) ?? now
+
+        var queryItems = [
+            URLQueryItem(name: "start_time", value: "\(Int(periodStart.timeIntervalSince1970))"),
+            URLQueryItem(name: "end_time", value: "\(Int(now.timeIntervalSince1970))"),
+            URLQueryItem(name: "bucket_width", value: "1d"),
+            URLQueryItem(name: "limit", value: "31")
+        ]
+        Self.appendUsageScopeQueryItems(to: &queryItems, projectID: projectID, apiKeyID: apiKeyID)
+
+        let data = try await fetchPagedAdminData(
+            endpoint: organizationUsageEndpoint,
+            adminAPIKey: trimmedAdminAPIKey,
+            queryItems: queryItems
+        )
+
+        return try Self.parseUsageStatus(
+            from: data,
+            periodStart: periodStart,
+            periodEnd: now,
+            checkedAt: now,
+            projectID: projectID,
+            apiKeyID: apiKeyID
+        )
     }
 
     func generateQuestion(
@@ -98,7 +190,7 @@ final class OpenAIClient: OpenAIClientProtocol {
         let output = try await sendStructuredRequest(
             apiKey: apiKey,
             model: settings.sanitizedOpenAIModel,
-            instructions: "You are an AI teacher that creates varied study questions in \(settings.language.promptLabel). Never repeat recent questions.",
+            instructions: "You are an AI teacher that creates varied study questions in \(Self.questionLanguage(for: settings).promptLabel). Never repeat recent questions.",
             input: prompt,
             previousResponseID: previousResponseID,
             schemaName: "study_question",
@@ -117,6 +209,8 @@ final class OpenAIClient: OpenAIClientProtocol {
     }
 
     nonisolated static func questionPrompt(settings: StudySettings, recentQuestions: [QuestionItem]) -> String {
+        let language = questionLanguage(for: settings)
+        let languageInstruction = questionLanguageInstruction(for: settings)
         let recentQuestionText = recentQuestions
             .suffix(20)
             .enumerated()
@@ -128,20 +222,35 @@ final class OpenAIClient: OpenAIClientProtocol {
 
         Topic: \(settings.topic)
         Difficulty: \(settings.difficulty.promptLabel)
-        Language: \(settings.language.promptLabel)
+        Language: \(language.promptLabel)
         Teacher instruction: \(settings.customPrompt)
+        Question language instruction: \(languageInstruction)
         Recent questions to avoid:
         \(recentQuestionText.isEmpty ? "None" : recentQuestionText)
 
         Requirements:
         - Return JSON only.
-        - Write the question and expectedAnswerHint in \(settings.language.promptLabel).
+        - \(languageInstruction)
+        - Write the question and expectedAnswerHint in \(language.promptLabel).
         - If Teacher instruction conflicts with Language, Language wins.
         - The question should be concise and practical.
         - Do not repeat or closely paraphrase any recent question.
         - Vary the concept, angle, example, or required reasoning from recent questions.
         - If the topic is broad, rotate through different subtopics.
         """
+    }
+
+    nonisolated private static func questionLanguage(for settings: StudySettings) -> StudyLanguage {
+        settings.appLanguage.studyLanguage
+    }
+
+    nonisolated private static func questionLanguageInstruction(for settings: StudySettings) -> String {
+        switch settings.appLanguage {
+        case .korean:
+            return "한국어로 질문해."
+        case .english:
+            return "Ask the question in English."
+        }
     }
 
     func gradeAnswer(question: QuestionItem, answer: String, settings: StudySettings, apiKey: String) async throws -> GradingResult {
@@ -245,6 +354,279 @@ final class OpenAIClient: OpenAIClientProtocol {
         return object["id"] as? String
     }
 
+    nonisolated static func extractUsage(from data: Data) -> OpenAIUsage? {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let usage = object["usage"] as? [String: Any] else {
+            return nil
+        }
+
+        let inputTokens = intValue(usage["input_tokens"])
+        let outputTokens = intValue(usage["output_tokens"])
+        let totalTokens = intValue(usage["total_tokens"], fallback: inputTokens + outputTokens)
+        let inputDetails = usage["input_tokens_details"] as? [String: Any]
+        let cachedInputTokens = intValue(inputDetails?["cached_tokens"])
+
+        return OpenAIUsage(
+            inputTokens: inputTokens,
+            cachedInputTokens: cachedInputTokens,
+            outputTokens: outputTokens,
+            totalTokens: totalTokens
+        )
+    }
+
+    nonisolated static func parseUsageStatus(
+        from data: Data,
+        periodStart: Date,
+        periodEnd: Date,
+        checkedAt: Date,
+        projectID: String? = nil,
+        apiKeyID: String? = nil
+    ) throws -> OpenAIUsageStatus {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let buckets = object["data"] as? [[String: Any]] else {
+            throw OpenAIClientError.invalidResponse
+        }
+
+        var inputTokens = 0
+        var cachedInputTokens = 0
+        var outputTokens = 0
+        var requestCount = 0
+        var includedResultCount = 0
+
+        for bucket in buckets {
+            guard let results = bucket["results"] as? [[String: Any]] else {
+                continue
+            }
+
+            for result in results {
+                guard shouldIncludeUsageResult(result, projectID: projectID, apiKeyID: apiKeyID) else {
+                    continue
+                }
+
+                inputTokens += intValue(result["input_tokens"])
+                cachedInputTokens += intValue(result["input_cached_tokens"])
+                outputTokens += intValue(result["output_tokens"])
+                requestCount += intValue(result["num_model_requests"])
+                includedResultCount += 1
+            }
+        }
+
+        return OpenAIUsageStatus(
+            inputTokens: inputTokens,
+            cachedInputTokens: cachedInputTokens,
+            outputTokens: outputTokens,
+            requestCount: requestCount,
+            periodStart: periodStart,
+            periodEnd: periodEnd,
+            checkedAt: checkedAt,
+            sourcePageCount: intValue(object["study_mate_page_count"], fallback: 1),
+            sourceBucketCount: buckets.count,
+            sourceResultCount: includedResultCount
+        )
+    }
+
+    nonisolated static func parseBillingStatus(
+        from data: Data,
+        periodStart: Date,
+        periodEnd: Date,
+        checkedAt: Date,
+        projectID: String? = nil,
+        apiKeyID: String? = nil
+    ) throws -> OpenAIBillingStatus {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let buckets = object["data"] as? [[String: Any]] else {
+            throw OpenAIClientError.invalidResponse
+        }
+
+        var totalAmount = 0.0
+        var currency = "usd"
+        var includedResultCount = 0
+
+        for bucket in buckets {
+            guard let results = bucket["results"] as? [[String: Any]] else {
+                continue
+            }
+
+            for result in results {
+                guard shouldIncludeUsageResult(result, projectID: projectID, apiKeyID: apiKeyID) else {
+                    continue
+                }
+
+                guard let amount = result["amount"] as? [String: Any] else {
+                    continue
+                }
+
+                totalAmount += doubleValue(amount["value"])
+                includedResultCount += 1
+                if let amountCurrency = amount["currency"] as? String,
+                   !amountCurrency.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    currency = amountCurrency
+                }
+            }
+        }
+
+        return OpenAIBillingStatus(
+            spentAmount: totalAmount,
+            currency: currency,
+            periodStart: periodStart,
+            periodEnd: periodEnd,
+            checkedAt: checkedAt,
+            sourcePageCount: intValue(object["study_mate_page_count"], fallback: 1),
+            sourceBucketCount: buckets.count,
+            sourceResultCount: includedResultCount
+        )
+    }
+
+    private func fetchPagedAdminData(endpoint: URL, adminAPIKey: String, queryItems: [URLQueryItem]) async throws -> Data {
+        var buckets: [[String: Any]] = []
+        var nextPage: String?
+        var pageCount = 0
+
+        repeat {
+            guard var urlComponents = URLComponents(url: endpoint, resolvingAgainstBaseURL: false) else {
+                throw OpenAIClientError.invalidURL
+            }
+
+            var pageQueryItems = queryItems
+            if let nextPage {
+                pageQueryItems.append(URLQueryItem(name: "page", value: nextPage))
+            }
+            urlComponents.queryItems = pageQueryItems
+
+            guard let url = urlComponents.url else {
+                throw OpenAIClientError.invalidURL
+            }
+
+            var request = URLRequest(url: url)
+            request.httpMethod = "GET"
+            request.setValue("Bearer \(adminAPIKey)", forHTTPHeaderField: "Authorization")
+
+            let (data, response) = try await loadData(for: request)
+            guard let httpResponse = response as? HTTPURLResponse else {
+                throw OpenAIClientError.invalidResponse
+            }
+
+            guard (200..<300).contains(httpResponse.statusCode) else {
+                let body = String(data: data, encoding: .utf8) ?? "No response body"
+                throw OpenAIClientError.httpError(httpResponse.statusCode, body)
+            }
+
+            guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let pageBuckets = object["data"] as? [[String: Any]] else {
+                throw OpenAIClientError.invalidResponse
+            }
+
+            buckets.append(contentsOf: pageBuckets)
+            pageCount += 1
+
+            let hasMore = object["has_more"] as? Bool ?? false
+            nextPage = hasMore ? object["next_page"] as? String : nil
+
+            if nextPage != nil && pageCount >= Self.maxAdminPaginationPages {
+                throw OpenAIClientError.invalidResponse
+            }
+        } while nextPage != nil
+
+        let mergedObject: [String: Any] = [
+            "object": "page",
+            "data": buckets,
+            "has_more": false,
+            "study_mate_page_count": pageCount
+        ]
+        return try JSONSerialization.data(withJSONObject: mergedObject)
+    }
+
+    nonisolated private static func appendCostScopeQueryItems(
+        to queryItems: inout [URLQueryItem],
+        projectID: String?,
+        apiKeyID: String?
+    ) {
+        if let projectID = sanitizedScopeValue(projectID) {
+            queryItems.append(URLQueryItem(name: "project_ids", value: projectID))
+            queryItems.append(URLQueryItem(name: "group_by", value: "project_id"))
+        }
+
+        if let apiKeyID = sanitizedScopeValue(apiKeyID) {
+            queryItems.append(URLQueryItem(name: "api_key_ids", value: apiKeyID))
+            queryItems.append(URLQueryItem(name: "group_by", value: "api_key_id"))
+        }
+    }
+
+    nonisolated private static func appendUsageScopeQueryItems(
+        to queryItems: inout [URLQueryItem],
+        projectID: String?,
+        apiKeyID: String?
+    ) {
+        if let projectID = sanitizedScopeValue(projectID) {
+            queryItems.append(URLQueryItem(name: "project_ids", value: projectID))
+            queryItems.append(URLQueryItem(name: "group_by", value: "project_id"))
+        }
+
+        if let apiKeyID = sanitizedScopeValue(apiKeyID) {
+            queryItems.append(URLQueryItem(name: "api_key_ids", value: apiKeyID))
+            queryItems.append(URLQueryItem(name: "group_by", value: "api_key_id"))
+        }
+    }
+
+    nonisolated private static func shouldIncludeUsageResult(
+        _ result: [String: Any],
+        projectID: String?,
+        apiKeyID: String?
+    ) -> Bool {
+        if let projectID = sanitizedScopeValue(projectID),
+           result["project_id"] as? String != projectID {
+            return false
+        }
+
+        if let apiKeyID = sanitizedScopeValue(apiKeyID),
+           result["api_key_id"] as? String != apiKeyID {
+            return false
+        }
+
+        return true
+    }
+
+    nonisolated private static func sanitizedScopeValue(_ value: String?) -> String? {
+        guard let value else {
+            return nil
+        }
+
+        let trimmedValue = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmedValue.isEmpty ? nil : trimmedValue
+    }
+
+    nonisolated private static func intValue(_ value: Any?, fallback: Int = 0) -> Int {
+        if let intValue = value as? Int {
+            return intValue
+        }
+
+        if let doubleValue = value as? Double {
+            return Int(doubleValue)
+        }
+
+        if let numberValue = value as? NSNumber {
+            return numberValue.intValue
+        }
+
+        return fallback
+    }
+
+    nonisolated private static func doubleValue(_ value: Any?, fallback: Double = 0) -> Double {
+        if let doubleValue = value as? Double {
+            return doubleValue
+        }
+
+        if let intValue = value as? Int {
+            return Double(intValue)
+        }
+
+        if let numberValue = value as? NSNumber {
+            return numberValue.doubleValue
+        }
+
+        return fallback
+    }
+
     private func sendStructuredRequest(
         apiKey: String,
         model: String,
@@ -277,8 +659,9 @@ final class OpenAIClient: OpenAIClientProtocol {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(trimmedAPIKey)", forHTTPHeaderField: "Authorization")
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        lastUsage = nil
 
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await loadData(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
             throw OpenAIClientError.invalidResponse
         }
@@ -292,6 +675,7 @@ final class OpenAIClient: OpenAIClientProtocol {
             throw OpenAIClientError.missingOutputText
         }
 
+        lastUsage = Self.extractUsage(from: data)
         return StructuredResponseOutput(
             text: text,
             responseID: Self.extractResponseID(from: data)
@@ -344,6 +728,14 @@ final class OpenAIClient: OpenAIClientProtocol {
         }
 
         return decoded
+    }
+
+    private func loadData(for request: URLRequest) async throws -> (Data, URLResponse) {
+        if let requestDataLoader {
+            return try await requestDataLoader(request)
+        }
+
+        return try await session.data(for: request)
     }
 }
 

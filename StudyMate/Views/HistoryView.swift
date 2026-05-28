@@ -3,35 +3,31 @@ import SwiftUI
 struct HistoryView: View {
     @EnvironmentObject private var appState: AppState
     @State private var selectedRecordID: String?
-    @State private var openSwipeRecordID: String?
     @State private var searchText = ""
-    @State private var filter: HistoryRecordFilter = .all
     @State private var page = 0
 
     private let pageSize = 10
 
     private var orderedRecords: [StudyRecord] {
-        Array(appState.studyRecords.reversed())
-    }
+        appState.studyRecords.sorted { lhs, rhs in
+            let lhsIsUngraded = lhs.gradingResult == nil
+            let rhsIsUngraded = rhs.gradingResult == nil
 
-    private var filteredByStatusRecords: [StudyRecord] {
-        switch filter {
-        case .all:
-            orderedRecords
-        case .graded:
-            orderedRecords.filter { $0.gradingResult != nil }
-        case .ungraded:
-            orderedRecords.filter { $0.gradingResult == nil }
+            if lhsIsUngraded != rhsIsUngraded {
+                return lhsIsUngraded
+            }
+
+            return sortDate(for: lhs) > sortDate(for: rhs)
         }
     }
 
     private var filteredRecords: [StudyRecord] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !query.isEmpty else {
-            return filteredByStatusRecords
+            return orderedRecords
         }
 
-        return filteredByStatusRecords.filter { record in
+        return orderedRecords.filter { record in
             record.question.question.lowercased().contains(query) ||
                 record.topic.lowercased().contains(query) ||
                 (record.answer ?? "").lowercased().contains(query) ||
@@ -39,24 +35,32 @@ struct HistoryView: View {
         }
     }
 
-    private var pageCount: Int {
-        max(Int(ceil(Double(filteredRecords.count) / Double(pageSize))), 1)
+    private func pageCount(for recordCount: Int) -> Int {
+        max(Int(ceil(Double(recordCount) / Double(pageSize))), 1)
     }
 
-    private var visibleRecords: [StudyRecord] {
+    private func visibleRecords(from records: [StudyRecord], page: Int, pageCount: Int) -> [StudyRecord] {
         let clampedPage = min(max(page, 0), pageCount - 1)
         let start = clampedPage * pageSize
-        let end = min(start + pageSize, filteredRecords.count)
+        let end = min(start + pageSize, records.count)
 
         guard start < end else {
             return []
         }
 
-        return Array(filteredRecords[start..<end])
+        return Array(records[start..<end])
     }
 
     var body: some View {
         let strings = appState.strings
+        let displayedRecords = filteredRecords
+        let displayedPageCount = pageCount(for: displayedRecords.count)
+        let displayedPage = min(max(page, 0), displayedPageCount - 1)
+        let displayedVisibleRecords = visibleRecords(
+            from: displayedRecords,
+            page: displayedPage,
+            pageCount: displayedPageCount
+        )
 
         VStack(alignment: .leading, spacing: 12) {
             HStack {
@@ -66,7 +70,7 @@ struct HistoryView: View {
                 Spacer()
 
                 if !appState.studyRecords.isEmpty {
-                    Text(strings.filteredRecordCount(filteredRecords.count, total: appState.studyRecords.count))
+                    Text(strings.filteredRecordCount(displayedRecords.count, total: appState.studyRecords.count))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -80,17 +84,10 @@ struct HistoryView: View {
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                Picker("", selection: $filter) {
-                    ForEach(HistoryRecordFilter.allCases) { filter in
-                        Text(filter.title(strings: strings)).tag(filter)
-                    }
-                }
-                .pickerStyle(.segmented)
-
                 TextField(strings.searchRecords, text: $searchText)
                     .textFieldStyle(.roundedBorder)
 
-                if filteredRecords.isEmpty {
+                if displayedRecords.isEmpty {
                     ContentUnavailableView(
                         strings.noSearchResults,
                         systemImage: "magnifyingglass",
@@ -98,47 +95,40 @@ struct HistoryView: View {
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                    ScrollView {
-                        LazyVStack(alignment: .leading, spacing: 10) {
-                            ForEach(visibleRecords) { record in
-                                VStack(alignment: .leading, spacing: 8) {
-                                    SwipeToDeleteHistoryRow(
-                                        id: record.id,
-                                        strings: strings,
-                                        openRowID: $openSwipeRecordID,
-                                        onDelete: {
-                                            delete(record)
-                                        },
-                                        onSelect: {
-                                            if let openSwipeRecordID, openSwipeRecordID != record.id {
-                                                self.openSwipeRecordID = nil
-                                            } else {
-                                                selectedRecordID = selectedRecordID == record.id ? nil : record.id
-                                            }
-                                        }
-                                    ) {
+                    List {
+                        ForEach(displayedVisibleRecords) { record in
+                            VStack(alignment: .leading, spacing: 8) {
+                                Button {
+                                    selectedRecordID = selectedRecordID == record.id ? nil : record.id
+                                } label: {
                                         HistoryRow(record: record, strings: strings, isSelected: selectedRecordID == record.id)
-                                    }
+                                }
+                                .buttonStyle(.plain)
 
-                                    if selectedRecordID == record.id {
-                                        InlineStudyRecordDetail(record: record) {
-                                            selectedRecordID = nil
-                                        }
-                                        .transition(.opacity.combined(with: .move(edge: .top)))
+                                if selectedRecordID == record.id {
+                                    InlineStudyRecordDetail(record: record) {
+                                        selectedRecordID = nil
                                     }
+                                    .transition(.opacity.combined(with: .move(edge: .top)))
+                                }
+                            }
+                            .listRowInsets(EdgeInsets(top: 5, leading: 0, bottom: 5, trailing: 8))
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(Color.clear)
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                Button(role: .destructive) {
+                                    delete(record)
+                                } label: {
+                                    Label(strings.clear, systemImage: "trash")
                                 }
                             }
                         }
-                        .padding(.trailing, 8)
-                        .padding(.bottom, 18)
                     }
+                    .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
                     .frame(maxHeight: .infinity)
-                    .background {
-                        Color.clear
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                closeOpenSwipeRow()
-                            }
+                    .refreshable {
+                        await appState.refreshVisibleData()
                     }
 
                     Divider()
@@ -149,36 +139,36 @@ struct HistoryView: View {
                         } label: {
                             Image(systemName: "backward.end.fill")
                         }
-                        .disabled(page == 0)
+                        .disabled(displayedPage == 0)
 
                         Button {
                             page = max(page - 1, 0)
                         } label: {
                             Image(systemName: "chevron.left")
                         }
-                        .disabled(page == 0)
+                        .disabled(displayedPage == 0)
 
                         Spacer()
 
-                        Text("\(min(page + 1, pageCount)) / \(pageCount)")
+                        Text("\(displayedPage + 1) / \(displayedPageCount)")
                             .font(.caption)
                             .foregroundStyle(.secondary)
 
                         Spacer()
 
                         Button {
-                            page = min(page + 1, pageCount - 1)
+                            page = min(page + 1, displayedPageCount - 1)
                         } label: {
                             Image(systemName: "chevron.right")
                         }
-                        .disabled(page >= pageCount - 1)
+                        .disabled(displayedPage >= displayedPageCount - 1)
 
                         Button {
-                            page = pageCount - 1
+                            page = displayedPageCount - 1
                         } label: {
                             Image(systemName: "forward.end.fill")
                         }
-                        .disabled(page >= pageCount - 1)
+                        .disabled(displayedPage >= displayedPageCount - 1)
                     }
                     .buttonStyle(.borderless)
                     .padding(.bottom, 6)
@@ -193,12 +183,6 @@ struct HistoryView: View {
         .onChange(of: searchText) {
             page = 0
             selectedRecordID = nil
-            openSwipeRecordID = nil
-        }
-        .onChange(of: filter) {
-            page = 0
-            selectedRecordID = nil
-            openSwipeRecordID = nil
         }
         .onChange(of: appState.focusedRecordRequest) {
             showFocusedRecord()
@@ -209,7 +193,11 @@ struct HistoryView: View {
     }
 
     private func clampPage() {
-        page = min(max(page, 0), pageCount - 1)
+        page = min(max(page, 0), pageCount(for: filteredRecords.count) - 1)
+    }
+
+    private func sortDate(for record: StudyRecord) -> Date {
+        record.answeredAt ?? record.question.createdAt
     }
 
     private func showFocusedRecord() {
@@ -229,197 +217,6 @@ struct HistoryView: View {
         if selectedRecordID == record.id {
             selectedRecordID = nil
         }
-        openSwipeRecordID = nil
-    }
-
-    private func closeOpenSwipeRow() {
-        guard openSwipeRecordID != nil else {
-            return
-        }
-
-        withAnimation(.snappy) {
-            openSwipeRecordID = nil
-        }
-    }
-}
-
-private enum HistoryRecordFilter: String, CaseIterable, Identifiable {
-    case all
-    case graded
-    case ungraded
-
-    var id: String { rawValue }
-
-    func title(strings: AppStrings) -> String {
-        switch self {
-        case .all:
-            strings.recordFilterAll
-        case .graded:
-            strings.recordFilterGraded
-        case .ungraded:
-            strings.recordFilterUngraded
-        }
-    }
-}
-
-private struct SwipeToDeleteHistoryRow<Content: View>: View {
-    var id: String
-    var strings: AppStrings
-    @Binding var openRowID: String?
-    var onDelete: () -> Void
-    var onSelect: () -> Void
-    var content: () -> Content
-
-    @State private var rowOffset: CGFloat = 0
-    @State private var dragStartOffset: CGFloat?
-
-    init(
-        id: String,
-        strings: AppStrings,
-        openRowID: Binding<String?>,
-        onDelete: @escaping () -> Void,
-        onSelect: @escaping () -> Void,
-        @ViewBuilder content: @escaping () -> Content
-    ) {
-        self.id = id
-        self.strings = strings
-        _openRowID = openRowID
-        self.onDelete = onDelete
-        self.onSelect = onSelect
-        self.content = content
-    }
-
-    private let actionWidth: CGFloat = 88
-
-    private var effectiveOffset: CGFloat {
-        min(0, max(-actionWidth, rowOffset))
-    }
-
-    var body: some View {
-        ZStack(alignment: .trailing) {
-            Button(role: .destructive) {
-                withAnimation(.snappy) {
-                    rowOffset = 0
-                    openRowID = nil
-                }
-                onDelete()
-            } label: {
-                VStack(spacing: 4) {
-                    Image(systemName: "trash")
-                    Text(strings.clear)
-                        .font(.caption2)
-                }
-                .frame(width: actionWidth)
-                .frame(maxHeight: .infinity)
-                .foregroundStyle(.white)
-                .background(Color.red)
-                .clipShape(TrailingRoundedRectangle(radius: 8))
-            }
-            .buttonStyle(.plain)
-            .offset(x: actionWidth + effectiveOffset)
-            .allowsHitTesting(rowOffset <= -actionWidth * 0.95)
-            .zIndex(3)
-
-            content()
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .offset(x: effectiveOffset)
-                .contentShape(Rectangle())
-                .allowsHitTesting(rowOffset == 0)
-                .onTapGesture {
-                    if rowOffset < 0 {
-                        withAnimation(.snappy) {
-                            rowOffset = 0
-                        }
-                    } else {
-                        onSelect()
-                    }
-                }
-                .simultaneousGesture(
-                    DragGesture(minimumDistance: 12)
-                        .onChanged { value in
-                            guard abs(value.translation.width) > abs(value.translation.height) else {
-                                return
-                            }
-
-                            if dragStartOffset == nil {
-                                openRowID = id
-                                dragStartOffset = rowOffset
-                            }
-
-                            let startOffset = dragStartOffset ?? 0
-                            rowOffset = min(0, max(-actionWidth, startOffset + value.translation.width))
-                        }
-                        .onEnded { value in
-                            defer {
-                                dragStartOffset = nil
-                            }
-
-                            guard abs(value.translation.width) > abs(value.translation.height) else {
-                                return
-                            }
-
-                            let targetOffset = rowOffset < -actionWidth * 0.45 ? -actionWidth : 0
-                            withAnimation(.snappy) {
-                                rowOffset = targetOffset
-                                openRowID = targetOffset == 0 ? nil : id
-                            }
-                        }
-                )
-                .zIndex(1)
-
-            if rowOffset < 0 {
-                HStack(spacing: 0) {
-                    Color.clear
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            withAnimation(.snappy) {
-                                rowOffset = 0
-                                openRowID = nil
-                            }
-                        }
-
-                    Color.clear
-                        .frame(width: actionWidth)
-                        .allowsHitTesting(false)
-                }
-                .zIndex(2)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .clipped()
-        .onChange(of: openRowID) {
-            guard openRowID != id, rowOffset != 0 else {
-                return
-            }
-
-            withAnimation(.snappy) {
-                rowOffset = 0
-            }
-        }
-    }
-}
-
-private struct TrailingRoundedRectangle: Shape {
-    var radius: CGFloat
-
-    func path(in rect: CGRect) -> Path {
-        let radius = min(radius, rect.width / 2, rect.height / 2)
-
-        var path = Path()
-        path.move(to: CGPoint(x: rect.minX, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.maxX - radius, y: rect.minY))
-        path.addQuadCurve(
-            to: CGPoint(x: rect.maxX, y: rect.minY + radius),
-            control: CGPoint(x: rect.maxX, y: rect.minY)
-        )
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - radius))
-        path.addQuadCurve(
-            to: CGPoint(x: rect.maxX - radius, y: rect.maxY),
-            control: CGPoint(x: rect.maxX, y: rect.maxY)
-        )
-        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
-        path.closeSubpath()
-        return path
     }
 }
 
@@ -517,11 +314,11 @@ private struct InlineStudyRecordDetail: View {
         .padding(12)
         .background {
             RoundedRectangle(cornerRadius: 8)
-                .fill(Color(nsColor: .controlBackgroundColor))
+                .fill(Color.platformControlBackground)
         }
         .overlay(alignment: .topLeading) {
             Triangle()
-                .fill(Color(nsColor: .controlBackgroundColor))
+                .fill(Color.platformControlBackground)
                 .frame(width: 14, height: 8)
                 .offset(x: 22, y: -7)
         }
@@ -529,6 +326,16 @@ private struct InlineStudyRecordDetail: View {
             RoundedRectangle(cornerRadius: 8)
                 .stroke(Color.secondary.opacity(0.18), lineWidth: 1)
         }
+    }
+}
+
+private extension Color {
+    static var platformControlBackground: Color {
+        #if os(macOS)
+        Color(nsColor: .controlBackgroundColor)
+        #else
+        Color(uiColor: .secondarySystemBackground)
+        #endif
     }
 }
 
