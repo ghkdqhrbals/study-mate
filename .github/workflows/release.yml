@@ -166,7 +166,8 @@ jobs:
             echo "RELEASE_CLOUDKIT_ENABLED=true" >> "${GITHUB_ENV}"
           else
             echo "RELEASE_CLOUDKIT_ENABLED=false" >> "${GITHUB_ENV}"
-            echo "Warning: provisioning profile does not include CloudKit. Release will be openable, but iCloud sync is unavailable in this build." >&2
+            echo "Provisioning profile does not include CloudKit. Refusing to publish a release without iCloud sync entitlement." >&2
+            exit 1
           fi
 
           mkdir -p "${PROFILE_DIR}"
@@ -294,25 +295,12 @@ jobs:
           test -d "${APP_PATH}"
 
           if [ "${SIGNING_ENABLED}" = "true" ]; then
-            if [ ! -f "${APP_PATH}/Contents/embedded.provisionprofile" ]; then
-              echo "No embedded provisioning profile found. Continuing with codesign and entitlement verification."
-            fi
-            if [ "${RELEASE_CLOUDKIT_ENABLED:-false}" = "true" ]; then
-              codesign --force \
-                --options runtime \
-                --entitlements StudyMate/StudyMate.entitlements \
-                --sign "Developer ID Application" \
-                --timestamp \
-                "${APP_PATH}"
-            else
-              codesign --force \
-                --options runtime \
-                --sign "Developer ID Application" \
-                --timestamp \
-                "${APP_PATH}"
+            if [ "${RELEASE_CLOUDKIT_ENABLED:-false}" = "true" ] && [ ! -f "${APP_PATH}/Contents/embedded.provisionprofile" ]; then
+              echo "No embedded provisioning profile found. Refusing to publish a CloudKit release without a provisioning profile." >&2
+              exit 1
             fi
             codesign --verify --deep --strict --verbose=2 "${APP_PATH}"
-            codesign -d --entitlements :- "${APP_PATH}" | tee "${RUNNER_TEMP}/app-entitlements.plist"
+            codesign -d --entitlements - "${APP_PATH}" | tee "${RUNNER_TEMP}/app-entitlements.plist"
             if [ "${RELEASE_CLOUDKIT_ENABLED:-false}" = "true" ]; then
               grep -q "iCloud.io.github.ghkdqhrbals.StudyMate" "${RUNNER_TEMP}/app-entitlements.plist"
               grep -q "com.apple.developer.icloud-services" "${RUNNER_TEMP}/app-entitlements.plist"
