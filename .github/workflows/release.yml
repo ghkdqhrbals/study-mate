@@ -136,10 +136,40 @@ jobs:
               SKIP_INSTALL=NO \
               CODE_SIGN_STYLE=Automatic \
               DEVELOPMENT_TEAM="${APPLE_TEAM_ID}" \
-              CODE_SIGN_IDENTITY="Developer ID Application" \
               CODE_SIGNING_ALLOWED=YES \
-              ENABLE_HARDENED_RUNTIME=YES \
-              OTHER_CODE_SIGN_FLAGS="--timestamp"
+              ENABLE_HARDENED_RUNTIME=YES
+
+            cat > build/export-options.plist <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>destination</key>
+            <string>export</string>
+            <key>method</key>
+            <string>developer-id</string>
+            <key>signingCertificate</key>
+            <string>Developer ID Application</string>
+            <key>signingStyle</key>
+            <string>automatic</string>
+            <key>stripSwiftSymbols</key>
+            <true/>
+            <key>teamID</key>
+            <string>${APPLE_TEAM_ID}</string>
+            <key>iCloudContainerEnvironment</key>
+            <string>Production</string>
+          </dict>
+          </plist>
+          PLIST
+
+            xcodebuild -exportArchive \
+              -archivePath build/StudyMate.xcarchive \
+              -exportPath build/export \
+              -exportOptionsPlist build/export-options.plist \
+              -allowProvisioningUpdates \
+              -authenticationKeyPath "${APPSTORE_CONNECT_PRIVATE_KEY_PATH}" \
+              -authenticationKeyID "${APPSTORE_CONNECT_KEY_ID}" \
+              -authenticationKeyIssuerID "${APPSTORE_CONNECT_ISSUER_ID}"
           else
             xcodebuild archive \
               -project StudyMate.xcodeproj \
@@ -162,25 +192,22 @@ jobs:
             VERSION="manual-${GITHUB_RUN_NUMBER}"
           fi
 
-          APP_PATH="build/StudyMate.xcarchive/Products/Applications/StudyMate.app"
-          ENTITLEMENTS_PATH="StudyMate/StudyMate.entitlements"
+          if [ "${SIGNING_ENABLED}" = "true" ]; then
+            APP_PATH="build/export/StudyMate.app"
+          else
+            APP_PATH="build/StudyMate.xcarchive/Products/Applications/StudyMate.app"
+          fi
           DMG_ROOT="build/dmg-root"
           DMG_PATH="dist/StudyMate-${VERSION}.dmg"
 
           test -d "${APP_PATH}"
 
           if [ "${SIGNING_ENABLED}" = "true" ]; then
-            codesign --force \
-              --deep \
-              --options runtime \
-              --entitlements "${ENTITLEMENTS_PATH}" \
-              --sign "Developer ID Application" \
-              --timestamp \
-              "${APP_PATH}"
             codesign --verify --deep --strict --verbose=2 "${APP_PATH}"
             codesign -d --entitlements :- "${APP_PATH}" > "${RUNNER_TEMP}/app-entitlements.plist"
             grep -q "iCloud.io.github.ghkdqhrbals.StudyMate" "${RUNNER_TEMP}/app-entitlements.plist"
             grep -q "com.apple.developer.icloud-services" "${RUNNER_TEMP}/app-entitlements.plist"
+            test -f "${APP_PATH}/Contents/embedded.provisionprofile"
           fi
 
           rm -rf "${DMG_ROOT}" dist
@@ -268,7 +295,7 @@ jobs:
           set -euo pipefail
 
           VERSION="${GITHUB_REF_NAME#v}"
-          APP_PATH="build/StudyMate.xcarchive/Products/Applications/StudyMate.app"
+          APP_PATH="build/export/StudyMate.app"
           DMG_PATH="dist/StudyMate-${VERSION}.dmg"
           BUILD_NUMBER="$(/usr/libexec/PlistBuddy -c 'Print CFBundleVersion' "${APP_PATH}/Contents/Info.plist")"
           DMG_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/StudyMate-${VERSION}.dmg"
