@@ -61,14 +61,13 @@ def find_bundle_id(token)
     token,
     query: {
       "filter[identifier]" => BUNDLE_IDENTIFIER,
-      "filter[platform]" => "MAC_OS",
       "limit" => "200"
     }
   )
 
   response.fetch("data").find do |item|
     attributes = item.fetch("attributes")
-    attributes["identifier"] == BUNDLE_IDENTIFIER && attributes["platform"] == "MAC_OS"
+    attributes["identifier"] == BUNDLE_IDENTIFIER
   end
 end
 
