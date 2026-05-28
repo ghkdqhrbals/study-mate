@@ -18,6 +18,7 @@ jobs:
     env:
       CERTIFICATE_P12_BASE64: ${{ secrets.DEVELOPER_ID_CERTIFICATE_P12_BASE64 }}
       CERTIFICATE_PASSWORD: ${{ secrets.DEVELOPER_ID_CERTIFICATE_PASSWORD }}
+      DEVELOPER_ID_PROVISIONING_PROFILE_BASE64: ${{ secrets.DEVELOPER_ID_PROVISIONING_PROFILE_BASE64 }}
       APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
       APPSTORE_CONNECT_KEY_ID: ${{ secrets.APPSTORE_CONNECT_KEY_ID }}
       APPSTORE_CONNECT_ISSUER_ID: ${{ secrets.APPSTORE_CONNECT_ISSUER_ID }}
@@ -61,6 +62,11 @@ jobs:
 
           echo "SIGNING_ENABLED=true" >> "${GITHUB_ENV}"
           echo "NOTARIZATION_ENABLED=true" >> "${GITHUB_ENV}"
+          if [ -n "${DEVELOPER_ID_PROVISIONING_PROFILE_BASE64}" ]; then
+            echo "USE_DEVELOPER_ID_PROFILE=true" >> "${GITHUB_ENV}"
+          else
+            echo "USE_DEVELOPER_ID_PROFILE=false" >> "${GITHUB_ENV}"
+          fi
 
       - name: Install Developer ID certificate
         run: |
@@ -108,6 +114,49 @@ jobs:
           chmod 600 "${PRIVATE_KEY_PATH}"
           echo "APPSTORE_CONNECT_PRIVATE_KEY_PATH=${PRIVATE_KEY_PATH}" >> "${GITHUB_ENV}"
 
+      - name: Install Developer ID provisioning profile
+        run: |
+          set -euo pipefail
+
+          if [ "${SIGNING_ENABLED}" != "true" ] || [ "${USE_DEVELOPER_ID_PROFILE}" != "true" ]; then
+            echo "Skipping provisioning profile install. Xcode will use automatic signing."
+            exit 0
+          fi
+
+          PROFILE_PATH="${RUNNER_TEMP}/studymate.provisionprofile"
+          PROFILE_PLIST="${RUNNER_TEMP}/studymate-profile.plist"
+          PROFILE_DIR="${HOME}/Library/MobileDevice/Provisioning Profiles"
+
+          printf '%s' "${DEVELOPER_ID_PROVISIONING_PROFILE_BASE64}" | base64 --decode > "${PROFILE_PATH}"
+          security cms -D -i "${PROFILE_PATH}" > "${PROFILE_PLIST}"
+
+          PROFILE_UUID="$(/usr/libexec/PlistBuddy -c 'Print UUID' "${PROFILE_PLIST}")"
+          PROFILE_NAME="$(/usr/libexec/PlistBuddy -c 'Print Name' "${PROFILE_PLIST}")"
+          PROFILE_TEAM_ID="$(/usr/libexec/PlistBuddy -c 'Print TeamIdentifier:0' "${PROFILE_PLIST}")"
+          PROFILE_APP_ID="$(/usr/libexec/PlistBuddy -c 'Print Entitlements:application-identifier' "${PROFILE_PLIST}")"
+          PROFILE_ICLOUD_SERVICE="$(/usr/libexec/PlistBuddy -c 'Print Entitlements:com.apple.developer.icloud-services:0' "${PROFILE_PLIST}" 2>/dev/null || true)"
+
+          if [ "${PROFILE_TEAM_ID}" != "${APPLE_TEAM_ID}" ]; then
+            echo "Provisioning profile team ${PROFILE_TEAM_ID} does not match APPLE_TEAM_ID ${APPLE_TEAM_ID}." >&2
+            exit 1
+          fi
+
+          if [ "${PROFILE_APP_ID}" != "${APPLE_TEAM_ID}.io.github.ghkdqhrbals.StudyMate" ]; then
+            echo "Provisioning profile app id must be ${APPLE_TEAM_ID}.io.github.ghkdqhrbals.StudyMate, got ${PROFILE_APP_ID}." >&2
+            exit 1
+          fi
+
+          if [ "${PROFILE_ICLOUD_SERVICE}" != "CloudKit" ]; then
+            echo "Provisioning profile must include the iCloud CloudKit entitlement." >&2
+            exit 1
+          fi
+
+          mkdir -p "${PROFILE_DIR}"
+          cp "${PROFILE_PATH}" "${PROFILE_DIR}/${PROFILE_UUID}.provisionprofile"
+
+          echo "DEVELOPER_ID_PROFILE_UUID=${PROFILE_UUID}" >> "${GITHUB_ENV}"
+          echo "Installed Developer ID provisioning profile: ${PROFILE_NAME} (${PROFILE_UUID})"
+
       - name: Run tests
         run: |
           xcodebuild test \
@@ -133,7 +182,36 @@ jobs:
               CODE_SIGNING_ALLOWED=NO \
               CODE_SIGN_IDENTITY=""
 
-            cat > build/export-options.plist <<PLIST
+            if [ "${USE_DEVELOPER_ID_PROFILE}" = "true" ]; then
+              cat > build/export-options.plist <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>destination</key>
+            <string>export</string>
+            <key>method</key>
+            <string>developer-id</string>
+            <key>signingCertificate</key>
+            <string>Developer ID Application</string>
+            <key>signingStyle</key>
+            <string>manual</string>
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>io.github.ghkdqhrbals.StudyMate</key>
+              <string>${DEVELOPER_ID_PROFILE_UUID}</string>
+            </dict>
+            <key>stripSwiftSymbols</key>
+            <true/>
+            <key>teamID</key>
+            <string>${APPLE_TEAM_ID}</string>
+            <key>iCloudContainerEnvironment</key>
+            <string>Production</string>
+          </dict>
+          </plist>
+          PLIST
+            else
+              cat > build/export-options.plist <<PLIST
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
@@ -155,6 +233,7 @@ jobs:
           </dict>
           </plist>
           PLIST
+            fi
 
             xcodebuild -exportArchive \
               -archivePath build/StudyMate.xcarchive \
@@ -197,12 +276,7 @@ jobs:
           test -d "${APP_PATH}"
 
           if [ "${SIGNING_ENABLED}" = "true" ]; then
-            codesign --force \
-              --options runtime \
-              --entitlements StudyMate/StudyMate.entitlements \
-              --sign "Developer ID Application" \
-              --timestamp \
-              "${APP_PATH}"
+            test -f "${APP_PATH}/Contents/embedded.provisionprofile"
             codesign --verify --deep --strict --verbose=2 "${APP_PATH}"
             codesign -d --entitlements :- "${APP_PATH}" | tee "${RUNNER_TEMP}/app-entitlements.plist"
             grep -q "iCloud.io.github.ghkdqhrbals.StudyMate" "${RUNNER_TEMP}/app-entitlements.plist"
@@ -221,14 +295,6 @@ jobs:
             -ov \
             -format UDZO \
             "${DMG_PATH}"
-
-          if [ "${SIGNING_ENABLED}" = "true" ]; then
-            codesign --force \
-              --sign "Developer ID Application" \
-              --timestamp \
-              "${DMG_PATH}"
-            codesign --verify --verbose=2 "${DMG_PATH}"
-          fi
 
       - name: Notarize DMG
         run: |
