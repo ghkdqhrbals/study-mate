@@ -197,8 +197,14 @@ jobs:
           test -d "${APP_PATH}"
 
           if [ "${SIGNING_ENABLED}" = "true" ]; then
+            codesign --force \
+              --options runtime \
+              --entitlements StudyMate/StudyMate.entitlements \
+              --sign "Developer ID Application" \
+              --timestamp \
+              "${APP_PATH}"
             codesign --verify --deep --strict --verbose=2 "${APP_PATH}"
-            codesign -d --entitlements :- "${APP_PATH}" > "${RUNNER_TEMP}/app-entitlements.plist"
+            codesign -d --entitlements :- "${APP_PATH}" | tee "${RUNNER_TEMP}/app-entitlements.plist"
             grep -q "iCloud.io.github.ghkdqhrbals.StudyMate" "${RUNNER_TEMP}/app-entitlements.plist"
             grep -q "com.apple.developer.icloud-services" "${RUNNER_TEMP}/app-entitlements.plist"
             test -f "${APP_PATH}/Contents/embedded.provisionprofile"
