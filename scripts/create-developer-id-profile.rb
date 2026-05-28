@@ -74,7 +74,7 @@ bundle_response = api_request(
 bundle_id = bundle_response.fetch("data").first&.fetch("id")
 abort "Bundle ID not found in App Store Connect: #{BUNDLE_IDENTIFIER}" unless bundle_id
 
-certificate_types = %w[DEVELOPER_ID_APPLICATION DEVELOPER_ID_APPLICATION_G2]
+certificate_types = %w[DEVELOPER_ID_APPLICATION]
 certificates = certificate_types.flat_map do |certificate_type|
   api_request(
     :get,
