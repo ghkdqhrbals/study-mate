@@ -146,7 +146,11 @@ jobs:
           PROFILE_NAME="$(/usr/libexec/PlistBuddy -c 'Print Name' "${PROFILE_PLIST}")"
           PROFILE_TEAM_ID="$(/usr/libexec/PlistBuddy -c 'Print TeamIdentifier:0' "${PROFILE_PLIST}")"
           PROFILE_APP_ID="$(/usr/libexec/PlistBuddy -c 'Print Entitlements:application-identifier' "${PROFILE_PLIST}" 2>/dev/null || /usr/libexec/PlistBuddy -c 'Print Entitlements:com.apple.application-identifier' "${PROFILE_PLIST}" 2>/dev/null || true)"
-          PROFILE_ICLOUD_SERVICE="$(/usr/libexec/PlistBuddy -c 'Print Entitlements:com.apple.developer.icloud-services:0' "${PROFILE_PLIST}" 2>/dev/null || true)"
+          PROFILE_ICLOUD_SERVICE="$(
+            /usr/libexec/PlistBuddy -c 'Print Entitlements:com.apple.developer.icloud-services:0' "${PROFILE_PLIST}" 2>/dev/null ||
+            /usr/libexec/PlistBuddy -c 'Print Entitlements:com.apple.developer.icloud-services' "${PROFILE_PLIST}" 2>/dev/null ||
+            true
+          )"
 
           if [ "${PROFILE_TEAM_ID}" != "${APPLE_TEAM_ID}" ]; then
             echo "Provisioning profile team ${PROFILE_TEAM_ID} does not match APPLE_TEAM_ID ${APPLE_TEAM_ID}." >&2
@@ -158,7 +162,7 @@ jobs:
             exit 1
           fi
 
-          if [ "${PROFILE_ICLOUD_SERVICE}" = "CloudKit" ]; then
+          if [ "${PROFILE_ICLOUD_SERVICE}" = "CloudKit" ] || [ "${PROFILE_ICLOUD_SERVICE}" = "*" ]; then
             echo "RELEASE_CLOUDKIT_ENABLED=true" >> "${GITHUB_ENV}"
           else
             echo "RELEASE_CLOUDKIT_ENABLED=false" >> "${GITHUB_ENV}"
