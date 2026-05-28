@@ -94,8 +94,7 @@ def ensure_icloud_capability(token, bundle_id)
   capabilities = api_request(
     :get,
     "/v1/bundleIds/#{bundle_id}/bundleIdCapabilities",
-    token,
-    query: { "limit" => "200" }
+    token
   ).fetch("data")
 
   return if capabilities.any? { |item| item.fetch("attributes")["capabilityType"] == "ICLOUD" }
