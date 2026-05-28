@@ -63,10 +63,11 @@ jobs:
           echo "SIGNING_ENABLED=true" >> "${GITHUB_ENV}"
           echo "NOTARIZATION_ENABLED=true" >> "${GITHUB_ENV}"
           if [ -n "${DEVELOPER_ID_PROVISIONING_PROFILE_BASE64}" ]; then
-            echo "USE_DEVELOPER_ID_PROFILE=true" >> "${GITHUB_ENV}"
+            echo "DEVELOPER_ID_PROFILE_SOURCE=secret" >> "${GITHUB_ENV}"
           else
-            echo "USE_DEVELOPER_ID_PROFILE=false" >> "${GITHUB_ENV}"
+            echo "DEVELOPER_ID_PROFILE_SOURCE=app-store-connect" >> "${GITHUB_ENV}"
           fi
+          echo "USE_DEVELOPER_ID_PROFILE=true" >> "${GITHUB_ENV}"
 
       - name: Install Developer ID certificate
         run: |
@@ -100,6 +101,13 @@ jobs:
             "${KEYCHAIN_PATH}"
           security find-identity -v -p codesigning "${KEYCHAIN_PATH}"
 
+          DEVELOPER_ID_CERTIFICATE_SERIAL="$(security find-certificate -c "Developer ID Application" -p "${KEYCHAIN_PATH}" | openssl x509 -noout -serial | sed 's/^serial=//' | tr '[:lower:]' '[:upper:]')"
+          if [ -z "${DEVELOPER_ID_CERTIFICATE_SERIAL}" ]; then
+            echo "Could not read Developer ID Application certificate serial." >&2
+            exit 1
+          fi
+          echo "DEVELOPER_ID_CERTIFICATE_SERIAL=${DEVELOPER_ID_CERTIFICATE_SERIAL}" >> "${GITHUB_ENV}"
+
       - name: Prepare App Store Connect API key
         run: |
           set -euo pipefail
@@ -127,7 +135,11 @@ jobs:
           PROFILE_PLIST="${RUNNER_TEMP}/studymate-profile.plist"
           PROFILE_DIR="${HOME}/Library/MobileDevice/Provisioning Profiles"
 
-          printf '%s' "${DEVELOPER_ID_PROVISIONING_PROFILE_BASE64}" | base64 --decode > "${PROFILE_PATH}"
+          if [ "${DEVELOPER_ID_PROFILE_SOURCE}" = "secret" ]; then
+            printf '%s' "${DEVELOPER_ID_PROVISIONING_PROFILE_BASE64}" | base64 --decode > "${PROFILE_PATH}"
+          else
+            PROFILE_OUTPUT_PATH="${PROFILE_PATH}" ruby scripts/create-developer-id-profile.rb
+          fi
           security cms -D -i "${PROFILE_PATH}" > "${PROFILE_PLIST}"
 
           PROFILE_UUID="$(/usr/libexec/PlistBuddy -c 'Print UUID' "${PROFILE_PLIST}")"
@@ -179,12 +191,8 @@ jobs:
               -derivedDataPath build/DerivedData \
               -archivePath build/StudyMate.xcarchive \
               SKIP_INSTALL=NO \
-              CODE_SIGN_STYLE=Automatic \
-              DEVELOPMENT_TEAM="${APPLE_TEAM_ID}" \
-              -allowProvisioningUpdates \
-              -authenticationKeyPath "${APPSTORE_CONNECT_PRIVATE_KEY_PATH}" \
-              -authenticationKeyID "${APPSTORE_CONNECT_KEY_ID}" \
-              -authenticationKeyIssuerID "${APPSTORE_CONNECT_ISSUER_ID}"
+              CODE_SIGNING_ALLOWED=NO \
+              CODE_SIGN_IDENTITY=""
 
             if [ "${USE_DEVELOPER_ID_PROFILE}" = "true" ]; then
               cat > build/export-options.plist <<PLIST

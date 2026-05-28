@@ -72,7 +72,7 @@ For trusted public distribution without Gatekeeper warnings, configure these Git
 - `APPSTORE_CONNECT_ISSUER_ID`: App Store Connect issuer ID
 - `APPSTORE_CONNECT_PRIVATE_KEY_BASE64`: base64-encoded App Store Connect API `.p8` private key
 - `SPARKLE_ED_PRIVATE_KEY`: base64 Sparkle EdDSA private key used to sign the appcast update archive
-- `DEVELOPER_ID_PROVISIONING_PROFILE_BASE64` optional: base64-encoded Developer ID provisioning profile for `io.github.ghkdqhrbals.StudyMate` with iCloud/CloudKit enabled. If omitted, the workflow asks Xcode to manage the profile automatically.
+- `DEVELOPER_ID_PROVISIONING_PROFILE_BASE64` optional: base64-encoded Developer ID provisioning profile for `io.github.ghkdqhrbals.StudyMate` with iCloud/CloudKit enabled. If omitted, the workflow creates a `MAC_APP_DIRECT` Developer ID profile through the App Store Connect API.
 
 When Developer ID secrets are present, the workflow signs the app, verifies the embedded iCloud/CloudKit entitlements, notarizes the DMG, staples the notarization ticket, publishes the release, and updates `docs/appcast.xml` for automatic updates.
 
