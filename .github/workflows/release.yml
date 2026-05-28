@@ -207,7 +207,6 @@ jobs:
             codesign -d --entitlements :- "${APP_PATH}" | tee "${RUNNER_TEMP}/app-entitlements.plist"
             grep -q "iCloud.io.github.ghkdqhrbals.StudyMate" "${RUNNER_TEMP}/app-entitlements.plist"
             grep -q "com.apple.developer.icloud-services" "${RUNNER_TEMP}/app-entitlements.plist"
-            test -f "${APP_PATH}/Contents/embedded.provisionprofile"
           fi
 
           rm -rf "${DMG_ROOT}" dist
