@@ -54,6 +54,82 @@ def normalized_serial(value)
   value.to_s.delete(":").upcase
 end
 
+def find_bundle_id(token)
+  response = api_request(
+    :get,
+    "/v1/bundleIds",
+    token,
+    query: {
+      "filter[identifier]" => BUNDLE_IDENTIFIER,
+      "filter[platform]" => "MAC_OS",
+      "limit" => "200"
+    }
+  )
+
+  response.fetch("data").find do |item|
+    attributes = item.fetch("attributes")
+    attributes["identifier"] == BUNDLE_IDENTIFIER && attributes["platform"] == "MAC_OS"
+  end
+end
+
+def create_bundle_id(token)
+  response = api_request(
+    :post,
+    "/v1/bundleIds",
+    token,
+    body: {
+      data: {
+        type: "bundleIds",
+        attributes: {
+          identifier: BUNDLE_IDENTIFIER,
+          name: "StudyMate macOS",
+          platform: "MAC_OS"
+        }
+      }
+    }
+  )
+  response.fetch("data")
+end
+
+def ensure_icloud_capability(token, bundle_id)
+  capabilities = api_request(
+    :get,
+    "/v1/bundleIds/#{bundle_id}/bundleIdCapabilities",
+    token,
+    query: { "limit" => "200" }
+  ).fetch("data")
+
+  return if capabilities.any? { |item| item.fetch("attributes")["capabilityType"] == "ICLOUD" }
+
+  api_request(
+    :post,
+    "/v1/bundleIdCapabilities",
+    token,
+    body: {
+      data: {
+        type: "bundleIdCapabilities",
+        attributes: {
+          capabilityType: "ICLOUD",
+          settings: [
+            {
+              key: "ICLOUD_VERSION",
+              options: [
+                { key: "XCODE_13", enabled: true }
+              ]
+            }
+          ]
+        },
+        relationships: {
+          bundleId: {
+            data: { type: "bundleIds", id: bundle_id }
+          }
+        }
+      }
+    }
+  )
+  sleep 5
+end
+
 key_id = require_env("APPSTORE_CONNECT_KEY_ID")
 issuer_id = require_env("APPSTORE_CONNECT_ISSUER_ID")
 private_key_path = require_env("APPSTORE_CONNECT_PRIVATE_KEY_PATH")
@@ -61,21 +137,13 @@ certificate_serial = normalized_serial(require_env("DEVELOPER_ID_CERTIFICATE_SER
 profile_output_path = require_env("PROFILE_OUTPUT_PATH")
 token = es256_jwt(key_id: key_id, issuer_id: issuer_id, private_key_path: private_key_path)
 
-bundle_response = api_request(
-  :get,
-  "/v1/bundleIds",
-  token,
-  query: {
-    "filter[identifier]" => BUNDLE_IDENTIFIER,
-    "filter[platform]" => "MAC_OS",
-    "limit" => "200"
-  }
-)
-bundle_id = bundle_response.fetch("data").find do |item|
-  attributes = item.fetch("attributes")
-  attributes["identifier"] == BUNDLE_IDENTIFIER && attributes["platform"] == "MAC_OS"
-end&.fetch("id")
-abort "Bundle ID not found in App Store Connect: #{BUNDLE_IDENTIFIER}" unless bundle_id
+bundle = find_bundle_id(token)
+unless bundle
+  bundle = create_bundle_id(token)
+  puts "Created macOS Bundle ID: #{BUNDLE_IDENTIFIER}"
+end
+bundle_id = bundle.fetch("id")
+ensure_icloud_capability(token, bundle_id)
 
 certificate_types = %w[DEVELOPER_ID_APPLICATION]
 certificates = certificate_types.flat_map do |certificate_type|
