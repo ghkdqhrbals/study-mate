@@ -293,6 +293,20 @@ jobs:
             if [ ! -f "${APP_PATH}/Contents/embedded.provisionprofile" ]; then
               echo "No embedded provisioning profile found. Continuing with codesign and entitlement verification."
             fi
+            if [ "${RELEASE_CLOUDKIT_ENABLED:-false}" = "true" ]; then
+              codesign --force \
+                --options runtime \
+                --entitlements StudyMate/StudyMate.entitlements \
+                --sign "Developer ID Application" \
+                --timestamp \
+                "${APP_PATH}"
+            else
+              codesign --force \
+                --options runtime \
+                --sign "Developer ID Application" \
+                --timestamp \
+                "${APP_PATH}"
+            fi
             codesign --verify --deep --strict --verbose=2 "${APP_PATH}"
             codesign -d --entitlements :- "${APP_PATH}" | tee "${RUNNER_TEMP}/app-entitlements.plist"
             if [ "${RELEASE_CLOUDKIT_ENABLED:-false}" = "true" ]; then
