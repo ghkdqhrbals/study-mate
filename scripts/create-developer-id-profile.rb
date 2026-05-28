@@ -15,7 +15,7 @@ ICLOUD_SETTINGS = [
   {
     key: "ICLOUD_VERSION",
     options: [
-      { key: "XCODE_13", enabled: true }
+      { key: "XCODE_6", enabled: true }
     ]
   }
 ].freeze
