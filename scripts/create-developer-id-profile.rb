@@ -68,10 +68,13 @@ bundle_response = api_request(
   query: {
     "filter[identifier]" => BUNDLE_IDENTIFIER,
     "filter[platform]" => "MAC_OS",
-    "limit" => "1"
+    "limit" => "200"
   }
 )
-bundle_id = bundle_response.fetch("data").first&.fetch("id")
+bundle_id = bundle_response.fetch("data").find do |item|
+  attributes = item.fetch("attributes")
+  attributes["identifier"] == BUNDLE_IDENTIFIER && attributes["platform"] == "MAC_OS"
+end&.fetch("id")
 abort "Bundle ID not found in App Store Connect: #{BUNDLE_IDENTIFIER}" unless bundle_id
 
 certificate_types = %w[DEVELOPER_ID_APPLICATION]
