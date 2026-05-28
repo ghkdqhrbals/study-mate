@@ -198,8 +198,10 @@ jobs:
               -derivedDataPath build/DerivedData \
               -archivePath build/StudyMate.xcarchive \
               SKIP_INSTALL=NO \
-              CODE_SIGNING_ALLOWED=NO \
-              CODE_SIGN_IDENTITY=""
+              CODE_SIGN_STYLE=Manual \
+              DEVELOPMENT_TEAM="${APPLE_TEAM_ID}" \
+              PROVISIONING_PROFILE_SPECIFIER="${DEVELOPER_ID_PROFILE_UUID}" \
+              CODE_SIGN_IDENTITY="Developer ID Application"
 
             if [ "${USE_DEVELOPER_ID_PROFILE}" = "true" ]; then
               cat > build/export-options.plist <<PLIST
