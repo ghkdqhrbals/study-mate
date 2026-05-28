@@ -11,6 +11,14 @@ require "uri"
 
 BUNDLE_IDENTIFIER = "io.github.ghkdqhrbals.StudyMate"
 PROFILE_TYPE = "MAC_APP_DIRECT"
+ICLOUD_SETTINGS = [
+  {
+    key: "ICLOUD_VERSION",
+    options: [
+      { key: "XCODE_13", enabled: true }
+    ]
+  }
+].freeze
 
 def require_env(name)
   value = ENV[name]
@@ -36,7 +44,13 @@ end
 
 def api_request(method, path, token, query: nil, body: nil)
   uri = URI::HTTPS.build(host: "api.appstoreconnect.apple.com", path: path, query: query && URI.encode_www_form(query))
-  request_class = method == :get ? Net::HTTP::Get : Net::HTTP::Post
+  request_class = case method
+                  when :get then Net::HTTP::Get
+                  when :post then Net::HTTP::Post
+                  when :patch then Net::HTTP::Patch
+                  else
+                    abort "Unsupported HTTP method: #{method}"
+                  end
   request = request_class.new(uri)
   request["Authorization"] = "Bearer #{token}"
   request["Content-Type"] = "application/json"
@@ -97,7 +111,26 @@ def ensure_icloud_capability(token, bundle_id)
     token
   ).fetch("data")
 
-  return if capabilities.any? { |item| item.fetch("attributes")["capabilityType"] == "ICLOUD" }
+  existing = capabilities.find { |item| item.fetch("attributes")["capabilityType"] == "ICLOUD" }
+  if existing
+    api_request(
+      :patch,
+      "/v1/bundleIdCapabilities/#{existing.fetch("id")}",
+      token,
+      body: {
+        data: {
+          type: "bundleIdCapabilities",
+          id: existing.fetch("id"),
+          attributes: {
+            capabilityType: "ICLOUD",
+            settings: ICLOUD_SETTINGS
+          }
+        }
+      }
+    )
+    sleep 5
+    return
+  end
 
   api_request(
     :post,
@@ -108,14 +141,7 @@ def ensure_icloud_capability(token, bundle_id)
         type: "bundleIdCapabilities",
         attributes: {
           capabilityType: "ICLOUD",
-          settings: [
-            {
-              key: "ICLOUD_VERSION",
-              options: [
-                { key: "XCODE_13", enabled: true }
-              ]
-            }
-          ]
+          settings: ICLOUD_SETTINGS
         },
         relationships: {
           bundleId: {
