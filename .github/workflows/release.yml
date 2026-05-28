@@ -179,8 +179,13 @@ jobs:
               -derivedDataPath build/DerivedData \
               -archivePath build/StudyMate.xcarchive \
               SKIP_INSTALL=NO \
-              CODE_SIGNING_ALLOWED=NO \
-              CODE_SIGN_IDENTITY=""
+              CODE_SIGN_STYLE=Automatic \
+              CODE_SIGN_IDENTITY="Developer ID Application" \
+              DEVELOPMENT_TEAM="${APPLE_TEAM_ID}" \
+              -allowProvisioningUpdates \
+              -authenticationKeyPath "${APPSTORE_CONNECT_PRIVATE_KEY_PATH}" \
+              -authenticationKeyID "${APPSTORE_CONNECT_KEY_ID}" \
+              -authenticationKeyIssuerID "${APPSTORE_CONNECT_ISSUER_ID}"
 
             if [ "${USE_DEVELOPER_ID_PROFILE}" = "true" ]; then
               cat > build/export-options.plist <<PLIST
