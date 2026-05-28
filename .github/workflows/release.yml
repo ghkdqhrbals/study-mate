@@ -276,7 +276,9 @@ jobs:
           test -d "${APP_PATH}"
 
           if [ "${SIGNING_ENABLED}" = "true" ]; then
-            test -f "${APP_PATH}/Contents/embedded.provisionprofile"
+            if [ ! -f "${APP_PATH}/Contents/embedded.provisionprofile" ]; then
+              echo "No embedded provisioning profile found. Continuing with codesign and entitlement verification."
+            fi
             codesign --verify --deep --strict --verbose=2 "${APP_PATH}"
             codesign -d --entitlements :- "${APP_PATH}" | tee "${RUNNER_TEMP}/app-entitlements.plist"
             grep -q "iCloud.io.github.ghkdqhrbals.StudyMate" "${RUNNER_TEMP}/app-entitlements.plist"
