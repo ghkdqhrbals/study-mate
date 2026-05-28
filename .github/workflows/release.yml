@@ -320,7 +320,10 @@ jobs:
           rm -rf "${DMG_ROOT}" dist
           mkdir -p "${DMG_ROOT}" dist
 
-          cp -R "${APP_PATH}" "${DMG_ROOT}/"
+          ditto "${APP_PATH}" "${DMG_ROOT}/StudyMate.app"
+          if [ "${SIGNING_ENABLED}" = "true" ]; then
+            codesign --verify --deep --strict --verbose=2 "${DMG_ROOT}/StudyMate.app"
+          fi
           ln -s /Applications "${DMG_ROOT}/Applications"
 
           hdiutil create \
