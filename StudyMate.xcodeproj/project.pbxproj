@@ -547,6 +547,7 @@
 				CODE_SIGN_ENTITLEMENTS = StudyMate/StudyMate.entitlements;
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
+				CLOUDKIT_CONTAINER_ENVIRONMENT = Development;
 				CURRENT_PROJECT_VERSION = 16;
 				DEVELOPMENT_TEAM = 4CL25TC734;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -576,6 +577,7 @@
 				CODE_SIGN_ENTITLEMENTS = StudyMate/StudyMate.entitlements;
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
+				CLOUDKIT_CONTAINER_ENVIRONMENT = Production;
 				CURRENT_PROJECT_VERSION = 16;
 				DEVELOPMENT_TEAM = 4CL25TC734;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -648,10 +650,11 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = StudyMate/StudyMate.entitlements;
 				CODE_SIGN_STYLE = Automatic;
+				CLOUDKIT_CONTAINER_ENVIRONMENT = Development;
 				CURRENT_PROJECT_VERSION = 16;
 				DEVELOPMENT_TEAM = 4CL25TC734;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = StudyMate;
+				INFOPLIST_KEY_CFBundleDisplayName = BuddyStudy;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UIRequiresFullScreen = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -664,7 +667,7 @@
 					"$(inherited)",
 					"-lsqlite3",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = io.github.ghkdqhrbals.StudyMate.iOS;
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.ghkdqhrbals.StudyMate;
 				PRODUCT_NAME = StudyMate;
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -680,10 +683,11 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = StudyMate/StudyMate.entitlements;
 				CODE_SIGN_STYLE = Automatic;
+				CLOUDKIT_CONTAINER_ENVIRONMENT = Production;
 				CURRENT_PROJECT_VERSION = 16;
 				DEVELOPMENT_TEAM = 4CL25TC734;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = StudyMate;
+				INFOPLIST_KEY_CFBundleDisplayName = BuddyStudy;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UIRequiresFullScreen = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -696,7 +700,7 @@
 					"$(inherited)",
 					"-lsqlite3",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = io.github.ghkdqhrbals.StudyMate.iOS;
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.ghkdqhrbals.StudyMate;
 				PRODUCT_NAME = StudyMate;
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
