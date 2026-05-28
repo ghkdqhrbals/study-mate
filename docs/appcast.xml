@@ -6,15 +6,15 @@
     <description>StudyMate release feed</description>
     <language>en</language>
     <item>
-      <title>StudyMate 1.0.14</title>
-      <sparkle:version>14</sparkle:version>
-      <sparkle:shortVersionString>1.0.14</sparkle:shortVersionString>
-      <pubDate>Thu, 28 May 2026 07:48:22 GMT</pubDate>
-      <link>https://github.com/ghkdqhrbals/study-mate/releases/tag/v1.0.14</link>
+      <title>StudyMate 1.0.15</title>
+      <sparkle:version>15</sparkle:version>
+      <sparkle:shortVersionString>1.0.15</sparkle:shortVersionString>
+      <pubDate>Thu, 28 May 2026 09:18:48 GMT</pubDate>
+      <link>https://github.com/ghkdqhrbals/study-mate/releases/tag/v1.0.15</link>
       <enclosure
-        url="https://github.com/ghkdqhrbals/study-mate/releases/download/v1.0.14/StudyMate-1.0.14.dmg"
-        sparkle:edSignature="ZO1chJ2avccmdT/bUAIJ2CWaeR4R0PPTMPXXoFo1nxE5tyASN7SpCLiCE3IJQrYWz/e0mqas98jQzyFvttj2CQ=="
-        length="2768661"
+        url="https://github.com/ghkdqhrbals/study-mate/releases/download/v1.0.15/StudyMate-1.0.15.dmg"
+        sparkle:edSignature="wjE4xMjVvwe2PgtJeM4cXAlyirCNzVNDZqNzEGAqhy4v69l3c1UDlDbzviFVXvmlkKRBjMrYOkzXJWbVvkaBAw=="
+        length="2766272"
         type="application/x-apple-diskimage" />
     </item>
   </channel>
