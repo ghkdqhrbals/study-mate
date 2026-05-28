@@ -52,8 +52,8 @@ xcodebuild test -project StudyMate.xcodeproj -scheme StudyMate -destination 'pla
 GitHub Actions builds a DMG when a version tag is pushed.
 
 ```sh
-git tag v1.0.14
-git push origin v1.0.14
+git tag v1.0.15
+git push origin v1.0.15
 ```
 
 The release DMG includes:
