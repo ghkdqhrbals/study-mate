@@ -1,8 +1,8 @@
-# StudyMate Architecture
+# BuddyStuddy Architecture
 
 ## Overview
 
-StudyMate is a SwiftUI app with shared domain logic across macOS and iOS. The app is intentionally local-first: SQLite/UserDefaults hold the working state, OpenAI is called directly from the client with the user's API key, and CloudKit provides iCloud sync plus iPhone push delivery without a custom backend.
+BuddyStuddy is a SwiftUI app with shared domain logic across macOS and iOS. The app is intentionally local-first: SQLite/UserDefaults hold the working state, OpenAI is called directly from the client with the user's API key, and CloudKit provides iCloud sync plus iPhone push delivery without a custom backend. Internal target names, bundle identifiers, background task identifiers, and CloudKit record types retain `StudyMate` to avoid breaking existing installs and iCloud data.
 
 ## Targets
 

@@ -2,7 +2,7 @@
 
 ## Project
 
-StudyMate is a SwiftUI iOS app plus a macOS menu bar app. It generates short study questions with OpenAI, stores records locally, syncs through CloudKit, and shows topic-level statistics. Current public release work targets only the iOS app; macOS DMG/Sparkle release is paused.
+BuddyStuddy is a SwiftUI iOS app plus a macOS menu bar app. It generates short study questions with OpenAI, stores records locally, syncs through CloudKit, and shows topic-level statistics. Current public release work targets only the iOS app; macOS DMG/Sparkle release is paused. Internal Xcode targets and CloudKit identifiers still use `StudyMate` for release continuity.
 
 Read these first:
 

@@ -1,0 +1,15 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title">
+  <title id="title">BuddyStuddy BS monogram</title>
+  <rect width="1024" height="1024" fill="#17212B"/>
+  <text x="512" y="640" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif" font-size="430" font-weight="900" fill="#A2D8FD" stroke="#A2D8FD" stroke-width="18" paint-order="stroke fill" letter-spacing="-20">BS</text>
+  <path d="M802 158L825 192L860 215L825 238L802 272L779 238L744 215L779 192L802 158Z" fill="#FFD24A"/>
+  <path d="M802 196L811 210L825 219L811 228L802 242L793 228L779 219L793 210L802 196Z" fill="#17212B"/>
+  <g stroke="#201916" stroke-width="10" stroke-linejoin="round">
+    <path d="M184 708H730L820 734L760 760H184V708Z" fill="#FFD24A"/>
+    <path d="M730 708L820 734L760 760Z" fill="#FFE5B0"/>
+    <path d="M794 726L842 734L806 746Z" fill="#2C211B"/>
+    <path d="M184 708H250V760H184V708Z" fill="#FF829A"/>
+    <path d="M244 708H268V760H244V708Z" fill="#DCE1E4"/>
+  </g>
+  <path d="M274 722H718" stroke="#FFE65E" stroke-width="18" stroke-linecap="round"/>
+</svg>

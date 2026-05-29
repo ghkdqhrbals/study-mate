@@ -1,0 +1,61 @@
+<svg width="1600" height="900" viewBox="0 0 1600 900" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">BuddyStuddy logo concepts</title>
+  <desc id="desc">Three vector logo concepts for BuddyStuddy using a friendly study buddy mark and uppercase wordmark.</desc>
+  <rect width="1600" height="900" fill="#F6FAFD"/>
+
+  <defs>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="16" stdDeviation="18" flood-color="#1F4D6B" flood-opacity="0.12"/>
+    </filter>
+    <style>
+      .label { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif; font-size: 28px; font-weight: 800; fill: #5F7280; letter-spacing: 0; }
+      .word { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif; font-size: 72px; font-weight: 900; fill: #17212B; letter-spacing: 3px; }
+      .sub { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif; font-size: 24px; font-weight: 700; fill: #6A7B86; letter-spacing: 0; }
+      .outline { stroke: #2C211B; stroke-width: 10; stroke-linejoin: round; stroke-linecap: round; }
+    </style>
+  </defs>
+
+  <g transform="translate(90 86)">
+    <text class="label" x="0" y="0">A. Buddy mark</text>
+    <rect x="0" y="28" width="1420" height="190" rx="36" fill="#FFFFFF" filter="url(#softShadow)"/>
+    <g transform="translate(48 70)">
+      <rect x="0" y="0" width="108" height="108" rx="28" fill="#A2D8FD"/>
+      <circle cx="54" cy="55" r="33" fill="#FFF0BF" class="outline"/>
+      <circle cx="43" cy="51" r="4.5" fill="#2C211B"/>
+      <circle cx="65" cy="51" r="4.5" fill="#2C211B"/>
+      <path d="M45 66C50 71 58 71 63 66" class="outline" stroke-width="5" fill="none"/>
+      <path d="M79 20L92 12L99 24L86 32L79 20Z" fill="#FFD24A" class="outline" stroke-width="5"/>
+    </g>
+    <text class="word" x="190" y="143">BUDDY<tspan fill="#2787D8">STUDY</tspan></text>
+    <text class="sub" x="820" y="150">friendly AI study companion</text>
+  </g>
+
+  <g transform="translate(90 350)">
+    <text class="label" x="0" y="0">B. BS monogram</text>
+    <rect x="0" y="28" width="1420" height="190" rx="36" fill="#FFFFFF" filter="url(#softShadow)"/>
+    <g transform="translate(48 70)">
+      <rect x="0" y="0" width="108" height="108" rx="30" fill="#17212B"/>
+      <path d="M30 26H58C73 26 82 33 82 45C82 53 77 59 68 62C79 65 86 72 86 82C86 96 75 103 58 103H30V26Z" fill="#A2D8FD"/>
+      <path d="M43 38V56H58C66 56 70 53 70 47C70 41 66 38 58 38H43ZM43 68V91H59C68 91 73 87 73 80C73 72 68 68 59 68H43Z" fill="#17212B"/>
+      <path d="M83 18L94 29L83 40L72 29L83 18Z" fill="#FFD24A"/>
+    </g>
+    <text class="word" x="190" y="143">BUDDY STUDY</text>
+    <text class="sub" x="840" y="150">simple, bolder, more app-store ready</text>
+  </g>
+
+  <g transform="translate(90 614)">
+    <text class="label" x="0" y="0">C. Pencil buddy</text>
+    <rect x="0" y="28" width="1420" height="190" rx="36" fill="#FFFFFF" filter="url(#softShadow)"/>
+    <g transform="translate(48 70)">
+      <rect x="0" y="0" width="108" height="108" rx="28" fill="#A2D8FD"/>
+      <path d="M25 76C18 68 18 49 27 38C36 27 51 23 65 28C79 33 88 47 86 62C84 79 71 91 54 91C42 91 32 86 25 76Z" fill="#FFF0BF" class="outline"/>
+      <circle cx="48" cy="56" r="4" fill="#2C211B"/>
+      <circle cx="67" cy="56" r="4" fill="#2C211B"/>
+      <path d="M51 70C55 73 61 73 65 70" class="outline" stroke-width="5" fill="none"/>
+      <path d="M74 23L96 45L57 84L35 62L74 23Z" fill="#FFD24A" class="outline" stroke-width="5"/>
+      <path d="M90 39L99 48L95 61L82 57L90 39Z" fill="#FFE5B0" class="outline" stroke-width="5"/>
+    </g>
+    <text class="word" x="190" y="143">BUDDY<tspan fill="#F4B400">STUDY</tspan></text>
+    <text class="sub" x="820" y="150">keeps the pencil identity, clearer brand name</text>
+  </g>
+</svg>

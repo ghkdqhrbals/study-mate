@@ -756,11 +756,11 @@ struct AppStrings {
     var tabSettings: String { text("설정", "Settings") }
     var tabRecords: String { text("기록", "Records") }
     var tabStatistics: String { text("통계", "Stats") }
-    var onboardingTitle: String { text("StudyMate 시작하기", "Set Up StudyMate") }
+    var onboardingTitle: String { text("BuddyStuddy 시작하기", "Set Up BuddyStuddy") }
     var onboardingSubtitle: String {
         text(
-            "AI를 더 잘 쓰려면 스스로의 지식도 필요합니다. StudyMate는 짧은 질문으로 그 지식을 계속 유지하게 돕습니다.",
-            "Better AI output still depends on what you know. StudyMate keeps that knowledge active with short questions."
+            "AI를 더 잘 쓰려면 스스로의 지식도 필요합니다. BuddyStuddy는 짧은 질문으로 그 지식을 계속 유지하게 돕습니다.",
+            "Better AI output still depends on what you know. BuddyStuddy keeps that knowledge active with short questions."
         )
     }
     var onboardingFreeNote: String {
@@ -792,13 +792,13 @@ struct AppStrings {
 
     func statusTitle(isRunning: Bool) -> String {
         if isRunning {
-            return text("StudyMate 실행 중", "StudyMate is running")
+            return text("BuddyStuddy 실행 중", "BuddyStuddy is running")
         }
-        return text("StudyMate 정지됨", "StudyMate is stopped")
+        return text("BuddyStuddy 정지됨", "BuddyStuddy is stopped")
     }
 
     var invalidAPIKey: String { text("API 키가 잘못되었습니다", "Invalid API key") }
-    var notificationTitle: String { "StudyMate" }
+    var notificationTitle: String { "BuddyStuddy" }
     var cloudQuestionPushBody: String {
         text("새 학습 질문이 도착했습니다. 탭해서 이어가세요.", "A new study question is ready. Tap to continue.")
     }
@@ -808,13 +808,13 @@ struct AppStrings {
     var otherAnswer: String { text("다른 응답", "Other Answer") }
     var ignore: String { text("무시", "Ignore") }
     var openStudy: String { text("학습 열기...", "Open Study...") }
-    var aboutStudyMate: String { text("StudyMate 정보", "About StudyMate") }
+    var aboutStudyMate: String { text("BuddyStuddy 정보", "About BuddyStuddy") }
     func timerTitle(minutes: Int) -> String { text("타이머: \(minutes)분", "Timer: \(minutes) min") }
     func minuteLabel(_ minutes: Int) -> String { text("\(minutes)분", "\(minutes) min") }
     var languageMenu: String { text("언어", "Language") }
     var pause: String { text("일시정지", "Pause") }
     var resume: String { text("재개", "Resume") }
-    var quit: String { text("StudyMate 종료", "Quit StudyMate") }
+    var quit: String { text("BuddyStuddy 종료", "Quit BuddyStuddy") }
 
     var general: String { "General" }
     var secrets: String { "Secrets" }
@@ -954,14 +954,14 @@ struct AppStrings {
     var appLanguageHelp: String { text("언어를 바꾸면 학습 언어도 같은 언어로 설정됩니다.", "Changing Language also sets the study language to match.") }
     var notifications: String { text("알림", "Notifications") }
     var notificationPermissionHelp: String {
-        text("시스템 설정에서 StudyMate 알림과 사운드 허용 여부를 직접 확인하세요.", "Check StudyMate notification and sound permissions directly in system settings.")
+        text("시스템 설정에서 BuddyStuddy 알림과 사운드 허용 여부를 직접 확인하세요.", "Check BuddyStuddy notification and sound permissions directly in system settings.")
     }
     var openNotificationSettings: String { text("시스템 알림 설정 열기", "Open Notification Settings") }
     var testNotification: String { text("테스트 알림", "Test Notification") }
     var testNotificationBody: String {
         text(
-            "알림이 보이면 StudyMate 알림 권한은 정상입니다.",
-            "If you see this, StudyMate notification permission is working."
+            "알림이 보이면 BuddyStuddy 알림 권한은 정상입니다.",
+            "If you see this, BuddyStuddy notification permission is working."
         )
     }
     var testNotificationSent: String { text("테스트 알림을 보냈습니다.", "Test notification sent.") }
@@ -978,21 +978,21 @@ struct AppStrings {
     var automaticallyDownloadUpdates: String { text("가능하면 자동으로 다운로드", "Automatically download updates when available") }
     var checkForUpdates: String { text("업데이트 확인...", "Check for Updates...") }
     var updateHelp: String {
-        text("GitHub Releases에 새 DMG가 올라오면 StudyMate가 업데이트를 안내합니다.", "StudyMate checks GitHub Releases and offers updates when a new DMG is available.")
+        text("GitHub Releases에 새 DMG가 올라오면 BuddyStuddy가 업데이트를 안내합니다.", "BuddyStuddy checks GitHub Releases and offers updates when a new DMG is available.")
     }
     var updateInstallHelp: String {
         text(
-            "DMG 안이나 임시 위치에서 실행 중이면 업데이트할 수 없습니다. StudyMate.app을 Applications 폴더로 옮긴 뒤 다시 실행하세요.",
-            "Updates are unavailable when StudyMate is running from a DMG or temporary location. Move StudyMate.app to Applications and relaunch it."
+            "DMG 안이나 임시 위치에서 실행 중이면 업데이트할 수 없습니다. BuddyStuddy.app을 Applications 폴더로 옮긴 뒤 다시 실행하세요.",
+            "Updates are unavailable when BuddyStuddy is running from a DMG or temporary location. Move BuddyStuddy.app to Applications and relaunch it."
         )
     }
-    var uninstall: String { text("StudyMate 제거", "Uninstall StudyMate") }
+    var uninstall: String { text("BuddyStuddy 제거", "Uninstall BuddyStuddy") }
     var uninstallHelp: String {
         text("앱을 휴지통으로 이동하고 로컬 설정과 캐시를 삭제합니다.", "Move the app to Trash and delete local settings and caches.")
     }
-    var uninstallConfirmationTitle: String { text("StudyMate를 제거할까요?", "Uninstall StudyMate?") }
+    var uninstallConfirmationTitle: String { text("BuddyStuddy를 제거할까요?", "Uninstall BuddyStuddy?") }
     var uninstallConfirmationMessage: String {
-        text("앱, 로컬 설정, 캐시가 삭제되고 StudyMate가 종료됩니다.", "The app, local settings, and caches will be deleted, then StudyMate will quit.")
+        text("앱, 로컬 설정, 캐시가 삭제되고 BuddyStuddy가 종료됩니다.", "The app, local settings, and caches will be deleted, then BuddyStuddy will quit.")
     }
     func uninstallFailed(_ reason: String) -> String {
         text("앱 제거 실패: \(reason)", "Uninstall failed: \(reason)")
@@ -1056,7 +1056,7 @@ struct AppStrings {
     var duplicateQuestionSkipped: String {
         text(
             "기존 질문과 너무 비슷한 질문이 반복되어 생성하지 않았습니다.",
-            "StudyMate did not save a repeated question."
+            "BuddyStuddy did not save a repeated question."
         )
     }
     var notificationQuestionMissingTitle: String { text("열 수 없는 알림", "Unavailable Notification") }
@@ -1119,7 +1119,7 @@ struct AppStrings {
     var topicRangeHelpBody: String {
         text(
             "각 답변의 레벨과 점수를 능력 추정치로 바꾼 뒤, 표본 수와 답변 간 차이를 함께 반영해 범위를 계산합니다. 서로 먼 레벨에서 엇갈린 점수가 있으면 범위가 넓어지고, 같은 점수대의 질문을 더 많이 답하면 범위가 더 정확하게 좁아집니다.",
-            "StudyMate converts each answer's level and score into an ability estimate, then combines sample count and disagreement between answers. Mixed results across distant levels make the range wider. Answer more questions around that range to narrow it."
+            "BuddyStuddy converts each answer's level and score into an ability estimate, then combines sample count and disagreement between answers. Mixed results across distant levels make the range wider. Answer more questions around that range to narrow it."
         )
     }
     var topicTrend: String { text("주제 레벨 추세", "Topic Level Trend") }

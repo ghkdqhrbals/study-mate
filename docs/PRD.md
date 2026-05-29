@@ -1,8 +1,8 @@
-# StudyMate PRD
+# BuddyStuddy PRD
 
 ## Purpose
 
-StudyMate is a quiet AI tutor for people who use AI heavily but still want to keep their own knowledge sharp. The product asks short questions on a schedule, lets the user answer when convenient, grades the answer with OpenAI, and turns the accumulated record into topic-level learning statistics.
+BuddyStuddy is a quiet AI tutor for people who use AI heavily but still want to keep their own knowledge sharp. The product asks short questions on a schedule, lets the user answer when convenient, grades the answer with OpenAI, and turns the accumulated record into topic-level learning statistics.
 
 ## Product Principles
 
