@@ -1,29 +1,35 @@
-name: Build Release DMG
+name: Release iOS App
 
 on:
   push:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Marketing version, for example 1.0.17. Leave empty to use the project version."
+        required: false
+        type: string
+      upload_to_app_store_connect:
+        description: "Upload the exported IPA to App Store Connect."
+        required: true
+        default: true
+        type: boolean
 
 permissions:
-  contents: write
-  pages: write
-  id-token: write
+  contents: read
 
 jobs:
-  build:
-    name: Build macOS DMG
+  ios:
+    name: Build and Upload iOS
     runs-on: macos-15
     env:
-      CERTIFICATE_P12_BASE64: ${{ secrets.DEVELOPER_ID_CERTIFICATE_P12_BASE64 }}
-      CERTIFICATE_PASSWORD: ${{ secrets.DEVELOPER_ID_CERTIFICATE_PASSWORD }}
-      DEVELOPER_ID_PROVISIONING_PROFILE_BASE64: ${{ secrets.DEVELOPER_ID_PROVISIONING_PROFILE_BASE64 }}
       APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
       APPSTORE_CONNECT_KEY_ID: ${{ secrets.APPSTORE_CONNECT_KEY_ID }}
       APPSTORE_CONNECT_ISSUER_ID: ${{ secrets.APPSTORE_CONNECT_ISSUER_ID }}
       APPSTORE_CONNECT_PRIVATE_KEY_BASE64: ${{ secrets.APPSTORE_CONNECT_PRIVATE_KEY_BASE64 }}
-      SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+      INPUT_VERSION: ${{ inputs.version || '' }}
+      UPLOAD_TO_APP_STORE_CONNECT: ${{ github.event_name != 'workflow_dispatch' || inputs.upload_to_app_store_connect }}
 
     steps:
       - name: Checkout
@@ -33,178 +39,104 @@ jobs:
         run: |
           set -euo pipefail
 
-          signing_count=0
-          [ -n "${CERTIFICATE_P12_BASE64}" ] && signing_count=$((signing_count + 1))
-          [ -n "${CERTIFICATE_PASSWORD}" ] && signing_count=$((signing_count + 1))
-          [ -n "${APPLE_TEAM_ID}" ] && signing_count=$((signing_count + 1))
+          missing=0
+          for name in APPLE_TEAM_ID APPSTORE_CONNECT_KEY_ID APPSTORE_CONNECT_ISSUER_ID APPSTORE_CONNECT_PRIVATE_KEY_BASE64; do
+            if [ -z "${!name}" ]; then
+              echo "Missing GitHub Actions secret: ${name}" >&2
+              missing=1
+            fi
+          done
 
-          if [ "${signing_count}" -eq 0 ]; then
-            echo "SIGNING_ENABLED=false" >> "${GITHUB_ENV}"
-            echo "NOTARIZATION_ENABLED=false" >> "${GITHUB_ENV}"
-            echo "No signing secrets found. Building an unsigned DMG."
-            exit 0
-          fi
-
-          if [ "${signing_count}" -ne 3 ]; then
-            echo "Developer ID signing requires DEVELOPER_ID_CERTIFICATE_P12_BASE64, DEVELOPER_ID_CERTIFICATE_PASSWORD, and APPLE_TEAM_ID." >&2
+          if [ "${missing}" -ne 0 ]; then
             exit 1
           fi
-
-          if [ -z "${APPSTORE_CONNECT_KEY_ID}" ] || [ -z "${APPSTORE_CONNECT_ISSUER_ID}" ] || [ -z "${APPSTORE_CONNECT_PRIVATE_KEY_BASE64}" ]; then
-            echo "Signed releases must be notarized. Add APPSTORE_CONNECT_KEY_ID, APPSTORE_CONNECT_ISSUER_ID, and APPSTORE_CONNECT_PRIVATE_KEY_BASE64." >&2
-            exit 1
-          fi
-
-          if [ -z "${SPARKLE_PRIVATE_KEY}" ]; then
-            echo "Signed releases require SPARKLE_ED_PRIVATE_KEY so Sparkle updates can be signed." >&2
-            exit 1
-          fi
-
-          echo "SIGNING_ENABLED=true" >> "${GITHUB_ENV}"
-          echo "NOTARIZATION_ENABLED=true" >> "${GITHUB_ENV}"
-          if [ -n "${DEVELOPER_ID_PROVISIONING_PROFILE_BASE64}" ]; then
-            echo "DEVELOPER_ID_PROFILE_SOURCE=secret" >> "${GITHUB_ENV}"
-          else
-            echo "DEVELOPER_ID_PROFILE_SOURCE=app-store-connect" >> "${GITHUB_ENV}"
-          fi
-          echo "USE_DEVELOPER_ID_PROFILE=true" >> "${GITHUB_ENV}"
-
-      - name: Install Developer ID certificate
-        run: |
-          set -euo pipefail
-
-          if [ "${SIGNING_ENABLED}" != "true" ]; then
-            echo "Skipping certificate import for unsigned build."
-            exit 0
-          fi
-
-          KEYCHAIN_PATH="${RUNNER_TEMP}/app-signing.keychain-db"
-          KEYCHAIN_PASSWORD="$(openssl rand -hex 24)"
-          CERTIFICATE_PATH="${RUNNER_TEMP}/developer-id.p12"
-
-          echo "${CERTIFICATE_P12_BASE64}" | base64 --decode > "${CERTIFICATE_PATH}"
-
-          security create-keychain -p "${KEYCHAIN_PASSWORD}" "${KEYCHAIN_PATH}"
-          security set-keychain-settings -lut 21600 "${KEYCHAIN_PATH}"
-          security unlock-keychain -p "${KEYCHAIN_PASSWORD}" "${KEYCHAIN_PATH}"
-          security import "${CERTIFICATE_PATH}" \
-            -P "${CERTIFICATE_PASSWORD}" \
-            -A \
-            -t cert \
-            -f pkcs12 \
-            -k "${KEYCHAIN_PATH}"
-          security list-keychains -d user -s "${KEYCHAIN_PATH}"
-          security set-key-partition-list \
-            -S apple-tool:,apple:,codesign: \
-            -s \
-            -k "${KEYCHAIN_PASSWORD}" \
-            "${KEYCHAIN_PATH}"
-          security find-identity -v -p codesigning "${KEYCHAIN_PATH}"
-
-          DEVELOPER_ID_CERTIFICATE_SERIAL="$(security find-certificate -c "Developer ID Application" -p "${KEYCHAIN_PATH}" | openssl x509 -noout -serial | sed 's/^serial=//' | tr '[:lower:]' '[:upper:]')"
-          if [ -z "${DEVELOPER_ID_CERTIFICATE_SERIAL}" ]; then
-            echo "Could not read Developer ID Application certificate serial." >&2
-            exit 1
-          fi
-          echo "DEVELOPER_ID_CERTIFICATE_SERIAL=${DEVELOPER_ID_CERTIFICATE_SERIAL}" >> "${GITHUB_ENV}"
 
       - name: Prepare App Store Connect API key
         run: |
           set -euo pipefail
 
-          if [ "${SIGNING_ENABLED}" != "true" ]; then
-            echo "Skipping App Store Connect API key for unsigned build."
-            exit 0
-          fi
-
           PRIVATE_KEY_PATH="${RUNNER_TEMP}/AuthKey_${APPSTORE_CONNECT_KEY_ID}.p8"
           echo "${APPSTORE_CONNECT_PRIVATE_KEY_BASE64}" | base64 --decode > "${PRIVATE_KEY_PATH}"
           chmod 600 "${PRIVATE_KEY_PATH}"
+
           echo "APPSTORE_CONNECT_PRIVATE_KEY_PATH=${PRIVATE_KEY_PATH}" >> "${GITHUB_ENV}"
 
-      - name: Install Developer ID provisioning profile
+      - name: Resolve release version
         run: |
           set -euo pipefail
 
-          if [ "${SIGNING_ENABLED}" != "true" ] || [ "${USE_DEVELOPER_ID_PROFILE}" != "true" ]; then
-            echo "Skipping provisioning profile install. Xcode will use automatic signing."
-            exit 0
-          fi
-
-          PROFILE_PATH="${RUNNER_TEMP}/studymate.provisionprofile"
-          PROFILE_PLIST="${RUNNER_TEMP}/studymate-profile.plist"
-          PROFILE_DIR="${HOME}/Library/MobileDevice/Provisioning Profiles"
-
-          if [ "${DEVELOPER_ID_PROFILE_SOURCE}" = "secret" ]; then
-            printf '%s' "${DEVELOPER_ID_PROVISIONING_PROFILE_BASE64}" | base64 --decode > "${PROFILE_PATH}"
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          elif [ -n "${INPUT_VERSION}" ]; then
+            VERSION="${INPUT_VERSION}"
           else
-            PROFILE_OUTPUT_PATH="${PROFILE_PATH}" ruby scripts/create-developer-id-profile.rb
+            VERSION="$(
+              xcodebuild -project StudyMate.xcodeproj \
+                -scheme StudyMateiOS \
+                -configuration Release \
+                -showBuildSettings |
+                awk -F '= ' '/MARKETING_VERSION/ { print $2; exit }'
+            )"
           fi
-          security cms -D -i "${PROFILE_PATH}" > "${PROFILE_PLIST}"
 
-          PROFILE_UUID="$(/usr/libexec/PlistBuddy -c 'Print UUID' "${PROFILE_PLIST}")"
-          PROFILE_NAME="$(/usr/libexec/PlistBuddy -c 'Print Name' "${PROFILE_PLIST}")"
-          PROFILE_TEAM_ID="$(/usr/libexec/PlistBuddy -c 'Print TeamIdentifier:0' "${PROFILE_PLIST}")"
-          PROFILE_APP_ID="$(/usr/libexec/PlistBuddy -c 'Print Entitlements:application-identifier' "${PROFILE_PLIST}" 2>/dev/null || /usr/libexec/PlistBuddy -c 'Print Entitlements:com.apple.application-identifier' "${PROFILE_PLIST}" 2>/dev/null || true)"
-          PROFILE_ICLOUD_SERVICE="$(
-            /usr/libexec/PlistBuddy -c 'Print Entitlements:com.apple.developer.icloud-services:0' "${PROFILE_PLIST}" 2>/dev/null ||
-            /usr/libexec/PlistBuddy -c 'Print Entitlements:com.apple.developer.icloud-services' "${PROFILE_PLIST}" 2>/dev/null ||
-            true
-          )"
-
-          if [ "${PROFILE_TEAM_ID}" != "${APPLE_TEAM_ID}" ]; then
-            echo "Provisioning profile team ${PROFILE_TEAM_ID} does not match APPLE_TEAM_ID ${APPLE_TEAM_ID}." >&2
+          if ! [[ "${VERSION}" =~ ^[0-9]+(\.[0-9]+){1,2}$ ]]; then
+            echo "Invalid release version: ${VERSION}" >&2
             exit 1
           fi
 
-          if [ "${PROFILE_APP_ID}" != "${APPLE_TEAM_ID}.io.github.ghkdqhrbals.StudyMate" ]; then
-            echo "Provisioning profile app id must be ${APPLE_TEAM_ID}.io.github.ghkdqhrbals.StudyMate, got ${PROFILE_APP_ID}." >&2
-            exit 1
-          fi
+          echo "RELEASE_VERSION=${VERSION}" >> "${GITHUB_ENV}"
+          echo "RELEASE_BUILD_NUMBER=${GITHUB_RUN_NUMBER}" >> "${GITHUB_ENV}"
 
-          if [ "${PROFILE_ICLOUD_SERVICE}" = "CloudKit" ] || [ "${PROFILE_ICLOUD_SERVICE}" = "*" ]; then
-            echo "RELEASE_CLOUDKIT_ENABLED=true" >> "${GITHUB_ENV}"
-          else
-            echo "RELEASE_CLOUDKIT_ENABLED=false" >> "${GITHUB_ENV}"
-            echo "Provisioning profile does not include CloudKit. Refusing to publish a release without iCloud sync entitlement." >&2
-            exit 1
-          fi
-
-          mkdir -p "${PROFILE_DIR}"
-          cp "${PROFILE_PATH}" "${PROFILE_DIR}/${PROFILE_UUID}.provisionprofile"
-
-          echo "DEVELOPER_ID_PROFILE_UUID=${PROFILE_UUID}" >> "${GITHUB_ENV}"
-          echo "Installed Developer ID provisioning profile: ${PROFILE_NAME} (${PROFILE_UUID})"
-
-      - name: Run tests
+      - name: Build iOS debug target
         run: |
-          xcodebuild test \
+          xcodebuild -project StudyMate.xcodeproj \
+            -scheme StudyMateiOS \
+            -configuration Debug \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build/iOSDeviceDerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Archive iOS app
+        run: |
+          set -euo pipefail
+
+          xcodebuild archive \
             -project StudyMate.xcodeproj \
-            -scheme StudyMate \
-            -destination 'platform=macOS' \
-            -derivedDataPath build/DerivedData \
-            CODE_SIGNING_ALLOWED=NO
+            -scheme StudyMateiOS \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build/iOSReleaseDerivedData \
+            -archivePath build/StudyMateiOS.xcarchive \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "${APPSTORE_CONNECT_PRIVATE_KEY_PATH}" \
+            -authenticationKeyID "${APPSTORE_CONNECT_KEY_ID}" \
+            -authenticationKeyIssuerID "${APPSTORE_CONNECT_ISSUER_ID}" \
+            DEVELOPMENT_TEAM="${APPLE_TEAM_ID}" \
+            MARKETING_VERSION="${RELEASE_VERSION}" \
+            CURRENT_PROJECT_VERSION="${RELEASE_BUILD_NUMBER}"
 
-      - name: Build app archive
+      - name: Verify release entitlements
         run: |
           set -euo pipefail
 
-          if [ "${SIGNING_ENABLED}" = "true" ]; then
-            xcodebuild archive \
-              -project StudyMate.xcodeproj \
-              -scheme StudyMate \
-              -configuration Release \
-              -destination 'generic/platform=macOS' \
-              -derivedDataPath build/DerivedData \
-              -archivePath build/StudyMate.xcarchive \
-              SKIP_INSTALL=NO \
-              CODE_SIGN_STYLE=Manual \
-              DEVELOPMENT_TEAM="${APPLE_TEAM_ID}" \
-              PROVISIONING_PROFILE_SPECIFIER="${DEVELOPER_ID_PROFILE_UUID}" \
-              CODE_SIGN_IDENTITY="Developer ID Application"
+          APP_PATH="build/StudyMateiOS.xcarchive/Products/Applications/StudyMate.app"
+          test -d "${APP_PATH}"
 
-            if [ "${USE_DEVELOPER_ID_PROFILE}" = "true" ]; then
-              cat > build/export-options.plist <<PLIST
+          codesign --verify --deep --strict --verbose=2 "${APP_PATH}"
+          codesign -d --entitlements - "${APP_PATH}" | tee "${RUNNER_TEMP}/ios-entitlements.plist"
+
+          grep -q "aps-environment" "${RUNNER_TEMP}/ios-entitlements.plist"
+          grep -q "production" "${RUNNER_TEMP}/ios-entitlements.plist"
+          grep -q "iCloud.io.github.ghkdqhrbals.StudyMate" "${RUNNER_TEMP}/ios-entitlements.plist"
+          grep -q "com.apple.developer.icloud-services" "${RUNNER_TEMP}/ios-entitlements.plist"
+
+      - name: Export IPA
+        run: |
+          set -euo pipefail
+
+          mkdir -p build dist
+          cat > build/export-options.plist <<PLIST
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
@@ -212,37 +144,7 @@ jobs:
             <key>destination</key>
             <string>export</string>
             <key>method</key>
-            <string>developer-id</string>
-            <key>signingCertificate</key>
-            <string>Developer ID Application</string>
-            <key>signingStyle</key>
-            <string>manual</string>
-            <key>provisioningProfiles</key>
-            <dict>
-              <key>io.github.ghkdqhrbals.StudyMate</key>
-              <string>${DEVELOPER_ID_PROFILE_UUID}</string>
-            </dict>
-            <key>stripSwiftSymbols</key>
-            <true/>
-            <key>teamID</key>
-            <string>${APPLE_TEAM_ID}</string>
-            <key>iCloudContainerEnvironment</key>
-            <string>Production</string>
-          </dict>
-          </plist>
-          PLIST
-            else
-              cat > build/export-options.plist <<PLIST
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>destination</key>
-            <string>export</string>
-            <key>method</key>
-            <string>developer-id</string>
-            <key>signingCertificate</key>
-            <string>Developer ID Application</string>
+            <string>app-store-connect</string>
             <key>signingStyle</key>
             <string>automatic</string>
             <key>stripSwiftSymbols</key>
@@ -251,198 +153,70 @@ jobs:
             <string>${APPLE_TEAM_ID}</string>
             <key>iCloudContainerEnvironment</key>
             <string>Production</string>
+            <key>manageAppVersionAndBuildNumber</key>
+            <false/>
           </dict>
           </plist>
           PLIST
-            fi
 
-            xcodebuild -exportArchive \
-              -archivePath build/StudyMate.xcarchive \
-              -exportPath build/export \
-              -exportOptionsPlist build/export-options.plist \
-              -allowProvisioningUpdates \
-              -authenticationKeyPath "${APPSTORE_CONNECT_PRIVATE_KEY_PATH}" \
-              -authenticationKeyID "${APPSTORE_CONNECT_KEY_ID}" \
-              -authenticationKeyIssuerID "${APPSTORE_CONNECT_ISSUER_ID}"
-          else
-            xcodebuild archive \
-              -project StudyMate.xcodeproj \
-              -scheme StudyMate \
-              -configuration Release \
-              -destination 'generic/platform=macOS' \
-              -derivedDataPath build/DerivedData \
-              -archivePath build/StudyMate.xcarchive \
-              SKIP_INSTALL=NO \
-              CODE_SIGNING_ALLOWED=NO \
-              CODE_SIGN_IDENTITY=""
-          fi
+          xcodebuild -exportArchive \
+            -archivePath build/StudyMateiOS.xcarchive \
+            -exportPath dist \
+            -exportOptionsPlist build/export-options.plist \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "${APPSTORE_CONNECT_PRIVATE_KEY_PATH}" \
+            -authenticationKeyID "${APPSTORE_CONNECT_KEY_ID}" \
+            -authenticationKeyIssuerID "${APPSTORE_CONNECT_ISSUER_ID}"
 
-      - name: Create DMG
-        run: |
-          set -euo pipefail
-
-          VERSION="${GITHUB_REF_NAME#v}"
-          if [ "${VERSION}" = "${GITHUB_REF_NAME}" ]; then
-            VERSION="manual-${GITHUB_RUN_NUMBER}"
-          fi
-
-          if [ "${SIGNING_ENABLED}" = "true" ]; then
-            APP_PATH="build/export/StudyMate.app"
-          else
-            APP_PATH="build/StudyMate.xcarchive/Products/Applications/StudyMate.app"
-          fi
-          DMG_ROOT="build/dmg-root"
-          DMG_PATH="dist/StudyMate-${VERSION}.dmg"
-
-          test -d "${APP_PATH}"
-
-          if [ "${SIGNING_ENABLED}" = "true" ]; then
-            if [ "${RELEASE_CLOUDKIT_ENABLED:-false}" = "true" ] && [ ! -f "${APP_PATH}/Contents/embedded.provisionprofile" ]; then
-              echo "No embedded provisioning profile found. Refusing to publish a CloudKit release without a provisioning profile." >&2
-              exit 1
-            fi
-            codesign --verify --deep --strict --verbose=2 "${APP_PATH}"
-            codesign -d --entitlements - "${APP_PATH}" | tee "${RUNNER_TEMP}/app-entitlements.plist"
-            if [ "${RELEASE_CLOUDKIT_ENABLED:-false}" = "true" ]; then
-              grep -q "iCloud.io.github.ghkdqhrbals.StudyMate" "${RUNNER_TEMP}/app-entitlements.plist"
-              grep -q "com.apple.developer.icloud-services" "${RUNNER_TEMP}/app-entitlements.plist"
-            else
-              echo "CloudKit entitlement verification skipped because the release provisioning profile does not include CloudKit."
-            fi
-          fi
-
-          rm -rf "${DMG_ROOT}" dist
-          mkdir -p "${DMG_ROOT}" dist
-
-          ditto "${APP_PATH}" "${DMG_ROOT}/StudyMate.app"
-          if [ "${SIGNING_ENABLED}" = "true" ]; then
-            codesign --verify --deep --strict --verbose=2 "${DMG_ROOT}/StudyMate.app"
-          fi
-          ln -s /Applications "${DMG_ROOT}/Applications"
-
-          hdiutil create \
-            -volname "StudyMate" \
-            -srcfolder "${DMG_ROOT}" \
-            -ov \
-            -format UDZO \
-            "${DMG_PATH}"
-
-      - name: Notarize DMG
-        run: |
-          set -euo pipefail
-
-          if [ "${NOTARIZATION_ENABLED}" != "true" ]; then
-            echo "Skipping notarization for unsigned build."
-            exit 0
-          fi
-
-          VERSION="${GITHUB_REF_NAME#v}"
-          if [ "${VERSION}" = "${GITHUB_REF_NAME}" ]; then
-            VERSION="manual-${GITHUB_RUN_NUMBER}"
-          fi
-
-          DMG_PATH="dist/StudyMate-${VERSION}.dmg"
-          PRIVATE_KEY_PATH="${APPSTORE_CONNECT_PRIVATE_KEY_PATH}"
-
-          NOTARY_JSON="${RUNNER_TEMP}/notary-submit.json"
-          xcrun notarytool submit "${DMG_PATH}" \
-            --key "${PRIVATE_KEY_PATH}" \
-            --key-id "${APPSTORE_CONNECT_KEY_ID}" \
-            --issuer "${APPSTORE_CONNECT_ISSUER_ID}" \
-            --team-id "${APPLE_TEAM_ID}" \
-            --wait \
-            --output-format json | tee "${NOTARY_JSON}"
-
-          SUBMISSION_ID="$(/usr/bin/python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("id", ""))' "${NOTARY_JSON}")"
-          STATUS="$(/usr/bin/python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("status", ""))' "${NOTARY_JSON}")"
-
-          if [ "${STATUS}" != "Accepted" ]; then
-            echo "Notarization failed with status: ${STATUS}" >&2
-            if [ -n "${SUBMISSION_ID}" ]; then
-              xcrun notarytool log "${SUBMISSION_ID}" \
-                --key "${PRIVATE_KEY_PATH}" \
-                --key-id "${APPSTORE_CONNECT_KEY_ID}" \
-                --issuer "${APPSTORE_CONNECT_ISSUER_ID}" \
-                --team-id "${APPLE_TEAM_ID}" || true
-            fi
+          IPA_PATH="$(find dist -maxdepth 1 -name '*.ipa' -print -quit)"
+          if [ -z "${IPA_PATH}" ]; then
+            echo "IPA export failed." >&2
             exit 1
           fi
 
-          xcrun stapler staple "${DMG_PATH}"
-          xcrun stapler validate "${DMG_PATH}"
+          echo "IPA_PATH=${IPA_PATH}" >> "${GITHUB_ENV}"
 
-      - name: Upload DMG artifact
+      - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
-          name: StudyMate-DMG
-          path: dist/*.dmg
+          name: BuddyStudy-iOS-${{ env.RELEASE_VERSION }}-${{ env.RELEASE_BUILD_NUMBER }}
+          path: dist/*.ipa
           if-no-files-found: error
+          retention-days: 14
 
-      - name: Publish GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: dist/*.dmg
-          generate_release_notes: true
-
-      - name: Generate Sparkle appcast
-        if: startsWith(github.ref, 'refs/tags/') && env.SIGNING_ENABLED == 'true'
+      - name: Upload to App Store Connect
+        if: env.UPLOAD_TO_APP_STORE_CONNECT == 'true'
         run: |
           set -euo pipefail
 
-          VERSION="${GITHUB_REF_NAME#v}"
-          APP_PATH="build/export/StudyMate.app"
-          DMG_PATH="dist/StudyMate-${VERSION}.dmg"
-          BUILD_NUMBER="$(/usr/libexec/PlistBuddy -c 'Print CFBundleVersion' "${APP_PATH}/Contents/Info.plist")"
-          DMG_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/StudyMate-${VERSION}.dmg"
-          RELEASE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/tag/${GITHUB_REF_NAME}"
-          SPARKLE_DIR="${RUNNER_TEMP}/sparkle"
+          cat > build/upload-options.plist <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>destination</key>
+            <string>upload</string>
+            <key>method</key>
+            <string>app-store-connect</string>
+            <key>signingStyle</key>
+            <string>automatic</string>
+            <key>stripSwiftSymbols</key>
+            <true/>
+            <key>teamID</key>
+            <string>${APPLE_TEAM_ID}</string>
+            <key>iCloudContainerEnvironment</key>
+            <string>Production</string>
+            <key>manageAppVersionAndBuildNumber</key>
+            <false/>
+          </dict>
+          </plist>
+          PLIST
 
-          curl -L \
-            https://github.com/sparkle-project/Sparkle/releases/download/2.9.2/Sparkle-for-Swift-Package-Manager.zip \
-            -o "${RUNNER_TEMP}/Sparkle-for-Swift-Package-Manager.zip"
-          unzip -q "${RUNNER_TEMP}/Sparkle-for-Swift-Package-Manager.zip" -d "${SPARKLE_DIR}"
-
-          SIGNATURE_ATTRIBUTES="$(printf '%s' "${SPARKLE_PRIVATE_KEY}" | "${SPARKLE_DIR}/bin/sign_update" --ed-key-file - "${DMG_PATH}")"
-
-          python3 scripts/create-appcast.py \
-            --version "${VERSION}" \
-            --build-number "${BUILD_NUMBER}" \
-            --dmg-url "${DMG_URL}" \
-            --release-url "${RELEASE_URL}" \
-            --signature-attributes "${SIGNATURE_ATTRIBUTES}" \
-            --output "${RUNNER_TEMP}/appcast.xml"
-
-      - name: Publish Sparkle appcast to Pages
-        if: startsWith(github.ref, 'refs/tags/') && env.SIGNING_ENABLED == 'true'
-        run: |
-          set -euo pipefail
-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git fetch origin main
-          git checkout main
-          git pull --ff-only origin main
-          cp "${RUNNER_TEMP}/appcast.xml" docs/appcast.xml
-          git add docs/appcast.xml
-
-          if git diff --cached --quiet; then
-            echo "Appcast is already up to date."
-          else
-            git commit -m "Update appcast for ${GITHUB_REF_NAME}"
-            git push origin main
-          fi
-
-      - name: Configure Pages
-        if: startsWith(github.ref, 'refs/tags/') && env.SIGNING_ENABLED == 'true'
-        uses: actions/configure-pages@v5
-
-      - name: Upload Pages artifact
-        if: startsWith(github.ref, 'refs/tags/') && env.SIGNING_ENABLED == 'true'
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: docs
-
-      - name: Deploy GitHub Pages
-        if: startsWith(github.ref, 'refs/tags/') && env.SIGNING_ENABLED == 'true'
-        uses: actions/deploy-pages@v4
+          xcodebuild -exportArchive \
+            -archivePath build/StudyMateiOS.xcarchive \
+            -exportPath build/app-store-upload \
+            -exportOptionsPlist build/upload-options.plist \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "${APPSTORE_CONNECT_PRIVATE_KEY_PATH}" \
+            -authenticationKeyID "${APPSTORE_CONNECT_KEY_ID}" \
+            -authenticationKeyIssuerID "${APPSTORE_CONNECT_ISSUER_ID}"

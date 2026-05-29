@@ -3,6 +3,7 @@ import SQLite3
 
 final class SettingsStore {
     static let maxLogCount = 1000
+    static let maxDeletedStudyRecordMarkerCount = 10_000
 
     private enum Keys {
         static let settings = "studySettings"
@@ -24,6 +25,8 @@ final class SettingsStore {
         static let openAIUsageStatus = "openAIUsageStatus"
         static let isCloudSyncEnabled = "isCloudSyncEnabled"
         static let cloudSyncSnapshotUpdatedAt = "cloudSyncSnapshotUpdatedAt"
+        static let deletedStudyRecordMarkers = "deletedStudyRecordMarkers"
+        static let studyRecordsClearedAt = "studyRecordsClearedAt"
     }
 
     private let defaults: UserDefaults
@@ -119,7 +122,14 @@ final class SettingsStore {
     }
 
     func loadStudyRecords() -> [StudyRecord] {
-        recordStore.load(limit: loadSettings().sanitizedMaxHistoryCount)
+        let deletedMarkers = loadDeletedStudyRecordMarkers()
+        let clearedAt = loadStudyRecordsClearedAt()
+
+        return recordStore
+            .load(limit: loadSettings().sanitizedMaxHistoryCount)
+            .filter {
+                !Self.isStudyRecordDeleted($0, markers: deletedMarkers, clearedAt: clearedAt)
+            }
     }
 
     func appendStudyRecord(question: QuestionItem, settings: StudySettings) {
@@ -168,16 +178,87 @@ final class SettingsStore {
     }
 
     func deleteStudyRecord(_ record: StudyRecord) {
+        markStudyRecordDeleted(record)
         recordStore.delete(record)
     }
 
     func clearStudyRecords() {
+        let recordsToDelete = loadStudyRecords()
+        let deletedAt = Date()
+        saveStudyRecordsClearedAt(deletedAt)
+        saveDeletedStudyRecordMarkers(
+            mergedDeletedStudyRecordMarkers(
+                loadDeletedStudyRecordMarkers(),
+                recordsToDelete.map { DeletedStudyRecordMarker(record: $0, deletedAt: deletedAt) }
+            )
+        )
         recordStore.clear()
         defaults.removeObject(forKey: Keys.studyRecords)
     }
 
     func replaceStudyRecords(_ records: [StudyRecord]) {
-        recordStore.replaceAll(Array(records.suffix(loadSettings().sanitizedMaxHistoryCount)))
+        let deletedMarkers = loadDeletedStudyRecordMarkers()
+        let clearedAt = loadStudyRecordsClearedAt()
+        let filteredRecords = records.filter {
+            !Self.isStudyRecordDeleted($0, markers: deletedMarkers, clearedAt: clearedAt)
+        }
+        recordStore.replaceAll(Array(filteredRecords.suffix(loadSettings().sanitizedMaxHistoryCount)))
+    }
+
+    func loadDeletedStudyRecordMarkers() -> [DeletedStudyRecordMarker] {
+        guard let data = defaults.data(forKey: Keys.deletedStudyRecordMarkers),
+              let markers = try? decoder.decode([DeletedStudyRecordMarker].self, from: data) else {
+            return []
+        }
+
+        return Array(
+            markers
+                .sorted { $0.deletedAt < $1.deletedAt }
+                .suffix(Self.maxDeletedStudyRecordMarkerCount)
+        )
+    }
+
+    func saveDeletedStudyRecordMarkers(_ markers: [DeletedStudyRecordMarker]) {
+        let cappedMarkers = Array(
+            markers
+                .sorted { $0.deletedAt < $1.deletedAt }
+                .suffix(Self.maxDeletedStudyRecordMarkerCount)
+        )
+
+        guard !cappedMarkers.isEmpty else {
+            defaults.removeObject(forKey: Keys.deletedStudyRecordMarkers)
+            return
+        }
+
+        if let data = try? encoder.encode(cappedMarkers) {
+            defaults.set(data, forKey: Keys.deletedStudyRecordMarkers)
+        }
+    }
+
+    func markStudyRecordDeleted(_ record: StudyRecord, deletedAt: Date = Date()) {
+        saveDeletedStudyRecordMarkers(
+            mergedDeletedStudyRecordMarkers(
+                loadDeletedStudyRecordMarkers(),
+                [DeletedStudyRecordMarker(record: record, deletedAt: deletedAt)]
+            )
+        )
+    }
+
+    func loadStudyRecordsClearedAt() -> Date? {
+        guard let value = defaults.object(forKey: Keys.studyRecordsClearedAt) as? TimeInterval else {
+            return nil
+        }
+
+        return Date(timeIntervalSince1970: value)
+    }
+
+    func saveStudyRecordsClearedAt(_ date: Date?) {
+        guard let date else {
+            defaults.removeObject(forKey: Keys.studyRecordsClearedAt)
+            return
+        }
+
+        defaults.set(date.timeIntervalSince1970, forKey: Keys.studyRecordsClearedAt)
     }
 
     func loadQuestionResponseID() -> String? {
@@ -472,6 +553,49 @@ final class SettingsStore {
         if let data = try? encoder.encode(value) {
             defaults.set(data, forKey: key)
         }
+    }
+
+    private static func isStudyRecordDeleted(
+        _ record: StudyRecord,
+        markers: [DeletedStudyRecordMarker],
+        clearedAt: Date?
+    ) -> Bool {
+        let sortDate = record.answeredAt ?? record.question.createdAt
+        if let clearedAt,
+           sortDate <= clearedAt {
+            return true
+        }
+
+        return markers.contains { marker in
+            marker.deletedAt >= sortDate && marker.matches(record)
+        }
+    }
+
+    private func mergedDeletedStudyRecordMarkers(
+        _ lhs: [DeletedStudyRecordMarker],
+        _ rhs: [DeletedStudyRecordMarker]
+    ) -> [DeletedStudyRecordMarker] {
+        var markersByKey: [String: DeletedStudyRecordMarker] = [:]
+
+        for marker in lhs + rhs {
+            let key = [
+                marker.recordID,
+                marker.mergeKey,
+                marker.normalizedQuestion
+            ].joined(separator: "|")
+
+            if let existingMarker = markersByKey[key] {
+                markersByKey[key] = marker.deletedAt >= existingMarker.deletedAt ? marker : existingMarker
+            } else {
+                markersByKey[key] = marker
+            }
+        }
+
+        return Array(
+            markersByKey.values
+                .sorted { $0.deletedAt < $1.deletedAt }
+                .suffix(Self.maxDeletedStudyRecordMarkerCount)
+        )
     }
 }
 

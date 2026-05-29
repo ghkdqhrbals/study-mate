@@ -20,6 +20,7 @@
 		11000000000000000000010C /* StudyMateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000000C /* StudyMateTests.swift */; };
 		11000000000000000000010E /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000000E /* HistoryView.swift */; };
 		11000000000000000000010F /* StatisticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000000F /* StatisticsView.swift */; };
+		110000000000000000000171 /* SwipeRevealRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000018 /* SwipeRevealRow.swift */; };
 		110000000000000000000150 /* study_ping.wav in Resources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000145 /* study_ping.wav */; };
 		110000000000000000000151 /* study_chime.wav in Resources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000146 /* study_chime.wav */; };
 		110000000000000000000152 /* study_pop.wav in Resources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000147 /* study_pop.wav */; };
@@ -39,6 +40,7 @@
 		12000000000000000000010F /* StatisticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11000000000000000000000F /* StatisticsView.swift */; };
 		120000000000000000000110 /* CloudSyncService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000016 /* CloudSyncService.swift */; };
 		120000000000000000000111 /* MobileRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 120000000000000000000003 /* MobileRootView.swift */; };
+		120000000000000000000112 /* SwipeRevealRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000018 /* SwipeRevealRow.swift */; };
 		120000000000000000000150 /* study_ping.wav in Resources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000145 /* study_ping.wav */; };
 		120000000000000000000151 /* study_chime.wav in Resources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000146 /* study_chime.wav */; };
 		120000000000000000000152 /* study_pop.wav in Resources */ = {isa = PBXBuildFile; fileRef = 110000000000000000000147 /* study_pop.wav */; };
@@ -81,12 +83,15 @@
 		110000000000000000000009 /* StudyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudyView.swift; sourceTree = "<group>"; };
 		11000000000000000000000A /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		11000000000000000000000B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		12000000000000000000000B /* iOSInfo.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = iOSInfo.plist; sourceTree = "<group>"; };
 		11000000000000000000000C /* StudyMateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudyMateTests.swift; sourceTree = "<group>"; };
 		11000000000000000000000D /* UpdateService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateService.swift; sourceTree = "<group>"; };
 		11000000000000000000000E /* HistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryView.swift; sourceTree = "<group>"; };
 		11000000000000000000000F /* StatisticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatisticsView.swift; sourceTree = "<group>"; };
 		110000000000000000000016 /* CloudSyncService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudSyncService.swift; sourceTree = "<group>"; };
 		110000000000000000000017 /* StudyMate.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = StudyMate.entitlements; sourceTree = "<group>"; };
+		110000000000000000000018 /* SwipeRevealRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeRevealRow.swift; sourceTree = "<group>"; };
+		120000000000000000000017 /* StudyMateiOS.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = StudyMateiOS.entitlements; sourceTree = "<group>"; };
 		110000000000000000000020 /* StudyMate.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = StudyMate.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		110000000000000000000021 /* StudyMateTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = StudyMateTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		110000000000000000000145 /* study_ping.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = study_ping.wav; sourceTree = "<group>"; };
@@ -146,7 +151,9 @@
 				110000000000000000000067 /* Views */,
 				110000000000000000000068 /* Resources */,
 				110000000000000000000017 /* StudyMate.entitlements */,
+				120000000000000000000017 /* StudyMateiOS.entitlements */,
 				11000000000000000000000B /* Info.plist */,
+				12000000000000000000000B /* iOSInfo.plist */,
 			);
 			path = StudyMate;
 			sourceTree = "<group>";
@@ -200,6 +207,7 @@
 		110000000000000000000067 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				11000000000000000000006B /* Components */,
 				110000000000000000000008 /* RootView.swift */,
 				110000000000000000000009 /* StudyView.swift */,
 				11000000000000000000000E /* HistoryView.swift */,
@@ -208,6 +216,14 @@
 				120000000000000000000003 /* MobileRootView.swift */,
 			);
 			path = Views;
+			sourceTree = "<group>";
+		};
+		11000000000000000000006B /* Components */ = {
+			isa = PBXGroup;
+			children = (
+				110000000000000000000018 /* SwipeRevealRow.swift */,
+			);
+			path = Components;
 			sourceTree = "<group>";
 		};
 		110000000000000000000068 /* Resources */ = {
@@ -311,6 +327,14 @@
 					};
 					120000000000000000000040 = {
 						CreatedOnToolsVersion = 26.0.1;
+						SystemCapabilities = {
+							com.apple.Push = {
+								enabled = 1;
+							};
+							com.apple.iCloud = {
+								enabled = 1;
+							};
+						};
 					};
 				};
 			};
@@ -389,6 +413,7 @@
 				110000000000000000000109 /* StudyView.swift in Sources */,
 				11000000000000000000010E /* HistoryView.swift in Sources */,
 				11000000000000000000010F /* StatisticsView.swift in Sources */,
+				110000000000000000000171 /* SwipeRevealRow.swift in Sources */,
 				11000000000000000000010A /* SettingsView.swift in Sources */,
 				110000000000000000000170 /* CloudSyncService.swift in Sources */,
 				11000000000000000000010B /* UpdateService.swift in Sources */,
@@ -418,6 +443,7 @@
 				12000000000000000000010F /* StatisticsView.swift in Sources */,
 				120000000000000000000110 /* CloudSyncService.swift in Sources */,
 				120000000000000000000111 /* MobileRootView.swift in Sources */,
+				120000000000000000000112 /* SwipeRevealRow.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -647,16 +673,15 @@
 		1200000000000000000000A2 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				APNS_ENVIRONMENT = development;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_ENTITLEMENTS = StudyMate/StudyMate.entitlements;
+				CODE_SIGN_ENTITLEMENTS = StudyMate/StudyMateiOS.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CLOUDKIT_CONTAINER_ENVIRONMENT = Development;
 				CURRENT_PROJECT_VERSION = 16;
 				DEVELOPMENT_TEAM = 4CL25TC734;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = BuddyStudy;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UIRequiresFullScreen = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = StudyMate/iOSInfo.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -680,16 +705,15 @@
 		1200000000000000000000A3 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				APNS_ENVIRONMENT = production;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_ENTITLEMENTS = StudyMate/StudyMate.entitlements;
+				CODE_SIGN_ENTITLEMENTS = StudyMate/StudyMateiOS.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CLOUDKIT_CONTAINER_ENVIRONMENT = Production;
 				CURRENT_PROJECT_VERSION = 16;
 				DEVELOPMENT_TEAM = 4CL25TC734;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = BuddyStudy;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UIRequiresFullScreen = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = StudyMate/iOSInfo.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

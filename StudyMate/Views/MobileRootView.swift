@@ -13,7 +13,7 @@ struct MobileRootView: View {
                 NavigationStack {
                     StudyView()
                         .padding(.horizontal, 16)
-                        .navigationTitle(strings.tabStudy)
+                        .mobileTabTitle(strings.tabStudy)
                 }
                 .tabItem {
                     Label(strings.tabStudy, systemImage: "book.fill")
@@ -23,7 +23,7 @@ struct MobileRootView: View {
                 NavigationStack {
                     HistoryView()
                         .padding(.horizontal, 16)
-                        .navigationTitle(strings.tabRecords)
+                        .mobileTabTitle(strings.tabRecords)
                 }
                 .tabItem {
                     Label(strings.tabRecords, systemImage: "clock.arrow.circlepath")
@@ -33,7 +33,7 @@ struct MobileRootView: View {
                 NavigationStack {
                     StatisticsView()
                         .padding(.horizontal, 16)
-                        .navigationTitle(strings.tabStatistics)
+                        .mobileTabTitle(strings.tabStatistics)
                 }
                 .tabItem {
                     Label(strings.tabStatistics, systemImage: "chart.xyaxis.line")
@@ -42,7 +42,7 @@ struct MobileRootView: View {
 
                 NavigationStack {
                     MobileSettingsView()
-                        .navigationTitle(strings.tabSettings)
+                        .mobileTabTitle(strings.tabSettings)
                 }
                 .tabItem {
                     Label(strings.tabSettings, systemImage: "gearshape.fill")
@@ -50,6 +50,20 @@ struct MobileRootView: View {
                 .tag(AppTab.settings)
             }
         }
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func mobileTabTitle(_ title: String) -> some View {
+        #if os(iOS)
+        self
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.visible, for: .navigationBar)
+        #else
+        self.navigationTitle(title)
+        #endif
     }
 }
 
@@ -170,43 +184,36 @@ private struct MobileSettingsView: View {
         let strings = appState.settingsEditorStrings
 
         Form {
-            Section(strings.iCloudSync) {
-                Toggle(
-                    strings.iCloudSync,
-                    isOn: Binding(
-                        get: { appState.isCloudSyncEnabled },
-                        set: { appState.setCloudSyncEnabled($0) }
-                    )
+            Section(strings.studySettings) {
+                TextField(strings.studyTopic, text: $appState.draftSettings.topic)
+
+                Stepper(
+                    appState.draftSettings.difficulty.displayName(language: appState.draftSettings.appLanguage),
+                    value: Binding(
+                        get: { appState.draftSettings.difficulty.level },
+                        set: { appState.draftSettings.difficulty = Difficulty(level: $0) }
+                    ),
+                    in: 1...10
                 )
 
-                Button {
-                    Task {
-                        await appState.syncCloudNow()
+                Stepper(
+                    strings.questionInterval(minutes: appState.draftSettings.sanitizedIntervalMinutes),
+                    value: $appState.draftSettings.intervalMinutes,
+                    in: 1...240
+                )
+
+                Menu {
+                    ForEach(RecommendedPrompt.allCases) { prompt in
+                        Button(prompt.title(language: appState.draftSettings.appLanguage)) {
+                            appState.draftSettings.customPrompt = prompt.text(language: appState.draftSettings.appLanguage)
+                        }
                     }
                 } label: {
-                    if appState.isCloudSyncing {
-                        Label(strings.syncing, systemImage: "arrow.triangle.2.circlepath")
-                    } else {
-                        Label(strings.syncNow, systemImage: "arrow.triangle.2.circlepath")
-                    }
-                }
-                .disabled(!appState.isCloudSyncEnabled || appState.isCloudSyncing)
-
-                if let cloudLastSyncedAt = appState.cloudLastSyncedAt {
-                    Text(strings.lastSyncedAt(cloudLastSyncedAt))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    Label(strings.recommendedPrompt, systemImage: "sparkles")
                 }
 
-                if let message = appState.cloudSyncMessage {
-                    Text(message)
-                        .font(.caption)
-                        .foregroundColor(appState.hasCloudSyncError ? .orange : .secondary)
-                }
-
-                Text(strings.iCloudSyncHelp)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                TextEditor(text: $appState.draftSettings.customPrompt)
+                    .frame(minHeight: 110)
             }
 
             Section("OpenAI") {
@@ -236,6 +243,16 @@ private struct MobileSettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.red)
                 }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(strings.openAIBillingHelp)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    Link(strings.openAIUsageAndCostsPage, destination: URL(string: "https://platform.openai.com/usage")!)
+                    Link(strings.openAIBillingPage, destination: URL(string: "https://platform.openai.com/settings/organization/billing/overview")!)
+                }
+                .padding(.vertical, 2)
             }
 
             Section(strings.generalSettings) {
@@ -255,14 +272,6 @@ private struct MobileSettingsView: View {
                     appState.openSystemNotificationSettings()
                 } label: {
                     Label(strings.openNotificationSettings, systemImage: "bell.badge")
-                }
-
-                Button {
-                    Task {
-                        await appState.sendTestNotification()
-                    }
-                } label: {
-                    Label(strings.testNotification, systemImage: "paperplane")
                 }
 
                 Picker(
@@ -290,28 +299,6 @@ private struct MobileSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section(strings.studySettings) {
-                TextField(strings.studyTopic, text: $appState.draftSettings.topic)
-
-                Stepper(
-                    appState.draftSettings.difficulty.displayName(language: appState.draftSettings.appLanguage),
-                    value: Binding(
-                        get: { appState.draftSettings.difficulty.level },
-                        set: { appState.draftSettings.difficulty = Difficulty(level: $0) }
-                    ),
-                    in: 1...10
-                )
-
-                Stepper(
-                    strings.questionInterval(minutes: appState.draftSettings.sanitizedIntervalMinutes),
-                    value: $appState.draftSettings.intervalMinutes,
-                    in: 1...240
-                )
-
-                TextEditor(text: $appState.draftSettings.customPrompt)
-                    .frame(minHeight: 110)
-            }
-
             Section(strings.records) {
                 Stepper(
                     "\(strings.maxRecordCount): \(appState.draftSettings.sanitizedMaxHistoryCount)",
@@ -328,17 +315,12 @@ private struct MobileSettingsView: View {
                 .disabled(appState.studyRecords.isEmpty)
             }
 
-            Section(strings.openAIBilling) {
-                Text(strings.openAIBillingHelp)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                Link(strings.openAIUsageAndCostsPage, destination: URL(string: "https://platform.openai.com/usage")!)
-                Link(strings.openAIBillingPage, destination: URL(string: "https://platform.openai.com/settings/organization/billing/overview")!)
-            }
-
             if appState.isDebuggingEnabled {
                 MobileDeveloperLogsSection()
+            }
+
+            Section {
+                MobileCloudSyncRow()
             }
         }
         .toolbar {
@@ -366,8 +348,59 @@ private struct MobileSettingsView: View {
     }
 }
 
+private struct MobileCloudSyncRow: View {
+    @EnvironmentObject private var appState: AppState
+
+    var body: some View {
+        let strings = appState.settingsEditorStrings
+
+        HStack(spacing: 8) {
+            Toggle(
+                strings.iCloudSync,
+                isOn: Binding(
+                    get: { appState.isCloudSyncEnabled },
+                    set: { appState.setCloudSyncEnabled($0) }
+                )
+            )
+            .fixedSize()
+
+            Text(statusText(strings: strings))
+                .font(.caption)
+                .foregroundStyle(appState.hasCloudSyncError ? .orange : .secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+
+            Spacer(minLength: 4)
+
+            Button {
+                Task {
+                    await appState.syncCloudNow()
+                }
+            } label: {
+                Image(systemName: appState.isCloudSyncing ? "arrow.triangle.2.circlepath" : "arrow.triangle.2.circlepath")
+            }
+            .disabled(!appState.isCloudSyncEnabled || appState.isCloudSyncing)
+            .accessibilityLabel(appState.isCloudSyncing ? strings.syncing : strings.syncNow)
+        }
+    }
+
+    private func statusText(strings: AppStrings) -> String {
+        if let message = appState.cloudSyncMessage,
+           !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return message
+        }
+
+        if let cloudLastSyncedAt = appState.cloudLastSyncedAt {
+            return strings.lastSyncedAt(cloudLastSyncedAt)
+        }
+
+        return appState.isCloudSyncEnabled ? strings.iCloudSyncOn : strings.iCloudSyncOff
+    }
+}
+
 private struct MobileDeveloperLogsSection: View {
     @EnvironmentObject private var appState: AppState
+    @State private var didLoadInitialLogPage = false
 
     var body: some View {
         let strings = appState.settingsEditorStrings
@@ -386,24 +419,23 @@ private struct MobileDeveloperLogsSection: View {
 
                 Spacer()
 
-                Button {
-                    appState.loadAppLogPage(appState.appLogPage - 1)
-                } label: {
-                    Image(systemName: "chevron.left")
-                }
-                .disabled(appState.appLogPage == 0)
+                MobileLogPageButton(
+                    systemImage: "chevron.left",
+                    isDisabled: appState.appLogPage == 0,
+                    action: appState.loadPreviousAppLogPage
+                )
 
                 Text("\(appState.appLogPage + 1)/\(appState.appLogPageCount)")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
+                    .frame(minWidth: 38)
 
-                Button {
-                    appState.loadAppLogPage(appState.appLogPage + 1)
-                } label: {
-                    Image(systemName: "chevron.right")
-                }
-                .disabled(appState.appLogPage >= appState.appLogPageCount - 1)
+                MobileLogPageButton(
+                    systemImage: "chevron.right",
+                    isDisabled: appState.appLogPage >= appState.appLogPageCount - 1,
+                    action: appState.loadNextAppLogPage
+                )
             }
 
             if appState.appLogs.isEmpty {
@@ -411,9 +443,12 @@ private struct MobileDeveloperLogsSection: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
-                ForEach(appState.appLogs) { entry in
-                    MobileLogRow(entry: entry)
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(appState.appLogs) { entry in
+                        MobileLogRow(entry: entry)
+                    }
                 }
+                .padding(.vertical, 2)
             }
 
             Button(role: .destructive) {
@@ -428,7 +463,12 @@ private struct MobileDeveloperLogsSection: View {
                 .foregroundStyle(.secondary)
         }
         .onAppear {
-            appState.loadAppLogPage(0)
+            guard !didLoadInitialLogPage else {
+                return
+            }
+
+            didLoadInitialLogPage = true
+            appState.loadAppLogPage(appState.appLogPage)
         }
     }
 
@@ -445,39 +485,54 @@ private struct MobileDeveloperLogsSection: View {
     }
 }
 
+private struct MobileLogPageButton: View {
+    var systemImage: String
+    var isDisabled: Bool
+    var action: () -> Void
+
+    var body: some View {
+        Button {
+            guard !isDisabled else {
+                return
+            }
+
+            action()
+        } label: {
+            Image(systemName: systemImage)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(isDisabled ? .tertiary : .primary)
+                .frame(width: 34, height: 30)
+                .background(Color.secondary.opacity(isDisabled ? 0.04 : 0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 7))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(isDisabled)
+    }
+}
+
 private struct MobileLogRow: View {
     var entry: AppLogEntry
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(color)
-                    .frame(width: 7, height: 7)
+        Text(lineText)
+            .font(.system(size: 10, weight: .regular, design: .monospaced))
+            .foregroundStyle(color)
+            .lineSpacing(0)
+            .lineLimit(1)
+            .truncationMode(.middle)
+            .padding(.vertical, 1)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
 
-                Text(entry.level.displayName)
-                    .font(.caption)
-                    .fontWeight(.semibold)
-
-                Text(entry.createdAt, formatter: Self.dateFormatter)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-
-                Spacer()
-            }
-
-            Text(entry.message)
-                .font(.caption)
-                .lineLimit(4)
-                .truncationMode(.tail)
-        }
-        .padding(.vertical, 4)
+    private var lineText: String {
+        "\(Self.dateFormatter.string(from: entry.createdAt)) \(entry.level.displayName.uppercased()) \(entry.message)"
     }
 
     private var color: Color {
         switch entry.level {
         case .info:
-            .blue
+            .primary
         case .warning:
             .orange
         case .error:

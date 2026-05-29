@@ -4,67 +4,35 @@ struct StudyView: View {
     @EnvironmentObject private var appState: AppState
     @State private var showsHint = false
     @State private var draftAnswer = ""
+    @State private var showsPendingLimitHelp = false
     #if os(iOS)
     @FocusState private var isAnswerEditorFocused: Bool
     #endif
 
     var body: some View {
         let strings = appState.strings
-        let canSubmitAnswer = appState.currentQuestion != nil &&
-            !draftAnswer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-            !appState.isGradingAnswer
 
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(appState.settings.topic)
-                            .font(.headline)
-                        Text("\(appState.settings.difficulty.displayName(language: appState.settings.appLanguage)) · \(appState.settings.language.displayName) · \(strings.minuteLabel(appState.settings.sanitizedIntervalMinutes))")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
                     Spacer()
 
-                    Button {
-                        Task {
-                            if appState.hasReachedPendingQuestionLimit {
-                                appState.openOldestPendingQuestion()
-                            } else {
-                                await appState.generateQuestion()
-                            }
-                        }
-                    } label: {
-                        if appState.isGeneratingQuestion {
-                            ProgressView()
-                                .controlSize(.small)
-                        } else if appState.hasReachedPendingQuestionLimit {
-                            Label(strings.continueOldestPending, systemImage: "arrow.uturn.down.circle")
-                        } else {
-                            Label(strings.newQuestion, systemImage: "plus.circle")
-                        }
-                    }
-                    .disabled(appState.isGeneratingQuestion)
+                    newQuestionButton(strings: strings)
                 }
 
-                StudyOverviewSection(
-                    pendingCount: appState.pendingStudyRecords.count,
-                    latestScore: latestScore,
-                    averageScore: averageScore,
-                    strings: strings,
-                    onContinue: {
-                        appState.openOldestPendingQuestion()
-                    }
+                StudySettingsSummarySection(
+                    topic: studyTopicLabel(strings: strings),
+                    level: appState.settings.difficulty.displayName(language: appState.settings.appLanguage),
+                    interval: strings.minuteLabel(appState.settings.sanitizedIntervalMinutes),
+                    strings: strings
                 )
 
-                if appState.hasReachedPendingQuestionLimit {
-                    PendingLimitValidationView(strings: strings) {
-                        appState.openOldestPendingQuestion()
-                    }
-                }
-
                 Divider()
+
+                if appState.currentQuestion != nil,
+                   let notificationLandingMessage = appState.notificationLandingMessage {
+                    notificationLandingInlineView(message: notificationLandingMessage, strings: strings)
+                }
 
                 if !appState.pendingStudyRecords.isEmpty {
                     PendingQuestionsSection(
@@ -73,6 +41,10 @@ struct StudyView: View {
                         strings: strings
                     ) { record in
                         appState.selectStudyRecord(record)
+                    } onSkip: { record in
+                        withAnimation(.easeOut(duration: 0.22)) {
+                            appState.skipPendingQuestion(record)
+                        }
                     }
 
                     Divider()
@@ -85,19 +57,6 @@ struct StudyView: View {
                                 Text(strings.question)
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
-
-                                Spacer()
-
-                                if appState.canSkipCurrentQuestion {
-                                    Button {
-                                        appState.skipCurrentQuestion()
-                                    } label: {
-                                        Label(strings.skipQuestion, systemImage: "forward.end.fill")
-                                    }
-                                    .buttonStyle(.borderless)
-                                    .font(.caption)
-                                    .help(strings.skipQuestionHelp)
-                                }
                             }
 
                             Text(question.question)
@@ -133,11 +92,7 @@ struct StudyView: View {
                         .background(Color.secondary.opacity(0.08))
                         .clipShape(RoundedRectangle(cornerRadius: 8))
                     } else {
-                        ContentUnavailableView(
-                            strings.noQuestion,
-                            systemImage: "questionmark.bubble",
-                            description: Text(strings.noQuestionDescription)
-                        )
+                        noQuestionView(strings: strings)
                         .frame(maxWidth: .infinity, minHeight: 140)
                     }
                 }
@@ -169,16 +124,14 @@ struct StudyView: View {
                         }
                     }
 
-                    answerEditor(strings: strings)
+                    answerEditor()
                 }
 
                 HStack {
                     Spacer()
 
                     Button {
-                        Task {
-                            await appState.gradeCurrentAnswer(answer: draftAnswer)
-                        }
+                        submitCurrentAnswer()
                     } label: {
                         if appState.isGradingAnswer {
                             ProgressView()
@@ -222,9 +175,19 @@ struct StudyView: View {
         }
         #if os(iOS)
         .scrollDismissesKeyboard(.interactively)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if isAnswerEditorFocused {
+                keyboardAnswerActionBar(strings: strings)
+            }
+        }
         #endif
         .refreshable {
             await appState.refreshVisibleData()
+        }
+        .alert(strings.pendingQuestionLimitTitle, isPresented: $showsPendingLimitHelp) {
+            Button(strings.done, role: .cancel) {}
+        } message: {
+            Text(strings.pendingQuestionLimitMessage)
         }
         .onAppear {
             draftAnswer = appState.lastAnswer
@@ -245,122 +208,212 @@ struct StudyView: View {
         }
     }
 
-    private var gradedRecords: [StudyRecord] {
-        appState.studyRecords.filter { $0.gradingResult != nil }
+    private var canSubmitAnswer: Bool {
+        appState.currentQuestion != nil &&
+            !draftAnswer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+            !appState.isGradingAnswer
     }
 
-    private var latestScore: Int? {
-        gradedRecords.last?.gradingResult?.score
-    }
-
-    private var averageScore: Int? {
-        let scores = gradedRecords.compactMap { $0.gradingResult?.score }
-        guard !scores.isEmpty else {
-            return nil
-        }
-
-        return Int((Double(scores.reduce(0, +)) / Double(scores.count)).rounded())
+    private func studyTopicLabel(strings: AppStrings) -> String {
+        let topic = appState.settings.topic.trimmingCharacters(in: .whitespacesAndNewlines)
+        return topic.isEmpty ? strings.studyFallback : topic
     }
 
     @ViewBuilder
-    private func answerEditor(strings: AppStrings) -> some View {
+    private func noQuestionView(strings: AppStrings) -> some View {
+        if let notificationLandingMessage = appState.notificationLandingMessage {
+            VStack(spacing: 12) {
+                ContentUnavailableView(
+                    strings.notificationQuestionMissingTitle,
+                    systemImage: "bell.slash",
+                    description: Text(notificationLandingMessage)
+                )
+
+                Text(strings.notificationQuestionUnavailableHelp)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+
+                HStack(spacing: 10) {
+                    newQuestionButton(strings: strings, prominent: true)
+                }
+                .font(.caption)
+            }
+            .frame(maxWidth: .infinity)
+        } else {
+            ContentUnavailableView(
+                strings.noQuestion,
+                systemImage: "questionmark.bubble",
+                description: Text(strings.noQuestionDescription)
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func newQuestionButton(strings: AppStrings, prominent: Bool = false) -> some View {
+        if prominent {
+            Button {
+                requestNewQuestion()
+            } label: {
+                newQuestionButtonLabel(strings: strings)
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(appState.isGeneratingQuestion)
+            .opacity(appState.hasReachedPendingQuestionLimit ? 0.55 : 1)
+            .accessibilityHint(appState.hasReachedPendingQuestionLimit ? strings.pendingQuestionLimitMessage : "")
+        } else {
+            Button {
+                requestNewQuestion()
+            } label: {
+                newQuestionButtonLabel(strings: strings)
+            }
+            .buttonStyle(.bordered)
+            .disabled(appState.isGeneratingQuestion)
+            .opacity(appState.hasReachedPendingQuestionLimit ? 0.55 : 1)
+            .accessibilityHint(appState.hasReachedPendingQuestionLimit ? strings.pendingQuestionLimitMessage : "")
+        }
+    }
+
+    @ViewBuilder
+    private func newQuestionButtonLabel(strings: AppStrings) -> some View {
+        if appState.isGeneratingQuestion {
+            ProgressView()
+                .controlSize(.small)
+        } else {
+            Label(strings.newQuestion, systemImage: "plus.circle")
+        }
+    }
+
+    private func requestNewQuestion() {
+        guard !appState.isGeneratingQuestion else {
+            return
+        }
+
+        if appState.hasReachedPendingQuestionLimit {
+            showsPendingLimitHelp = true
+            return
+        }
+
+        Task {
+            await appState.generateQuestion()
+        }
+    }
+
+    private func notificationLandingInlineView(message: String, strings: AppStrings) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "bell.slash")
+                .foregroundStyle(.secondary)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(strings.notificationQuestionMissingTitle)
+                    .font(.subheadline.weight(.semibold))
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+
+            Spacer(minLength: 8)
+
+            Button(strings.done) {
+                appState.clearStatus()
+            }
+            .buttonStyle(.borderless)
+            .font(.caption)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.secondary.opacity(0.07))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    @ViewBuilder
+    private func answerEditor() -> some View {
         #if os(iOS)
         AnswerEditor(
             text: $draftAnswer,
             minHeight: 96,
-            doneTitle: strings.done,
             isFocused: $isAnswerEditorFocused
         )
         #else
         AnswerEditor(
             text: $draftAnswer,
-            minHeight: 96,
-            doneTitle: strings.done
+            minHeight: 96
         )
         #endif
     }
+
+    private func submitCurrentAnswer() {
+        #if os(iOS)
+        isAnswerEditorFocused = false
+        #endif
+
+        Task {
+            await appState.gradeCurrentAnswer(answer: draftAnswer)
+        }
+    }
+
+    #if os(iOS)
+    private func keyboardAnswerActionBar(strings: AppStrings) -> some View {
+        HStack(spacing: 12) {
+            Button(strings.done) {
+                isAnswerEditorFocused = false
+            }
+            .buttonStyle(.bordered)
+
+            Spacer(minLength: 8)
+
+            Button {
+                submitCurrentAnswer()
+            } label: {
+                if appState.isGradingAnswer {
+                    ProgressView()
+                        .controlSize(.small)
+                } else {
+                    Label(strings.gradeAnswer, systemImage: "checkmark.seal")
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(!canSubmitAnswer)
+        }
+        .font(.callout)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity)
+        .background(.bar)
+        .overlay(alignment: .top) {
+            Divider()
+        }
+        .transition(.move(edge: .bottom).combined(with: .opacity))
+    }
+    #endif
 }
 
-private struct StudyOverviewSection: View {
-    var pendingCount: Int
-    var latestScore: Int?
-    var averageScore: Int?
+private struct StudySettingsSummarySection: View {
+    var topic: String
+    var level: String
+    var interval: String
     var strings: AppStrings
-    var onContinue: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
-                Text(strings.studyOverview)
+                Text(strings.studySettings)
                     .font(.caption)
                     .fontWeight(.semibold)
                     .foregroundStyle(.secondary)
-
-                Spacer()
-
-                if pendingCount > 0 {
-                    Button(strings.continueOldestPending, action: onContinue)
-                        .buttonStyle(.borderless)
-                        .font(.caption)
-                }
             }
 
             HStack(spacing: 8) {
-                StudyOverviewMetric(title: strings.pendingShort, value: "\(pendingCount)")
-                StudyOverviewMetric(title: strings.latestScoreShort, value: scoreText(latestScore))
-                StudyOverviewMetric(title: strings.averageScoreShort, value: scoreText(averageScore))
+                StudySummaryMetric(title: strings.studyTopicShort, value: topic)
+                StudySummaryMetric(title: strings.studyLevelShort, value: level)
+                StudySummaryMetric(title: strings.studyIntervalShort, value: interval)
             }
         }
     }
-
-    private func scoreText(_ score: Int?) -> String {
-        guard let score else {
-            return strings.noScoreShort
-        }
-
-        return "\(score)"
-    }
 }
 
-private struct PendingLimitValidationView: View {
-    var strings: AppStrings
-    var onContinue: () -> Void
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.orange)
-                .frame(width: 18, height: 18)
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text(strings.pendingQuestionLimitTitle)
-                    .font(.caption)
-                    .fontWeight(.semibold)
-
-                Text(strings.pendingQuestionLimitMessage)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            Spacer(minLength: 8)
-
-            Button(strings.continueOldestPending, action: onContinue)
-                .buttonStyle(.borderless)
-                .font(.caption)
-        }
-        .padding(10)
-        .background(Color.orange.opacity(0.08))
-        .overlay {
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(Color.orange.opacity(0.18), lineWidth: 1)
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-    }
-}
-
-private struct StudyOverviewMetric: View {
+private struct StudySummaryMetric: View {
     var title: String
     var value: String
 
@@ -371,7 +424,8 @@ private struct StudyOverviewMetric: View {
                 .foregroundStyle(.secondary)
             Text(value)
                 .font(.headline)
-                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 8)
@@ -388,7 +442,6 @@ private struct StudyOverviewMetric: View {
 private struct AnswerEditor: View {
     @Binding var text: String
     var minHeight: CGFloat
-    var doneTitle: String
     #if os(iOS)
     var isFocused: FocusState<Bool>.Binding
     #endif
@@ -409,14 +462,6 @@ private struct AnswerEditor: View {
         #if os(iOS)
         editor
             .focused(isFocused)
-            .toolbar {
-                ToolbarItemGroup(placement: .keyboard) {
-                    Spacer()
-                    Button(doneTitle) {
-                        isFocused.wrappedValue = false
-                    }
-                }
-            }
         #else
         editor
         #endif
@@ -428,6 +473,9 @@ private struct PendingQuestionsSection: View {
     var currentQuestion: QuestionItem?
     var strings: AppStrings
     var onSelect: (StudyRecord) -> Void
+    var onSkip: (StudyRecord) -> Void
+
+    @State private var openSwipeRecordID: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -444,6 +492,42 @@ private struct PendingQuestionsSection: View {
             }
 
             VStack(spacing: 4) {
+                #if os(iOS)
+                ForEach(records) { record in
+                    let isSelected = isCurrent(record)
+                    let skipAction: () -> Void = {
+                        openSwipeRecordID = nil
+                        onSkip(record)
+                    }
+
+                    SwipeRevealRow(
+                        isOpen: Binding(
+                            get: { openSwipeRecordID == record.id },
+                            set: { openSwipeRecordID = $0 ? record.id : nil }
+                        ),
+                        actionWidth: 82,
+                        onTap: {
+                            if let openSwipeRecordID, openSwipeRecordID != record.id {
+                                closeOpenSwipe(animated: true)
+                                return
+                            }
+
+                            onSelect(record)
+                        },
+                        onFullSwipe: skipAction
+                    ) {
+                        PendingQuestionRow(record: record, strings: strings, isSelected: isSelected)
+                    } action: {
+                        SwipeActionButton(title: strings.skipQuestion, systemImage: "forward.end.fill", tint: .orange)
+                    }
+                    .transition(
+                        .asymmetric(
+                            insertion: .opacity,
+                            removal: .opacity.combined(with: .move(edge: .leading))
+                        )
+                    )
+                }
+                #else
                 ForEach(records) { record in
                     let isSelected = isCurrent(record)
 
@@ -454,6 +538,13 @@ private struct PendingQuestionsSection: View {
                     }
                     .buttonStyle(.plain)
                 }
+                #endif
+            }
+        }
+        .onChange(of: records.map(\.id)) {
+            if let openSwipeRecordID,
+               !records.contains(where: { $0.id == openSwipeRecordID }) {
+                self.openSwipeRecordID = nil
             }
         }
     }
@@ -467,6 +558,25 @@ private struct PendingQuestionsSection: View {
             SettingsStore.normalizedQuestionText(record.question.question) ==
             SettingsStore.normalizedQuestionText(currentQuestion.question)
     }
+
+    private func closeOpenSwipe(animated: Bool) {
+        guard openSwipeRecordID != nil else {
+            return
+        }
+
+        if animated {
+            withAnimation(.interactiveSpring(response: 0.24, dampingFraction: 0.9)) {
+                openSwipeRecordID = nil
+            }
+        } else {
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                openSwipeRecordID = nil
+            }
+        }
+    }
+
 }
 
 private struct PendingQuestionRow: View {
@@ -501,6 +611,7 @@ private struct PendingQuestionRow: View {
         }
         .padding(.vertical, 7)
         .padding(.horizontal, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(isSelected ? Color.secondary.opacity(0.1) : Color.secondary.opacity(0.04))
         .overlay {
             RoundedRectangle(cornerRadius: 8)

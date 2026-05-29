@@ -5,9 +5,37 @@ import AppKit
 import UIKit
 #endif
 
+private enum QuestionGenerationSkip: Error {
+    case pendingLimit
+    case duplicateQuestion
+}
+
+#if os(iOS)
+private final class BackgroundTaskExpiration: @unchecked Sendable {
+    private let lock = NSLock()
+    private var expired = false
+
+    var isExpired: Bool {
+        lock.lock()
+        defer {
+            lock.unlock()
+        }
+
+        return expired
+    }
+
+    func expire() {
+        lock.lock()
+        expired = true
+        lock.unlock()
+    }
+}
+#endif
+
 @MainActor
 final class AppState: ObservableObject {
     static let developerLogPageSize = 50
+    static let maxPendingQuestionCount = 3
 
     @Published var settings: StudySettings
     @Published var draftSettings: StudySettings
@@ -34,6 +62,7 @@ final class AppState: ObservableObject {
     @Published var isDebuggingEnabled: Bool
     @Published var statusMessage: String?
     @Published var errorMessage: String?
+    @Published var notificationLandingMessage: String?
     @Published var selectedTab: AppTab = .study
     @Published var focusedRecordRequest: FocusedRecordRequest?
     @Published var hasCompletedOnboarding: Bool
@@ -50,10 +79,11 @@ final class AppState: ObservableObject {
 
     private let settingsStore: SettingsStore
     private let openAIClient: OpenAIClientProtocol
-    private let notificationService: NotificationService
+    private let notificationService: NotificationServicing
     private var cloudSyncService: CloudSyncServiceProtocol?
     private var timerTask: Task<Void, Never>?
     private var cloudSyncTask: Task<Void, Never>?
+    private var lastBackgroundQuestionPreparationAt: Date?
     private var didStart = false
     private var savedSettings: StudySettings
     private var savedAPIKey: String
@@ -116,17 +146,35 @@ final class AppState: ObservableObject {
     }
 
     var pendingQuestionCount: Int {
-        studyRecords.filter { $0.gradingResult == nil }.count
+        pendingRecordsIncludingCurrent.count
     }
 
     var hasReachedPendingQuestionLimit: Bool {
-        pendingQuestionCount >= 3
+        pendingQuestionCount >= Self.maxPendingQuestionCount
     }
 
     var pendingStudyRecords: [StudyRecord] {
-        studyRecords
-            .filter { $0.gradingResult == nil }
+        pendingRecordsIncludingCurrent
             .sorted { $0.question.createdAt > $1.question.createdAt }
+    }
+
+    private var pendingRecordsIncludingCurrent: [StudyRecord] {
+        var records = studyRecords.filter { $0.gradingResult == nil }
+
+        if let currentQuestion,
+           gradingResult == nil,
+           !records.contains(where: { studyRecordMatches($0, question: currentQuestion) }) {
+            records.append(
+                StudyRecord(
+                    question: currentQuestion,
+                    answer: lastAnswer.isEmpty ? nil : lastAnswer,
+                    topic: settings.topic,
+                    difficulty: settings.difficulty
+                )
+            )
+        }
+
+        return records
     }
 
     var canSkipCurrentQuestion: Bool {
@@ -160,7 +208,7 @@ final class AppState: ObservableObject {
     init(
         settingsStore: SettingsStore = SettingsStore(),
         openAIClient: OpenAIClientProtocol? = nil,
-        notificationService: NotificationService = NotificationService(),
+        notificationService: NotificationServicing = NotificationService(),
         cloudSyncService: CloudSyncServiceProtocol? = nil
     ) {
         let loadedSettings = settingsStore.loadSettings()
@@ -237,12 +285,70 @@ final class AppState: ObservableObject {
         }
 
         if isCloudSyncEnabled {
-            await syncCloudNow()
+            await syncCloudNow(updateVisibleQuestion: false)
+            await ensureCloudQuestionPushSubscription()
         }
 
         _ = await notificationService.requestAuthorizationIfNeeded(language: settings.appLanguage)
         await validateAPIKeyOnStartup()
+        #if os(macOS)
+        await generateDueQuestionIfNeeded(reason: "startup")
+        #endif
         restartTimer()
+    }
+
+    func handleAppBecameActive() async {
+        guard hasCompletedOnboarding else {
+            return
+        }
+
+        reloadPersistedState()
+        if isCloudSyncEnabled {
+            await syncCloudNow(updateVisibleQuestion: false)
+            await ensureCloudQuestionPushSubscription()
+        }
+        await generateDueQuestionIfNeeded(reason: "foreground")
+    }
+
+    @discardableResult
+    func handleBackgroundRefresh() async -> Bool {
+        guard hasCompletedOnboarding else {
+            return false
+        }
+
+        reloadPersistedState()
+        if isCloudSyncEnabled {
+            await syncCloudNow(updateVisibleQuestion: false)
+            await ensureCloudQuestionPushSubscription()
+        }
+
+        return await generateDueQuestionIfNeeded(reason: "background-refresh")
+    }
+
+    @discardableResult
+    func prepareBackgroundQuestionNotifications() async -> Int {
+        #if os(iOS)
+        let expiration = BackgroundTaskExpiration()
+        let taskIdentifier = UIApplication.shared.beginBackgroundTask(withName: "StudyMate.prepareQuestions") {
+            expiration.expire()
+        }
+        defer {
+            if taskIdentifier != .invalid {
+                UIApplication.shared.endBackgroundTask(taskIdentifier)
+            }
+        }
+
+        return await prepareScheduledQuestionsForLockedDevice {
+            expiration.isExpired
+        }
+        #else
+        return 0
+        #endif
+    }
+
+    func backgroundRefreshEarliestBeginDate(now: Date = Date()) -> Date {
+        refreshStudyProgressFromStore()
+        return nextQuestionDueDate(now: now)
     }
 
     func refreshVisibleData() async {
@@ -264,7 +370,7 @@ final class AppState: ObservableObject {
         }
     }
 
-    private func reloadPersistedState() {
+    private func reloadPersistedState(restartTimerAfterReload: Bool = true) {
         let loadedSettings = settingsStore.loadSettings()
         let loadedAPIKey = settingsStore.loadAPIKey()
         let loadedAdminAPIKey = settingsStore.loadAdminAPIKey()
@@ -302,7 +408,22 @@ final class AppState: ObservableObject {
         }
 
         hasAPIKeyError = loadedAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        restartTimer()
+        if restartTimerAfterReload {
+            restartTimer()
+        }
+    }
+
+    private func refreshStudyProgressFromStore() {
+        currentQuestion = settingsStore.loadQuestion()
+        lastAnswer = settingsStore.loadLastAnswer()
+        gradingResult = settingsStore.loadGradingResult()
+        studyRecords = settingsStore.loadStudyRecords()
+    }
+
+    private func showPendingQuestionLimitStatus(reason: String) {
+        statusMessage = strings.pendingQuestionLimitTitle
+        errorMessage = strings.pendingQuestionLimitMessage
+        log(.warning, "미채점 질문이 \(Self.maxPendingQuestionCount)개라 \(reason)을 건너뛰었습니다.")
     }
 
     private func validateAPIKeyOnStartup() async {
@@ -505,6 +626,10 @@ final class AppState: ObservableObject {
         markCloudDataChanged()
 
         restartTimer()
+
+        Task {
+            await ensureCloudQuestionPushSubscription()
+        }
     }
 
     func saveSettingsAndValidateAPIKey() async {
@@ -609,6 +734,8 @@ final class AppState: ObservableObject {
     }
 
     func generateQuestion(manual: Bool = true) async {
+        notificationLandingMessage = nil
+
         if !manual && !isRunning {
             log(.info, "타이머가 중지되어 예약 질문 생성을 건너뛰었습니다.")
             return
@@ -619,41 +746,251 @@ final class AppState: ObservableObject {
             return
         }
 
-        guard !hasReachedPendingQuestionLimit else {
-            statusMessage = strings.pendingQuestionLimitTitle
-            errorMessage = nil
-            log(.warning, "미채점 질문이 3개라 새 질문 생성을 건너뛰었습니다.")
-            return
-        }
-
         isGeneratingQuestion = true
         defer {
             isGeneratingQuestion = false
         }
+
+        guard await canCreateQuestionAfterGlobalPendingCheck(
+            reason: "새 질문 생성",
+            updateVisibleQuestion: manual
+        ) else {
+            return
+        }
+
         errorMessage = nil
         statusMessage = manual ? "질문을 생성 중입니다." : "예약된 질문을 생성 중입니다."
         log(.info, "새 질문 생성 요청을 전송합니다. topic=\(settings.topic), difficulty=\(settings.difficulty.level), model=\(settings.sanitizedOpenAIModel)")
 
         do {
-            let question = try await createAndStoreQuestion()
-            statusMessage = "새 질문이 준비됐습니다."
+            let shouldActivateQuestion = manual || !hasActiveUngradedCurrentQuestion
+            let question = try await createAndStoreQuestion(activate: shouldActivateQuestion)
+            guard await syncGeneratedQuestionIfNeeded(
+                question,
+                updateVisibleQuestion: shouldActivateQuestion
+            ) else {
+                return
+            }
+            statusMessage = shouldActivateQuestion ? "새 질문이 준비됐습니다." : "새 질문이 미제출 목록에 추가됐습니다."
             log(.info, "질문을 생성했습니다: \(question.question)")
             let didScheduleNotification = await notificationService.showQuestionNotification(
                 question: question,
                 title: strings.notificationTitle,
                 subtitle: notificationSubtitle,
                 sound: settings.notificationSound,
-                language: settings.appLanguage
+                language: settings.appLanguage,
+                deliveryDate: nil
             )
             if !didScheduleNotification {
                 statusMessage = strings.testNotificationFailed
                 log(.warning, "질문 알림을 표시하지 못했습니다. 알림 권한 또는 시스템 설정을 확인하세요.")
             }
+            await saveQuestionPushIfNeeded(question)
             markCloudDataChanged()
+        } catch QuestionGenerationSkip.pendingLimit {
+            showPendingQuestionLimitStatus(reason: "질문 저장")
+        } catch QuestionGenerationSkip.duplicateQuestion {
+            statusMessage = strings.duplicateQuestionSkipped
+            log(.warning, "OpenAI가 기존 질문과 중복되는 질문을 반복 생성해 저장하지 않았습니다.")
         } catch {
             handleOpenAIError(error)
             statusMessage = nil
             log(.error, "질문 생성에 실패했습니다: \(error.localizedDescription)")
+        }
+    }
+
+    @discardableResult
+    private func generateDueQuestionIfNeeded(reason: String) async -> Bool {
+        guard hasCompletedOnboarding, isRunning else {
+            return false
+        }
+
+        refreshStudyProgressFromStore()
+
+        guard apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else {
+            log(.warning, "API 키가 비어 있어 \(reason) 예약 질문 생성을 건너뛰었습니다.")
+            return false
+        }
+
+        guard !hasAPIKeyError else {
+            log(.warning, "API 키 오류가 있어 \(reason) 예약 질문 생성을 건너뛰었습니다.")
+            return false
+        }
+
+        guard !hasReachedPendingQuestionLimit else {
+            showPendingQuestionLimitStatus(reason: "\(reason) 예약 질문 생성")
+            return false
+        }
+
+        guard isQuestionDue(now: Date()) else {
+            return false
+        }
+
+        let latestBeforeGeneration = latestQuestionCreatedAt
+        log(.info, "\(reason) 기준 질문 간격이 지나 새 질문을 생성합니다.")
+        await generateQuestion(manual: false)
+        return latestQuestionCreatedAt != latestBeforeGeneration
+    }
+
+    @discardableResult
+    private func prepareScheduledQuestionsForLockedDevice(isExpired: () -> Bool) async -> Int {
+        reloadPersistedState(restartTimerAfterReload: false)
+
+        guard hasCompletedOnboarding, isRunning else {
+            return 0
+        }
+
+        guard !isGeneratingQuestion else {
+            log(.info, "질문 생성 중이라 잠금화면용 예약 질문 준비를 건너뛰었습니다.")
+            return 0
+        }
+
+        guard apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else {
+            log(.warning, "API 키가 비어 있어 잠금화면용 예약 질문 준비를 건너뛰었습니다.")
+            return 0
+        }
+
+        guard !hasAPIKeyError else {
+            log(.warning, "API 키 오류가 있어 잠금화면용 예약 질문 준비를 건너뛰었습니다.")
+            return 0
+        }
+
+        guard await notificationService.requestAuthorizationIfNeeded(language: settings.appLanguage) else {
+            log(.warning, "알림 권한이 없어 잠금화면용 예약 질문 준비를 건너뛰었습니다.")
+            return 0
+        }
+
+        if isCloudSyncEnabled {
+            await syncCloudNow(updateVisibleQuestion: false)
+            await ensureCloudQuestionPushSubscription()
+        }
+        refreshStudyProgressFromStore()
+
+        let pendingScheduledNotificationCount = await notificationService.pendingQuestionNotificationCount()
+        guard pendingScheduledNotificationCount == 0 else {
+            log(.info, "이미 예약된 질문 알림이 있어 잠금화면용 예약 질문 준비를 건너뛰었습니다. pendingNotifications=\(pendingScheduledNotificationCount)")
+            return 0
+        }
+
+        guard pendingQuestionCount < Self.maxPendingQuestionCount else {
+            showPendingQuestionLimitStatus(reason: "잠금화면용 예약 질문 준비")
+            return 0
+        }
+
+        let now = Date()
+        let deliveryDate = max(nextQuestionDueDate(now: now), now.addingTimeInterval(2))
+        guard shouldPrepareBackgroundQuestionNotification(now: now) else {
+            return 0
+        }
+
+        guard !isExpired() else {
+            log(.warning, "iOS background 시간이 만료되어 잠금화면용 예약 질문 준비를 중단했습니다.")
+            return 0
+        }
+
+        isGeneratingQuestion = true
+        defer {
+            isGeneratingQuestion = false
+        }
+
+        do {
+            let question = try await createAndStoreQuestion(activate: false)
+            guard await syncGeneratedQuestionIfNeeded(question, updateVisibleQuestion: false) else {
+                return 0
+            }
+
+            let didScheduleNotification = await notificationService.showQuestionNotification(
+                question: question,
+                title: strings.notificationTitle,
+                subtitle: notificationSubtitle,
+                sound: settings.notificationSound,
+                language: settings.appLanguage,
+                deliveryDate: deliveryDate
+            )
+
+            guard didScheduleNotification else {
+                log(.warning, "잠금화면용 질문 알림 예약에 실패했습니다.")
+                return 0
+            }
+
+            lastBackgroundQuestionPreparationAt = now
+            statusMessage = "잠금화면용 질문 1개를 예약했습니다."
+            log(
+                .info,
+                "잠금화면용 예약 질문을 1개 준비했습니다. deliveryAt=\(deliveryDate), pending=\(pendingQuestionCount)"
+            )
+            markCloudDataChanged()
+            return 1
+        } catch QuestionGenerationSkip.pendingLimit {
+            showPendingQuestionLimitStatus(reason: "잠금화면용 예약 질문 저장")
+            return 0
+        } catch {
+            handleOpenAIError(error)
+            statusMessage = nil
+            log(.error, "잠금화면용 예약 질문 준비에 실패했습니다: \(error.localizedDescription)")
+            return 0
+        }
+    }
+
+    private func shouldPrepareBackgroundQuestionNotification(now: Date) -> Bool {
+        if let lastBackgroundQuestionPreparationAt,
+           now.timeIntervalSince(lastBackgroundQuestionPreparationAt) < 30 {
+            log(.info, "백그라운드 질문 준비가 너무 자주 호출되어 건너뛰었습니다.")
+            return false
+        }
+
+        return true
+    }
+
+    private func canCreateQuestionAfterGlobalPendingCheck(
+        reason: String,
+        updateVisibleQuestion: Bool = true
+    ) async -> Bool {
+        await refreshGlobalStudyProgressFromStore(updateVisibleQuestion: updateVisibleQuestion)
+
+        if isCloudSyncEnabled, hasCloudSyncError {
+            let message = cloudSyncMessage ?? strings.syncUnavailable
+            statusMessage = message
+            errorMessage = message
+            log(.warning, "iCloud 동기화 상태를 확인하지 못해 \(reason)을 건너뛰었습니다.")
+            return false
+        }
+
+        guard !hasReachedPendingQuestionLimit else {
+            showPendingQuestionLimitStatus(reason: reason)
+            return false
+        }
+
+        return true
+    }
+
+    private func refreshGlobalStudyProgressFromStore(updateVisibleQuestion: Bool = true) async {
+        refreshStudyProgressFromStore()
+
+        guard isCloudSyncEnabled else {
+            return
+        }
+
+        await waitForActiveCloudSyncIfNeeded()
+
+        if !isCloudSyncing {
+            await syncCloudNow(updateVisibleQuestion: updateVisibleQuestion)
+        }
+
+        await waitForActiveCloudSyncIfNeeded()
+        refreshStudyProgressFromStore()
+    }
+
+    private func waitForActiveCloudSyncIfNeeded() async {
+        guard isCloudSyncing else {
+            return
+        }
+
+        for _ in 0..<20 {
+            try? await Task.sleep(nanoseconds: 100_000_000)
+            if !isCloudSyncing {
+                return
+            }
         }
     }
 
@@ -669,7 +1006,8 @@ final class AppState: ObservableObject {
             title: strings.notificationTitle,
             subtitle: strings.notifications,
             sound: settings.notificationSound,
-            language: settings.appLanguage
+            language: settings.appLanguage,
+            deliveryDate: nil
         )
 
         if didSend {
@@ -681,53 +1019,113 @@ final class AppState: ObservableObject {
         }
     }
 
-    private func createAndStoreQuestion() async throws -> QuestionItem {
+    private func createAndStoreQuestion(activate: Bool) async throws -> QuestionItem {
+        await refreshGlobalStudyProgressFromStore(updateVisibleQuestion: activate)
+        guard !hasReachedPendingQuestionLimit else {
+            throw QuestionGenerationSkip.pendingLimit
+        }
+
         let generated = try await generateUniqueQuestion()
         let question = generated.question
 
-        currentQuestion = question
-        gradingResult = nil
-        lastAnswer = ""
-        settingsStore.saveQuestion(question)
+        await refreshGlobalStudyProgressFromStore(updateVisibleQuestion: activate)
+        guard !hasReachedPendingQuestionLimit else {
+            throw QuestionGenerationSkip.pendingLimit
+        }
+        guard !Self.isDuplicate(question, in: previousQuestionsForGeneration()) else {
+            throw QuestionGenerationSkip.duplicateQuestion
+        }
+
         settingsStore.appendQuestionToHistory(question)
         settingsStore.appendStudyRecord(question: question, settings: settings)
         settingsStore.saveQuestionResponseID(generated.responseID)
-        settingsStore.saveGradingResult(nil)
-        settingsStore.saveLastAnswer("")
+
+        if activate {
+            currentQuestion = question
+            gradingResult = nil
+            lastAnswer = ""
+            settingsStore.saveQuestion(question)
+            settingsStore.saveGradingResult(nil)
+            settingsStore.saveLastAnswer("")
+        }
+
         studyRecords = settingsStore.loadStudyRecords()
         hasAPIKeyError = false
 
         return question
     }
 
-    private func generateUniqueQuestion() async throws -> GeneratedQuestionResult {
-        var recentQuestions = settingsStore.loadQuestionHistory()
-
-        if let currentQuestion {
-            recentQuestions.append(currentQuestion)
+    private func syncGeneratedQuestionIfNeeded(
+        _ question: QuestionItem,
+        updateVisibleQuestion: Bool = true
+    ) async -> Bool {
+        guard isCloudSyncEnabled else {
+            return true
         }
 
-        for attempt in 0..<2 {
+        markCloudDataDirtyWithoutScheduling()
+        await syncCloudNow(updateVisibleQuestion: updateVisibleQuestion)
+        refreshStudyProgressFromStore()
+
+        if isCloudSyncEnabled, hasCloudSyncError {
+            log(.warning, "질문은 로컬에 저장했지만 iCloud 동기화에 실패했습니다.")
+            return true
+        }
+
+        if pendingQuestionCount > Self.maxPendingQuestionCount {
+            log(.warning, "iCloud 동기화 후 미채점 질문이 \(pendingQuestionCount)개입니다. 기존 데이터는 보존하고 이후 새 질문 생성을 막습니다.")
+            showPendingQuestionLimitStatus(reason: "iCloud 동기화 후 질문 알림 전송")
+            return false
+        }
+
+        return true
+    }
+
+    private func generateUniqueQuestion() async throws -> GeneratedQuestionResult {
+        var previousQuestions = previousQuestionsForGeneration()
+
+        for _ in 0..<5 {
             let generated = try await openAIClient.generateQuestion(
                 settings: settings,
-                recentQuestions: Array(recentQuestions.suffix(20)),
+                recentQuestions: Array(previousQuestions.suffix(80)),
                 previousResponseID: settingsStore.loadQuestionResponseID(),
                 apiKey: apiKey
             )
 
-            if !Self.isDuplicate(generated.question, in: recentQuestions) || attempt == 1 {
+            if !Self.isDuplicate(generated.question, in: previousQuestions) {
                 return generated
             }
 
-            recentQuestions.append(generated.question)
+            previousQuestions.append(generated.question)
+            log(.warning, "생성된 질문이 기존 질문과 중복되어 다시 생성합니다.")
         }
 
-        return try await openAIClient.generateQuestion(
-            settings: settings,
-            recentQuestions: Array(recentQuestions.suffix(20)),
-            previousResponseID: settingsStore.loadQuestionResponseID(),
-            apiKey: apiKey
-        )
+        throw QuestionGenerationSkip.duplicateQuestion
+    }
+
+    private func previousQuestionsForGeneration() -> [QuestionItem] {
+        var questions = settingsStore.loadQuestionHistory()
+        questions.append(contentsOf: settingsStore.loadStudyRecords().map(\.question))
+
+        if let currentQuestion {
+            questions.append(currentQuestion)
+        }
+
+        var questionsByKey: [String: QuestionItem] = [:]
+        for question in questions {
+            let key = SettingsStore.normalizedQuestionText(question.question)
+            guard !key.isEmpty else {
+                continue
+            }
+
+            if let existingQuestion = questionsByKey[key] {
+                questionsByKey[key] = question.createdAt >= existingQuestion.createdAt ? question : existingQuestion
+            } else {
+                questionsByKey[key] = question
+            }
+        }
+
+        return questionsByKey.values.sorted { $0.createdAt < $1.createdAt }
     }
 
     private var notificationSubtitle: String {
@@ -739,6 +1137,36 @@ final class AppState: ObservableObject {
         }
 
         return "\(topic) · \(difficulty)"
+    }
+
+    private func isQuestionDue(now: Date) -> Bool {
+        latestQuestionCreatedAt == nil || nextQuestionDueDate(now: now) <= now
+    }
+
+    private func nextQuestionDueDate(now: Date) -> Date {
+        let interval = TimeInterval(settings.sanitizedIntervalMinutes * 60)
+        guard let latestQuestionCreatedAt else {
+            return now.addingTimeInterval(interval)
+        }
+
+        return latestQuestionCreatedAt.addingTimeInterval(interval)
+    }
+
+    private var latestQuestionCreatedAt: Date? {
+        let recordDates = studyRecords.map(\.question.createdAt)
+        return ([currentQuestion?.createdAt].compactMap { $0 } + recordDates).max()
+    }
+
+    private var hasActiveUngradedCurrentQuestion: Bool {
+        guard let currentQuestion else {
+            return false
+        }
+
+        if let record = studyRecord(matching: currentQuestion) {
+            return record.gradingResult == nil
+        }
+
+        return gradingResult == nil
     }
 
     func gradeCurrentAnswer(answer submittedAnswer: String? = nil) async {
@@ -781,6 +1209,7 @@ final class AppState: ObservableObject {
                 answer: trimmedAnswer,
                 gradingResult: result
             )
+            notificationService.cancelQuestionNotification(for: currentQuestion)
             studyRecords = settingsStore.loadStudyRecords()
             hasAPIKeyError = false
             statusMessage = "채점이 완료됐습니다."
@@ -837,6 +1266,7 @@ final class AppState: ObservableObject {
                 answer: trimmedAnswer,
                 gradingResult: result
             )
+            notificationService.cancelQuestionNotification(for: record.question)
             studyRecords = settingsStore.loadStudyRecords()
             hasAPIKeyError = false
             statusMessage = "채점이 완료됐습니다."
@@ -853,34 +1283,71 @@ final class AppState: ObservableObject {
             return
         }
 
-        let skippedRecord = studyRecord(matching: currentQuestion)
-        if let skippedRecord, skippedRecord.gradingResult == nil {
-            settingsStore.deleteStudyRecord(skippedRecord)
+        let skippedRecord = studyRecord(matching: currentQuestion) ?? StudyRecord(
+            question: currentQuestion,
+            answer: lastAnswer.isEmpty ? nil : lastAnswer,
+            topic: settings.topic,
+            difficulty: settings.difficulty
+        )
+
+        skipPendingQuestion(skippedRecord)
+    }
+
+    func skipPendingQuestion(_ record: StudyRecord) {
+        guard record.gradingResult == nil else {
+            return
+        }
+
+        notificationLandingMessage = nil
+
+        let matchesCurrentQuestion = currentQuestion.map {
+            Self.questionsMatch($0, record.question)
+        } ?? false
+
+        if matchesCurrentQuestion {
+            notificationService.cancelQuestionNotification(for: record.question)
+        }
+
+        if let storedRecord = studyRecord(matching: record.question),
+           storedRecord.gradingResult == nil {
+            notificationService.cancelQuestionNotification(for: storedRecord.question)
+            settingsStore.deleteStudyRecord(storedRecord)
+        } else if !matchesCurrentQuestion {
+            return
         }
 
         studyRecords = settingsStore.loadStudyRecords()
 
-        if let nextRecord = pendingStudyRecords.first {
-            self.currentQuestion = nextRecord.question
-            lastAnswer = nextRecord.answer ?? ""
-            gradingResult = nil
-            settingsStore.saveQuestion(nextRecord.question)
-            settingsStore.saveLastAnswer(nextRecord.answer ?? "")
-            settingsStore.saveGradingResult(nil)
-            statusMessage = "질문을 넘기고 다음 미제출 질문을 열었습니다."
-        } else {
+        if matchesCurrentQuestion {
             self.currentQuestion = nil
             lastAnswer = ""
             gradingResult = nil
-            settingsStore.saveQuestion(nil)
-            settingsStore.saveLastAnswer("")
-            settingsStore.saveGradingResult(nil)
+
+            let remainingPendingRecords = studyRecords
+                .filter { $0.gradingResult == nil }
+                .sorted { $0.question.createdAt > $1.question.createdAt }
+
+            if let nextRecord = remainingPendingRecords.first {
+                self.currentQuestion = nextRecord.question
+                lastAnswer = nextRecord.answer ?? ""
+                gradingResult = nil
+                settingsStore.saveQuestion(nextRecord.question)
+                settingsStore.saveLastAnswer(nextRecord.answer ?? "")
+                settingsStore.saveGradingResult(nil)
+                statusMessage = "질문을 넘기고 다음 미제출 질문을 열었습니다."
+            } else {
+                settingsStore.saveQuestion(nil)
+                settingsStore.saveLastAnswer("")
+                settingsStore.saveGradingResult(nil)
+                statusMessage = "질문을 넘겼습니다."
+            }
+        } else {
             statusMessage = "질문을 넘겼습니다."
         }
 
         errorMessage = nil
-        log(.info, "현재 미제출 질문을 넘겼습니다.")
-        markCloudDataChanged()
+        log(.info, "미제출 질문을 넘겼습니다.")
+        markCloudDataChanged(syncDelaySeconds: 0)
     }
 
     func openOldestPendingQuestion() {
@@ -888,6 +1355,7 @@ final class AppState: ObservableObject {
             return
         }
 
+        notificationLandingMessage = nil
         selectStudyRecord(record)
         statusMessage = "가장 오래된 미제출 질문을 열었습니다."
         log(.info, "가장 오래된 미제출 질문을 열었습니다.")
@@ -920,6 +1388,7 @@ final class AppState: ObservableObject {
     }
 
     func selectStudyRecord(_ record: StudyRecord) {
+        notificationLandingMessage = nil
         currentQuestion = record.question
         lastAnswer = record.answer ?? ""
         gradingResult = record.gradingResult
@@ -932,14 +1401,38 @@ final class AppState: ObservableObject {
         markCloudDataChanged(syncDelaySeconds: 4)
     }
 
-    func openRecordFromNotification(questionCreatedAt: TimeInterval?, replyText: String? = nil) {
+    func prepareToOpenQuestionFromNotification() {
+        selectedTab = .study
+        notificationLandingMessage = strings.openingNotificationQuestion
+        statusMessage = strings.openingNotificationQuestion
+        errorMessage = nil
+    }
+
+    @discardableResult
+    func openRecordFromNotification(questionCreatedAt: TimeInterval?, replyText: String? = nil) -> Bool {
         studyRecords = settingsStore.loadStudyRecords()
 
-        let record = recordMatching(questionCreatedAt: questionCreatedAt) ?? studyRecords.last
+        let matchingRecord = recordMatching(questionCreatedAt: questionCreatedAt)
+        let record = matchingRecord
         guard let record else {
-            selectedTab = .study
-            statusMessage = "알림에서 열린 질문입니다."
-            return
+            if let questionCreatedAt,
+               let currentQuestion,
+               abs(currentQuestion.createdAt.timeIntervalSince1970 - questionCreatedAt) < 1 {
+                let trimmedReply = replyText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                if !trimmedReply.isEmpty {
+                    updateAnswer(trimmedReply)
+                    statusMessage = "알림 답장을 기록에 저장했습니다."
+                } else {
+                    statusMessage = "알림에서 열린 질문입니다."
+                }
+                notificationLandingMessage = nil
+                selectedTab = .study
+                return true
+            }
+
+            showNotificationQuestionUnavailable(preserveCurrentQuestion: true)
+            log(.warning, "알림에서 요청한 질문을 찾을 수 없습니다. 삭제되었거나 넘겨진 질문일 수 있습니다.")
+            return false
         }
 
         let trimmedReply = replyText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -952,26 +1445,189 @@ final class AppState: ObservableObject {
             studyRecords.first { $0.id == record.id } ??
             record
         selectStudyRecord(refreshedRecord)
+        notificationLandingMessage = nil
         statusMessage = trimmedReply.isEmpty ? "알림에서 열린 질문입니다." : "알림 답장을 기록에 저장했습니다."
         markCloudDataChanged()
+        return true
+    }
+
+    @discardableResult
+    func saveNotificationReplyFromNotification(questionCreatedAt: TimeInterval?, replyText: String?) -> Bool {
+        studyRecords = settingsStore.loadStudyRecords()
+
+        let trimmedReply = replyText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmedReply.isEmpty else {
+            return false
+        }
+
+        guard let record = recordMatching(questionCreatedAt: questionCreatedAt) else {
+            log(.warning, "알림 답장을 저장할 질문을 찾을 수 없습니다. 삭제되었거나 넘겨진 질문일 수 있습니다.")
+            return false
+        }
+
+        guard record.gradingResult == nil else {
+            log(.info, "이미 채점된 질문이라 알림 답장을 덮어쓰지 않았습니다.")
+            return false
+        }
+
+        settingsStore.updateStudyRecordAnswer(
+            question: record.question,
+            answer: trimmedReply,
+            onlyIfUngraded: true
+        )
+
+        if currentQuestion.map({ Self.questionsMatch($0, record.question) }) == true {
+            lastAnswer = trimmedReply
+            settingsStore.saveLastAnswer(trimmedReply)
+        }
+
+        studyRecords = settingsStore.loadStudyRecords()
+        markCloudDataChanged()
+        return true
+    }
+
+    @discardableResult
+    func handleCloudQuestionPush(recordName: String?, openStudy: Bool, replyText: String? = nil) async -> Bool {
+        guard isCloudSyncEnabled else {
+            log(.info, "iCloud 동기화가 꺼져 있어 CloudKit push를 무시했습니다.")
+            return false
+        }
+
+        guard let cloudSyncService = resolvedCloudSyncService() else {
+            log(.warning, "CloudKit push를 처리할 수 없습니다. iCloud 권한을 확인하세요.")
+            return false
+        }
+
+        var fetchedPush: CloudQuestionPush?
+
+        do {
+            if let recordName,
+               let push = try await cloudSyncService.fetchQuestionPush(recordName: recordName) {
+                fetchedPush = push
+            }
+        } catch {
+            log(.warning, "CloudKit push 질문 정보를 불러오지 못했습니다: \(error.localizedDescription)")
+        }
+
+        await syncCloudNow(updateVisibleQuestion: openStudy)
+
+        guard let fetchedPush else {
+            guard openStudy else {
+                log(.info, "CloudKit push record가 없어 조용히 무시했습니다.")
+                return false
+            }
+
+            showNotificationQuestionUnavailable(preserveCurrentQuestion: true)
+            log(.warning, "CloudKit push record가 없어 알림 질문을 열 수 없습니다.")
+            return false
+        }
+
+        var pushedQuestionCreatedAt: TimeInterval?
+        let didAddRecord = ensureLocalRecordExists(for: fetchedPush, showStatus: openStudy)
+        refreshStudyProgressFromStore()
+
+        if studyRecord(matching: fetchedPush.question) != nil {
+            pushedQuestionCreatedAt = fetchedPush.question.createdAt.timeIntervalSince1970
+        }
+
+        let didSaveReply = saveNotificationReplyIfNeeded(
+            replyText,
+            for: fetchedPush.question,
+            showStatus: openStudy
+        )
+
+        if didAddRecord || didSaveReply {
+            markCloudDataDirtyWithoutScheduling()
+            await syncCloudNow(updateVisibleQuestion: openStudy)
+        }
+
+        guard openStudy else {
+            log(.info, "CloudKit push로 iCloud 데이터를 갱신했습니다.")
+            return true
+        }
+
+        if let pushedQuestionCreatedAt {
+            openRecordFromNotification(questionCreatedAt: pushedQuestionCreatedAt, replyText: replyText)
+        } else {
+            showNotificationQuestionUnavailable(preserveCurrentQuestion: true)
+        }
+
+        return true
+    }
+
+    private func saveNotificationReplyIfNeeded(
+        _ replyText: String?,
+        for question: QuestionItem,
+        showStatus: Bool
+    ) -> Bool {
+        let trimmedReply = replyText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmedReply.isEmpty else {
+            return false
+        }
+
+        let existingRecord = studyRecord(matching: question)
+        guard existingRecord?.gradingResult == nil else {
+            log(.info, "이미 채점된 질문이라 알림 답장을 덮어쓰지 않았습니다.")
+            return false
+        }
+
+        settingsStore.updateStudyRecordAnswer(
+            question: question,
+            answer: trimmedReply,
+            onlyIfUngraded: true
+        )
+
+        if currentQuestion.map({ Self.questionsMatch($0, question) }) == true {
+            lastAnswer = trimmedReply
+            settingsStore.saveLastAnswer(trimmedReply)
+        }
+
+        studyRecords = settingsStore.loadStudyRecords()
+        if showStatus {
+            statusMessage = "알림 답장을 기록에 저장했습니다."
+        }
+        log(.info, "CloudKit push 알림 답장을 기록에 저장했습니다.")
+        return true
+    }
+
+    private func showNotificationQuestionUnavailable(preserveCurrentQuestion: Bool) {
+        selectedTab = .study
+        errorMessage = nil
+
+        if !preserveCurrentQuestion || currentQuestion == nil {
+            currentQuestion = nil
+            lastAnswer = ""
+            gradingResult = nil
+            settingsStore.saveQuestion(nil)
+            settingsStore.saveLastAnswer("")
+            settingsStore.saveGradingResult(nil)
+        }
+
+        notificationLandingMessage = strings.notificationQuestionUnavailable
+        statusMessage = strings.notificationQuestionUnavailable
     }
 
     func clearStatus() {
         statusMessage = nil
         errorMessage = nil
+        notificationLandingMessage = nil
     }
 
     func clearStudyRecords() {
+        notificationService.cancelQuestionNotifications(for: studyRecords.map(\.question))
         settingsStore.clearStudyRecords()
         studyRecords = []
+        notificationLandingMessage = nil
         statusMessage = "학습 기록을 삭제했습니다."
         log(.warning, "학습 기록을 모두 삭제했습니다.")
-        markCloudDataChanged()
+        markCloudDataChanged(syncDelaySeconds: 0)
     }
 
     func deleteStudyRecord(_ record: StudyRecord) {
+        notificationService.cancelQuestionNotification(for: record.question)
         settingsStore.deleteStudyRecord(record)
         studyRecords = settingsStore.loadStudyRecords()
+        notificationLandingMessage = nil
 
         if SettingsStore.normalizedQuestionText(currentQuestion?.question ?? "") ==
             SettingsStore.normalizedQuestionText(record.question.question) {
@@ -985,7 +1641,7 @@ final class AppState: ObservableObject {
 
         statusMessage = "기록을 삭제했습니다."
         log(.info, "학습 기록을 1개 삭제했습니다.")
-        markCloudDataChanged()
+        markCloudDataChanged(syncDelaySeconds: 0)
     }
 
     func clearAppLogs() {
@@ -995,11 +1651,23 @@ final class AppState: ObservableObject {
         appLogPage = 0
     }
 
+    func logRemoteNotificationEvent(_ message: String, isWarning: Bool = false) {
+        log(isWarning ? .warning : .info, message)
+    }
+
     func loadAppLogPage(_ page: Int) {
         let logPage = settingsStore.loadAppLogs(page: page, pageSize: Self.developerLogPageSize)
         appLogs = logPage.entries
         appLogTotalCount = logPage.totalCount
         appLogPage = logPage.page
+    }
+
+    func loadPreviousAppLogPage() {
+        loadAppLogPage(appLogPage - 1)
+    }
+
+    func loadNextAppLogPage() {
+        loadAppLogPage(appLogPage + 1)
     }
 
     func setDebuggingEnabled(_ isEnabled: Bool) {
@@ -1021,10 +1689,11 @@ final class AppState: ObservableObject {
 
         Task {
             await syncCloudNow()
+            await ensureCloudQuestionPushSubscription()
         }
     }
 
-    func syncCloudNow() async {
+    func syncCloudNow(updateVisibleQuestion: Bool = true) async {
         guard isCloudSyncEnabled else {
             return
         }
@@ -1064,7 +1733,7 @@ final class AppState: ObservableObject {
                 let remoteSnapshot = apiKeyMerge.snapshot
                 if storedLocalUpdatedAt == nil {
                     let firstSync = firstSyncSnapshot(from: remoteSnapshot)
-                    applyCloudSnapshot(firstSync.snapshot)
+                    applyCloudSnapshot(firstSync.snapshot, updateVisibleQuestion: updateVisibleQuestion)
 
                     if firstSync.shouldPushMergedSnapshot {
                         try await cloudSyncService.saveSnapshot(firstSync.snapshot)
@@ -1077,35 +1746,45 @@ final class AppState: ObservableObject {
                         log(.info, "첫 iCloud 동기화에서 원격 학습 데이터를 불러왔습니다.")
                     }
                 } else if remoteSnapshot.updatedAt > localUpdatedAt {
-                    applyCloudSnapshot(remoteSnapshot)
-                    if apiKeyMerge.shouldPush {
-                        try await cloudSyncService.saveSnapshot(remoteSnapshot)
-                        settingsStore.saveCloudSyncSnapshotUpdatedAt(remoteSnapshot.updatedAt)
-                        cloudLastSyncedAt = remoteSnapshot.updatedAt
+                    var mergedRemoteSnapshot = incomingSnapshotMergingLocalData(remoteSnapshot)
+                    let shouldPushMergedRemote = apiKeyMerge.shouldPush ||
+                        cloudSnapshotContentDiffers(mergedRemoteSnapshot, remoteSnapshot)
+
+                    if shouldPushMergedRemote {
+                        mergedRemoteSnapshot.updatedAt = max(Date(), remoteSnapshot.updatedAt, localUpdatedAt)
+                        try await cloudSyncService.saveSnapshot(mergedRemoteSnapshot)
+                        applyCloudSnapshot(mergedRemoteSnapshot, updateVisibleQuestion: updateVisibleQuestion)
+                        settingsStore.saveCloudSyncSnapshotUpdatedAt(mergedRemoteSnapshot.updatedAt)
+                        cloudLastSyncedAt = mergedRemoteSnapshot.updatedAt
                         cloudSyncMessage = strings.syncMergedRemote
-                        log(.info, "iCloud 최신 데이터에 이 기기의 OpenAI API 키를 병합했습니다.")
+                        log(.info, "iCloud 최신 데이터에 이 기기의 로컬 변경사항을 병합했습니다.")
                     } else {
+                        applyCloudSnapshot(remoteSnapshot, updateVisibleQuestion: updateVisibleQuestion)
                         cloudSyncMessage = strings.syncPulledRemote
                         log(.info, "iCloud에서 최신 학습 데이터를 불러왔습니다.")
                     }
                 } else {
-                    let updatedAt = max(localUpdatedAt, Date())
-                    let snapshot = outgoingSnapshotPreservingRemoteAPIKey(
-                        makeCloudSnapshot(updatedAt: updatedAt),
+                    let mergedSnapshot = outgoingSnapshotMergingRemoteData(
+                        makeCloudSnapshot(updatedAt: localUpdatedAt),
                         remoteSnapshot: remoteSnapshot
                     )
-                    try await cloudSyncService.saveSnapshot(snapshot)
-                    settingsStore.saveCloudSyncSnapshotUpdatedAt(snapshot.updatedAt)
-                    cloudLastSyncedAt = snapshot.updatedAt
-                    cloudSyncMessage = strings.syncPushedLocal
-                    log(.info, "학습 데이터를 iCloud에 저장했습니다.")
+                    if cloudSnapshotContentDiffers(mergedSnapshot, remoteSnapshot) {
+                        var snapshot = mergedSnapshot
+                        snapshot.updatedAt = max(localUpdatedAt, remoteSnapshot.updatedAt, Date())
+                        try await cloudSyncService.saveSnapshot(snapshot)
+                        applyCloudSnapshot(snapshot, updateVisibleQuestion: updateVisibleQuestion)
+                        cloudSyncMessage = strings.syncPushedLocal
+                        log(.info, "학습 데이터를 iCloud에 저장했습니다.")
+                    } else {
+                        applyCloudSnapshot(remoteSnapshot, updateVisibleQuestion: updateVisibleQuestion)
+                        cloudSyncMessage = strings.syncAlreadyCurrent
+                    }
                 }
             } else {
                 let updatedAt = max(localUpdatedAt, Date())
                 let snapshot = makeCloudSnapshot(updatedAt: updatedAt)
                 try await cloudSyncService.saveSnapshot(snapshot)
-                settingsStore.saveCloudSyncSnapshotUpdatedAt(snapshot.updatedAt)
-                cloudLastSyncedAt = snapshot.updatedAt
+                applyCloudSnapshot(snapshot, updateVisibleQuestion: updateVisibleQuestion)
                 cloudSyncMessage = strings.syncPushedLocal
                 log(.info, "학습 데이터를 iCloud에 저장했습니다.")
             }
@@ -1356,20 +2035,138 @@ final class AppState: ObservableObject {
             return
         }
 
-        let interval = settings.sanitizedIntervalMinutes
-
         timerTask = Task { [weak self] in
             while !Task.isCancelled {
-                let seconds = UInt64(interval * 60)
+                let seconds = self?.timerPollIntervalSeconds() ?? 60
                 try? await Task.sleep(nanoseconds: seconds * 1_000_000_000)
 
                 guard !Task.isCancelled else {
                     return
                 }
 
-                await self?.generateQuestion(manual: false)
+                await self?.handleScheduledQuestionTick()
             }
         }
+    }
+
+    private func timerPollIntervalSeconds() -> UInt64 {
+        let intervalSeconds = max(settings.sanitizedIntervalMinutes * 60, 60)
+        return UInt64(max(15, min(60, intervalSeconds / 4)))
+    }
+
+    private func handleScheduledQuestionTick() async {
+        reloadPersistedState(restartTimerAfterReload: false)
+        guard hasCompletedOnboarding, isRunning else {
+            restartTimer()
+            return
+        }
+
+        if isCloudSyncEnabled {
+            await syncCloudNow(updateVisibleQuestion: false)
+        }
+
+        guard hasCompletedOnboarding, isRunning else {
+            restartTimer()
+            return
+        }
+
+        await generateDueQuestionIfNeeded(reason: "timer")
+    }
+
+    private func ensureCloudQuestionPushSubscription() async {
+        #if os(iOS)
+        guard isCloudSyncEnabled else {
+            return
+        }
+
+        guard let cloudSyncService = resolvedCloudSyncService() else {
+            log(.warning, "CloudKit push 구독을 설정할 수 없습니다. iCloud 권한을 확인하세요.")
+            return
+        }
+
+        do {
+            try await cloudSyncService.ensureQuestionPushSubscription(
+                language: settings.appLanguage,
+                sound: settings.notificationSound
+            )
+            log(.info, "iPhone CloudKit 질문 push 구독을 설정했습니다.")
+        } catch {
+            log(.warning, "CloudKit push 구독 설정 실패: \(error.localizedDescription)")
+        }
+        #endif
+    }
+
+    private func saveQuestionPushIfNeeded(_ question: QuestionItem) async {
+        #if os(iOS)
+        return
+        #else
+        guard isCloudSyncEnabled else {
+            return
+        }
+
+        guard let cloudSyncService = resolvedCloudSyncService() else {
+            log(.warning, "CloudKit push 질문을 저장할 수 없습니다. iCloud 권한을 확인하세요.")
+            return
+        }
+
+        do {
+            try await cloudSyncService.saveQuestionPush(question: question, settings: settings)
+            log(.info, "iPhone push용 CloudKit 질문 record를 저장했습니다.")
+        } catch {
+            log(.warning, "iPhone push용 CloudKit 질문 record 저장 실패: \(error.localizedDescription)")
+        }
+        #endif
+    }
+
+    @discardableResult
+    private func ensureLocalRecordExists(for push: CloudQuestionPush, showStatus: Bool = true) -> Bool {
+        refreshStudyProgressFromStore()
+        guard studyRecord(matching: push.question) == nil else {
+            return false
+        }
+
+        let pushRecord = StudyRecord(
+            question: push.question,
+            topic: push.topic.isEmpty ? settings.topic : push.topic,
+            difficulty: push.difficulty
+        )
+        if settingsStore.loadDeletedStudyRecordMarkers().contains(where: { $0.matches(pushRecord) }) {
+            if showStatus {
+                showNotificationQuestionUnavailable(preserveCurrentQuestion: true)
+            }
+            log(.info, "이미 삭제되었거나 넘겨진 CloudKit push 질문을 다시 추가하지 않았습니다.")
+            return false
+        }
+
+        let matchesCurrentQuestion = currentQuestion.map {
+            Self.questionsMatch($0, push.question)
+        } ?? false
+
+        guard matchesCurrentQuestion || !hasReachedPendingQuestionLimit else {
+            if showStatus {
+                showPendingQuestionLimitStatus(reason: "CloudKit push 질문 추가")
+            } else {
+                log(.warning, "CloudKit push 질문 추가를 건너뛰었습니다. 미채점 질문이 \(pendingQuestionCount)개입니다.")
+            }
+            return false
+        }
+
+        let pushSettings = StudySettings(
+            topic: push.topic.isEmpty ? settings.topic : push.topic,
+            difficulty: push.difficulty,
+            appLanguage: settings.appLanguage,
+            language: settings.appLanguage.studyLanguage,
+            openAIModel: settings.sanitizedOpenAIModel,
+            notificationSound: settings.notificationSound,
+            customPrompt: settings.customPrompt,
+            intervalMinutes: settings.sanitizedIntervalMinutes,
+            maxHistoryCount: settings.sanitizedMaxHistoryCount
+        )
+
+        settingsStore.appendQuestionToHistory(push.question)
+        settingsStore.appendStudyRecord(question: push.question, settings: pushSettings)
+        studyRecords = settingsStore.loadStudyRecords()
+        return true
     }
 
     private func markCloudDataChanged(syncDelaySeconds: UInt64 = 2) {
@@ -1377,10 +2174,18 @@ final class AppState: ObservableObject {
             return
         }
 
+        markCloudDataDirtyWithoutScheduling()
+        scheduleCloudSync(delaySeconds: syncDelaySeconds)
+    }
+
+    private func markCloudDataDirtyWithoutScheduling() {
+        guard isCloudSyncEnabled else {
+            return
+        }
+
         let updatedAt = Date()
         settingsStore.saveCloudSyncSnapshotUpdatedAt(updatedAt)
         cloudLastSyncedAt = updatedAt
-        scheduleCloudSync(delaySeconds: syncDelaySeconds)
     }
 
     private func scheduleCloudSync(delaySeconds: UInt64 = 2) {
@@ -1390,12 +2195,18 @@ final class AppState: ObservableObject {
 
         cloudSyncTask?.cancel()
         cloudSyncTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: delaySeconds * 1_000_000_000)
+            if delaySeconds > 0 {
+                try? await Task.sleep(nanoseconds: delaySeconds * 1_000_000_000)
+                guard !Task.isCancelled else {
+                    return
+                }
+            }
+
+            await self?.waitForActiveCloudSyncIfNeeded()
             guard !Task.isCancelled else {
                 return
             }
-
-            await self?.syncCloudNow()
+            await self?.syncCloudNow(updateVisibleQuestion: false)
         }
     }
 
@@ -1410,7 +2221,9 @@ final class AppState: ObservableObject {
             gradingResult: gradingResult,
             isRunning: isRunning,
             hasCompletedOnboarding: hasCompletedOnboarding,
-            studyRecords: studyRecords
+            studyRecords: studyRecords,
+            deletedStudyRecordMarkers: settingsStore.loadDeletedStudyRecordMarkers(),
+            studyRecordsClearedAt: settingsStore.loadStudyRecordsClearedAt()
         )
     }
 
@@ -1426,27 +2239,156 @@ final class AppState: ObservableObject {
         return (mergedSnapshot, true)
     }
 
-    private func outgoingSnapshotPreservingRemoteAPIKey(
+    private func incomingSnapshotMergingLocalData(_ remoteSnapshot: CloudSyncSnapshot) -> CloudSyncSnapshot {
+        var mergedSnapshot = remoteSnapshot
+        let maxHistoryCount = max(
+            remoteSnapshot.settings.sanitizedMaxHistoryCount,
+            settings.sanitizedMaxHistoryCount
+        )
+        let deletedMarkers = mergedDeletedStudyRecordMarkers(
+            remote: remoteSnapshot.deletedStudyRecordMarkers,
+            local: settingsStore.loadDeletedStudyRecordMarkers()
+        )
+        let recordsClearedAt = mergedStudyRecordsClearedAt(
+            remote: remoteSnapshot.studyRecordsClearedAt,
+            local: settingsStore.loadStudyRecordsClearedAt()
+        )
+        let mergedRecords = mergedStudyRecords(
+            remote: remoteSnapshot.studyRecords,
+            local: studyRecords,
+            deletedMarkers: deletedMarkers,
+            recordsClearedAt: recordsClearedAt,
+            maxCount: maxHistoryCount
+        )
+
+        mergedSnapshot.deletedStudyRecordMarkers = deletedMarkers
+        mergedSnapshot.studyRecordsClearedAt = recordsClearedAt
+        mergedSnapshot.studyRecords = mergedRecords
+        mergedSnapshot.questionHistory = mergedQuestionHistory(
+            remote: remoteSnapshot.questionHistory,
+            local: settingsStore.loadQuestionHistory()
+        )
+
+        if let currentQuestion = preferredCurrentQuestion(
+            local: currentQuestion,
+            remote: remoteSnapshot.currentQuestion,
+            mergedRecords: mergedRecords
+        ) {
+            mergedSnapshot.currentQuestion = currentQuestion
+            if let currentRecord = mergedRecords.last(where: {
+                studyRecordMatches($0, question: currentQuestion)
+            }) {
+                mergedSnapshot.lastAnswer = currentRecord.answer ?? ""
+                mergedSnapshot.gradingResult = currentRecord.gradingResult
+            }
+        } else {
+            mergedSnapshot.currentQuestion = nil
+            mergedSnapshot.lastAnswer = ""
+            mergedSnapshot.gradingResult = nil
+        }
+
+        return mergedSnapshot
+    }
+
+    private func cloudSnapshotContentDiffers(_ lhs: CloudSyncSnapshot, _ rhs: CloudSyncSnapshot) -> Bool {
+        var normalizedLHS = lhs
+        var normalizedRHS = rhs
+        normalizedLHS.updatedAt = .distantPast
+        normalizedRHS.updatedAt = .distantPast
+        return normalizedLHS != normalizedRHS
+    }
+
+    private func outgoingSnapshotMergingRemoteData(
         _ snapshot: CloudSyncSnapshot,
         remoteSnapshot: CloudSyncSnapshot
     ) -> CloudSyncSnapshot {
-        guard Self.trimmedOptional(snapshot.apiKey ?? "") == nil,
-              let remoteAPIKey = Self.trimmedOptional(remoteSnapshot.apiKey ?? "") else {
-            return snapshot
+        var mergedSnapshot = snapshot
+        let maxHistoryCount = max(
+            snapshot.settings.sanitizedMaxHistoryCount,
+            remoteSnapshot.settings.sanitizedMaxHistoryCount
+        )
+
+        if Self.trimmedOptional(snapshot.apiKey ?? "") == nil,
+           let remoteAPIKey = Self.trimmedOptional(remoteSnapshot.apiKey ?? "") {
+            mergedSnapshot.apiKey = remoteAPIKey
+            apiKey = remoteAPIKey
+            draftAPIKey = remoteAPIKey
+            savedAPIKey = remoteAPIKey
+            settingsStore.saveAPIKey(remoteAPIKey)
+            hasAPIKeyError = false
+            if errorMessage == strings.apiKeyEmptyDetailed || errorMessage == strings.apiKeyInvalidDetailed {
+                errorMessage = nil
+            }
+            log(.info, "iCloud 원격 OpenAI API 키를 보존해 로컬 변경사항과 함께 저장합니다.")
         }
 
-        var mergedSnapshot = snapshot
-        mergedSnapshot.apiKey = remoteAPIKey
-        apiKey = remoteAPIKey
-        draftAPIKey = remoteAPIKey
-        savedAPIKey = remoteAPIKey
-        settingsStore.saveAPIKey(remoteAPIKey)
-        hasAPIKeyError = false
-        if errorMessage == strings.apiKeyEmptyDetailed || errorMessage == strings.apiKeyInvalidDetailed {
-            errorMessage = nil
+        mergedSnapshot.hasCompletedOnboarding = snapshot.hasCompletedOnboarding || remoteSnapshot.hasCompletedOnboarding
+        let deletedMarkers = mergedDeletedStudyRecordMarkers(
+            remote: remoteSnapshot.deletedStudyRecordMarkers,
+            local: snapshot.deletedStudyRecordMarkers
+        )
+        let recordsClearedAt = mergedStudyRecordsClearedAt(
+            remote: remoteSnapshot.studyRecordsClearedAt,
+            local: snapshot.studyRecordsClearedAt
+        )
+        let mergedRecords = mergedStudyRecords(
+            remote: remoteSnapshot.studyRecords,
+            local: snapshot.studyRecords,
+            deletedMarkers: deletedMarkers,
+            recordsClearedAt: recordsClearedAt,
+            maxCount: maxHistoryCount
+        )
+        let currentCandidate = preferredCurrentQuestion(
+            local: snapshot.currentQuestion,
+            remote: remoteSnapshot.currentQuestion,
+            mergedRecords: mergedRecords
+        )
+        mergedSnapshot.studyRecords = mergedRecords
+        mergedSnapshot.deletedStudyRecordMarkers = deletedMarkers
+        mergedSnapshot.studyRecordsClearedAt = recordsClearedAt
+        mergedSnapshot.questionHistory = mergedQuestionHistory(
+            remote: remoteSnapshot.questionHistory,
+            local: snapshot.questionHistory
+        )
+
+        if let preferredCurrentQuestion = currentCandidate,
+           mergedSnapshot.studyRecords.contains(where: {
+               studyRecordMatches($0, question: preferredCurrentQuestion)
+           }) {
+            mergedSnapshot.currentQuestion = preferredCurrentQuestion
+            if let currentRecord = mergedSnapshot.studyRecords.last(where: {
+                studyRecordMatches($0, question: preferredCurrentQuestion)
+            }) {
+                mergedSnapshot.lastAnswer = currentRecord.answer ?? ""
+                mergedSnapshot.gradingResult = currentRecord.gradingResult
+            }
+        } else {
+            mergedSnapshot.currentQuestion = nil
+            mergedSnapshot.lastAnswer = ""
+            mergedSnapshot.gradingResult = nil
         }
-        log(.info, "iCloud 원격 OpenAI API 키를 보존해 로컬 변경사항과 함께 저장합니다.")
+
         return mergedSnapshot
+    }
+
+    private func preferredCurrentQuestion(
+        local: QuestionItem?,
+        remote: QuestionItem?,
+        mergedRecords: [StudyRecord]
+    ) -> QuestionItem? {
+        let candidates = [local, remote].compactMap { $0 }
+        guard !candidates.isEmpty else {
+            return nil
+        }
+
+        let ungradedCandidates = candidates.filter { question in
+            mergedRecords.contains {
+                studyRecordMatches($0, question: question) && $0.gradingResult == nil
+            }
+        }
+
+        return (ungradedCandidates.isEmpty ? candidates : ungradedCandidates)
+            .max { $0.createdAt < $1.createdAt }
     }
 
     private func firstSyncSnapshot(from remoteSnapshot: CloudSyncSnapshot) -> (snapshot: CloudSyncSnapshot, shouldPushMergedSnapshot: Bool) {
@@ -1460,9 +2402,19 @@ final class AppState: ObservableObject {
             mergedSnapshot.apiKey = Self.trimmedOptional(apiKey)
         }
         mergedSnapshot.hasCompletedOnboarding = remoteSnapshot.hasCompletedOnboarding || hasCompletedOnboarding
+        mergedSnapshot.deletedStudyRecordMarkers = mergedDeletedStudyRecordMarkers(
+            remote: remoteSnapshot.deletedStudyRecordMarkers,
+            local: settingsStore.loadDeletedStudyRecordMarkers()
+        )
+        mergedSnapshot.studyRecordsClearedAt = mergedStudyRecordsClearedAt(
+            remote: remoteSnapshot.studyRecordsClearedAt,
+            local: settingsStore.loadStudyRecordsClearedAt()
+        )
         mergedSnapshot.studyRecords = mergedStudyRecords(
             remote: remoteSnapshot.studyRecords,
             local: studyRecords,
+            deletedMarkers: mergedSnapshot.deletedStudyRecordMarkers,
+            recordsClearedAt: mergedSnapshot.studyRecordsClearedAt,
             maxCount: max(
                 remoteSnapshot.settings.sanitizedMaxHistoryCount,
                 settings.sanitizedMaxHistoryCount
@@ -1493,17 +2445,29 @@ final class AppState: ObservableObject {
             !lastAnswer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
             gradingResult != nil ||
             !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+            !settingsStore.loadDeletedStudyRecordMarkers().isEmpty ||
+            settingsStore.loadStudyRecordsClearedAt() != nil ||
             normalizedSettings(settings) != .default
     }
 
     private func mergedStudyRecords(
         remote remoteRecords: [StudyRecord],
         local localRecords: [StudyRecord],
+        deletedMarkers: [DeletedStudyRecordMarker],
+        recordsClearedAt: Date?,
         maxCount: Int
     ) -> [StudyRecord] {
         var recordsByKey: [String: StudyRecord] = [:]
 
         for record in remoteRecords + localRecords {
+            guard !isStudyRecordDeleted(
+                record,
+                markers: deletedMarkers,
+                recordsClearedAt: recordsClearedAt
+            ) else {
+                continue
+            }
+
             let key = studyRecordMergeKey(record)
             if let existingRecord = recordsByKey[key] {
                 recordsByKey[key] = preferredStudyRecord(existingRecord, record)
@@ -1516,6 +2480,62 @@ final class AppState: ObservableObject {
             studyRecordSortDate($0) < studyRecordSortDate($1)
         }
         return Array(sortedRecords.suffix(max(10, maxCount)))
+    }
+
+    private func mergedDeletedStudyRecordMarkers(
+        remote remoteMarkers: [DeletedStudyRecordMarker],
+        local localMarkers: [DeletedStudyRecordMarker]
+    ) -> [DeletedStudyRecordMarker] {
+        var markersByKey: [String: DeletedStudyRecordMarker] = [:]
+
+        for marker in remoteMarkers + localMarkers {
+            let key = [
+                marker.recordID,
+                marker.mergeKey,
+                marker.normalizedQuestion
+            ].joined(separator: "|")
+
+            if let existingMarker = markersByKey[key] {
+                markersByKey[key] = marker.deletedAt >= existingMarker.deletedAt ? marker : existingMarker
+            } else {
+                markersByKey[key] = marker
+            }
+        }
+
+        return Array(
+            markersByKey.values
+                .sorted { $0.deletedAt < $1.deletedAt }
+                .suffix(SettingsStore.maxDeletedStudyRecordMarkerCount)
+        )
+    }
+
+    private func mergedStudyRecordsClearedAt(remote: Date?, local: Date?) -> Date? {
+        switch (remote, local) {
+        case (.some(let remote), .some(let local)):
+            return max(remote, local)
+        case (.some(let remote), .none):
+            return remote
+        case (.none, .some(let local)):
+            return local
+        case (.none, .none):
+            return nil
+        }
+    }
+
+    private func isStudyRecordDeleted(
+        _ record: StudyRecord,
+        markers: [DeletedStudyRecordMarker],
+        recordsClearedAt: Date?
+    ) -> Bool {
+        let sortDate = studyRecordSortDate(record)
+        if let recordsClearedAt,
+           sortDate <= recordsClearedAt {
+            return true
+        }
+
+        return markers.contains { marker in
+            marker.deletedAt >= sortDate && marker.matches(record)
+        }
     }
 
     private func mergedQuestionHistory(remote: [QuestionItem], local: [QuestionItem]) -> [QuestionItem] {
@@ -1537,11 +2557,17 @@ final class AppState: ObservableObject {
     }
 
     private func studyRecordMergeKey(_ record: StudyRecord) -> String {
-        [
-            record.topic.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
-            String(record.difficulty.level),
-            SettingsStore.normalizedQuestionText(record.question.question)
-        ].joined(separator: "|")
+        DeletedStudyRecordMarker.mergeKey(for: record)
+    }
+
+    private func studyRecordMatches(_ record: StudyRecord, question: QuestionItem) -> Bool {
+        Self.questionsMatch(record.question, question)
+    }
+
+    nonisolated private static func questionsMatch(_ lhs: QuestionItem, _ rhs: QuestionItem) -> Bool {
+        lhs.createdAt == rhs.createdAt ||
+            SettingsStore.normalizedQuestionText(lhs.question) ==
+            SettingsStore.normalizedQuestionText(rhs.question)
     }
 
     private func preferredStudyRecord(_ existingRecord: StudyRecord, _ candidateRecord: StudyRecord) -> StudyRecord {
@@ -1585,11 +2611,43 @@ final class AppState: ObservableObject {
         }
     }
 
-    private func applyCloudSnapshot(_ snapshot: CloudSyncSnapshot) {
+    private func applyCloudSnapshot(_ snapshot: CloudSyncSnapshot, updateVisibleQuestion: Bool = true) {
         let preservedCloudSyncEnabled = isCloudSyncEnabled
         let sanitizedSettings = normalizedSettings(snapshot.settings)
         let mergedHasCompletedOnboarding = hasCompletedOnboarding || snapshot.hasCompletedOnboarding
         let syncedAPIKey = Self.trimmedOptional(snapshot.apiKey ?? "")
+        let localCurrentQuestion = currentQuestion
+        let localLastAnswer = lastAnswer
+        let localGradingResult = gradingResult
+        let localStudyRecords = studyRecords
+        let localQuestionHistory = settingsStore.loadQuestionHistory()
+        let previousAPIKey = Self.trimmedOptional(apiKey)
+        let shouldPreserveActiveQuestion = shouldPreserveActiveQuestion(whenApplying: snapshot)
+        let mergedDeletedMarkers = mergedDeletedStudyRecordMarkers(
+            remote: snapshot.deletedStudyRecordMarkers,
+            local: settingsStore.loadDeletedStudyRecordMarkers()
+        )
+        let mergedRecordsClearedAt = mergedStudyRecordsClearedAt(
+            remote: snapshot.studyRecordsClearedAt,
+            local: settingsStore.loadStudyRecordsClearedAt()
+        )
+        let mergedRecords = mergedStudyRecords(
+            remote: snapshot.studyRecords,
+            local: localStudyRecords,
+            deletedMarkers: mergedDeletedMarkers,
+            recordsClearedAt: mergedRecordsClearedAt,
+            maxCount: max(
+                sanitizedSettings.sanitizedMaxHistoryCount,
+                settings.sanitizedMaxHistoryCount
+            )
+        )
+        let mergedHistory = mergedQuestionHistory(
+            remote: snapshot.questionHistory,
+            local: localQuestionHistory
+        )
+        let appliedCurrentQuestion: QuestionItem?
+        let appliedLastAnswer: String
+        let appliedGradingResult: GradingResult?
 
         settings = sanitizedSettings
         draftSettings = sanitizedSettings
@@ -1602,30 +2660,75 @@ final class AppState: ObservableObject {
             if errorMessage == strings.apiKeyEmptyDetailed || errorMessage == strings.apiKeyInvalidDetailed {
                 errorMessage = nil
             }
-            log(.info, "iCloud에서 OpenAI API 키를 불러왔습니다.")
+            if previousAPIKey != syncedAPIKey {
+                log(.info, "iCloud에서 OpenAI API 키를 불러왔습니다.")
+            }
         }
-        currentQuestion = snapshot.currentQuestion
-        lastAnswer = snapshot.lastAnswer
-        gradingResult = snapshot.gradingResult
+
+        if !updateVisibleQuestion {
+            appliedCurrentQuestion = localCurrentQuestion
+            appliedLastAnswer = localLastAnswer
+            appliedGradingResult = localGradingResult
+            log(.info, "조용한 iCloud 동기화라 현재 학습 화면은 변경하지 않았습니다.")
+        } else if shouldPreserveActiveQuestion, let localCurrentQuestion {
+            let activeRecord = mergedRecords.last {
+                studyRecordMatches($0, question: localCurrentQuestion)
+            }
+            appliedCurrentQuestion = localCurrentQuestion
+            appliedLastAnswer = activeRecord?.answer ?? localLastAnswer
+            appliedGradingResult = activeRecord?.gradingResult ?? localGradingResult
+            log(.info, "iCloud 동기화 중 작성 중인 미제출 질문을 유지했습니다.")
+        } else {
+            let snapshotQuestion = snapshot.currentQuestion
+            if let snapshotQuestion,
+               mergedRecords.contains(where: { studyRecordMatches($0, question: snapshotQuestion) }) {
+                appliedCurrentQuestion = snapshotQuestion
+                appliedLastAnswer = snapshot.lastAnswer
+                appliedGradingResult = snapshot.gradingResult
+            } else {
+                appliedCurrentQuestion = nil
+                appliedLastAnswer = ""
+                appliedGradingResult = nil
+            }
+        }
+
+        currentQuestion = appliedCurrentQuestion
+        lastAnswer = appliedLastAnswer
+        gradingResult = appliedGradingResult
         isRunning = snapshot.isRunning
         hasCompletedOnboarding = mergedHasCompletedOnboarding
         isCloudSyncEnabled = preservedCloudSyncEnabled
 
         settingsStore.saveSettings(sanitizedSettings)
-        settingsStore.saveQuestion(snapshot.currentQuestion)
-        settingsStore.saveQuestionHistory(snapshot.questionHistory)
-        settingsStore.saveLastAnswer(snapshot.lastAnswer)
-        settingsStore.saveGradingResult(snapshot.gradingResult)
+        settingsStore.saveQuestion(appliedCurrentQuestion)
+        settingsStore.saveQuestionHistory(mergedHistory)
+        settingsStore.saveLastAnswer(appliedLastAnswer)
+        settingsStore.saveGradingResult(appliedGradingResult)
         settingsStore.saveIsRunning(snapshot.isRunning)
         settingsStore.saveHasCompletedOnboarding(mergedHasCompletedOnboarding)
         settingsStore.saveIsCloudSyncEnabled(preservedCloudSyncEnabled)
-        settingsStore.replaceStudyRecords(snapshot.studyRecords)
+        settingsStore.saveDeletedStudyRecordMarkers(mergedDeletedMarkers)
+        settingsStore.saveStudyRecordsClearedAt(mergedRecordsClearedAt)
+        settingsStore.replaceStudyRecords(mergedRecords)
         settingsStore.saveCloudSyncSnapshotUpdatedAt(snapshot.updatedAt)
 
         studyRecords = settingsStore.loadStudyRecords()
         savedSettings = sanitizedSettings
         cloudLastSyncedAt = snapshot.updatedAt
         restartTimer()
+    }
+
+    private func shouldPreserveActiveQuestion(whenApplying snapshot: CloudSyncSnapshot) -> Bool {
+        guard let currentQuestion else {
+            return false
+        }
+
+        if let remoteCurrentQuestion = snapshot.currentQuestion,
+           Self.questionsMatch(remoteCurrentQuestion, currentQuestion) {
+            return false
+        }
+
+        return hasActiveUngradedCurrentQuestion
     }
 
     private func resolvedCloudSyncService() -> CloudSyncServiceProtocol? {
@@ -1664,7 +2767,7 @@ final class AppState: ObservableObject {
     private func log(_ level: LogLevel, _ message: String) {
         let entry = AppLogEntry(level: level, message: message)
         settingsStore.appendAppLog(entry)
-        loadAppLogPage(0)
+        loadAppLogPage(appLogPage)
     }
 
     private func openURLString(_ urlString: String) {
@@ -1711,9 +2814,16 @@ final class AppState: ObservableObject {
             return nil
         }
 
-        return studyRecords.last {
-            abs($0.question.createdAt.timeIntervalSince1970 - questionCreatedAt) < 0.001
-        }
+        return studyRecords
+            .map {
+                (
+                    record: $0,
+                    distance: abs($0.question.createdAt.timeIntervalSince1970 - questionCreatedAt)
+                )
+            }
+            .filter { $0.distance < 1 }
+            .min { $0.distance < $1.distance }?
+            .record
     }
 
     private func studyRecord(matching question: QuestionItem?) -> StudyRecord? {

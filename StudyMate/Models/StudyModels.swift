@@ -345,6 +345,87 @@ struct OpenAIModelOption: Identifiable, Equatable {
     }
 }
 
+enum RecommendedPrompt: String, CaseIterable, Identifiable {
+    case concept
+    case interview
+    case practical
+    case scale
+    case enterprise
+    case review
+
+    var id: String { rawValue }
+
+    func title(language: AppLanguage) -> String {
+        switch language {
+        case .korean:
+            switch self {
+            case .concept:
+                return "개념 확인형"
+            case .interview:
+                return "면접 질문형"
+            case .practical:
+                return "실전 예제형"
+            case .scale:
+                return "스케일 설계형"
+            case .enterprise:
+                return "대기업 실무형"
+            case .review:
+                return "복습 강화형"
+            }
+        case .english:
+            switch self {
+            case .concept:
+                return "Concept Check"
+            case .interview:
+                return "Interview Style"
+            case .practical:
+                return "Practical Example"
+            case .scale:
+                return "Scale Design"
+            case .enterprise:
+                return "Enterprise Practice"
+            case .review:
+                return "Review Focus"
+            }
+        }
+    }
+
+    func text(language: AppLanguage) -> String {
+        switch language {
+        case .korean:
+            switch self {
+            case .concept:
+                return "핵심 개념을 정확히 이해했는지 확인하는 짧은 질문을 내세요. 한 번에 하나의 개념만 다루세요."
+            case .interview:
+                return "기술 면접처럼 질문하세요. 단순 정의보다 이유, trade-off, 실제 적용 상황을 설명하게 만드세요."
+            case .practical:
+                return "실무 상황이나 작은 예제를 기반으로 질문하세요. 사용자가 개념을 적용해서 답하도록 만드세요."
+            case .scale:
+                return "스케일 인/아웃 관점에서 질문하세요. 트래픽 증가, 병목, 샤딩/파티셔닝, 캐시, 큐, 장애 격리, 비용 trade-off를 함께 설명하게 만드세요."
+            case .enterprise:
+                return "대기업 실무 관점에서 질문하세요. 운영 안정성, 배포/롤백, 모니터링, 보안, 권한, 데이터 정합성, 장애 대응, 팀 간 협업까지 고려하게 만드세요."
+            case .review:
+                return "이전 질문과 겹치지 않게 복습 질문을 내세요. 자주 틀릴 만한 부분과 헷갈리는 차이를 확인하세요."
+            }
+        case .english:
+            switch self {
+            case .concept:
+                return "Ask a short question that checks whether the core concept is understood. Cover only one concept at a time."
+            case .interview:
+                return "Ask like a technical interview. Make the user explain reasons, trade-offs, and practical usage, not just definitions."
+            case .practical:
+                return "Ask from a real work scenario or a small example. Make the user apply the concept in the answer."
+            case .scale:
+                return "Ask from a scale-in/scale-out design perspective. Make the user explain traffic growth, bottlenecks, sharding/partitioning, caching, queues, failure isolation, and cost trade-offs."
+            case .enterprise:
+                return "Ask from a large-company production perspective. Make the user consider reliability, deployment/rollback, monitoring, security, permissions, data consistency, incident response, and cross-team collaboration."
+            case .review:
+                return "Ask a review question that does not overlap with previous questions. Check common mistakes and confusing differences."
+            }
+        }
+    }
+}
+
 struct OpenAIUsage: Codable, Equatable {
     var inputTokens: Int
     var cachedInputTokens: Int
@@ -446,6 +527,131 @@ struct StudyRecord: Codable, Equatable, Identifiable {
     }
 }
 
+struct DeletedStudyRecordMarker: Codable, Equatable, Identifiable {
+    var recordID: String
+    var normalizedQuestion: String
+    var mergeKey: String
+    var deletedAt: Date
+
+    var id: String {
+        [recordID, mergeKey, String(deletedAt.timeIntervalSince1970)].joined(separator: "|")
+    }
+
+    init(record: StudyRecord, deletedAt: Date = Date()) {
+        self.recordID = record.id
+        self.normalizedQuestion = Self.normalizedQuestionText(record.question.question)
+        self.mergeKey = Self.mergeKey(for: record)
+        self.deletedAt = deletedAt
+    }
+
+    func matches(_ record: StudyRecord) -> Bool {
+        record.id == recordID ||
+            Self.mergeKey(for: record) == mergeKey ||
+            Self.normalizedQuestionText(record.question.question) == normalizedQuestion
+    }
+
+    static func mergeKey(for record: StudyRecord) -> String {
+        [
+            record.topic.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+            String(record.difficulty.level),
+            normalizedQuestionText(record.question.question)
+        ].joined(separator: "|")
+    }
+
+    static func normalizedQuestionText(_ question: String) -> String {
+        question
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+    }
+}
+
+enum TopicGrouping {
+    static func displayTopic(for record: StudyRecord, fallback: String) -> String {
+        displayTopic(record.topic, fallback: fallback)
+    }
+
+    static func displayTopic(_ topic: String, fallback: String) -> String {
+        let trimmed = topic.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? fallback : trimmed
+    }
+
+    static func normalizedKey(for record: StudyRecord, fallback: String) -> String {
+        normalizedKey(for: record.topic, fallback: fallback)
+    }
+
+    static func normalizedKey(for topic: String, fallback: String) -> String {
+        let display = displayTopic(topic, fallback: fallback)
+        let expanded = display
+            .replacingOccurrences(
+                of: "([a-z0-9])([A-Z])",
+                with: "$1 $2",
+                options: .regularExpression
+            )
+            .replacingOccurrences(
+                of: "([A-Za-z])([0-9])",
+                with: "$1 $2",
+                options: .regularExpression
+            )
+            .replacingOccurrences(
+                of: "([0-9])([A-Za-z])",
+                with: "$1 $2",
+                options: .regularExpression
+            )
+        let folded = expanded
+            .folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: .current)
+            .lowercased()
+
+        var key = ""
+        for scalar in folded.unicodeScalars where scalar.properties.isAlphabetic || scalar.properties.numericType != nil {
+            key.unicodeScalars.append(scalar)
+        }
+
+        return key.isEmpty ? "study" : key
+    }
+
+    static func preferredDisplayTopic(for records: [StudyRecord], fallback: String) -> String {
+        var summaries: [String: (name: String, count: Int, latest: Date)] = [:]
+
+        for record in records {
+            let name = displayTopic(for: record, fallback: fallback)
+            let latest = record.answeredAt ?? record.question.createdAt
+            let key = name.folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: .current)
+                .lowercased()
+
+            if let existing = summaries[key] {
+                summaries[key] = (
+                    name: existing.name,
+                    count: existing.count + 1,
+                    latest: max(existing.latest, latest)
+                )
+            } else {
+                summaries[key] = (name: name, count: 1, latest: latest)
+            }
+        }
+
+        return summaries.values.sorted {
+            if $0.count != $1.count {
+                return $0.count > $1.count
+            }
+            if $0.latest != $1.latest {
+                return $0.latest > $1.latest
+            }
+            if $0.name.count != $1.name.count {
+                return $0.name.count < $1.name.count
+            }
+            return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+        }.first?.name ?? fallback
+    }
+
+    static func displayAliases(for records: [StudyRecord], fallback: String) -> [String] {
+        let names = Set(records.map { displayTopic(for: $0, fallback: fallback) })
+        return names.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+    }
+}
+
 struct CloudSyncSnapshot: Codable, Equatable {
     var schemaVersion: Int
     var updatedAt: Date
@@ -458,9 +664,27 @@ struct CloudSyncSnapshot: Codable, Equatable {
     var isRunning: Bool
     var hasCompletedOnboarding: Bool
     var studyRecords: [StudyRecord]
+    var deletedStudyRecordMarkers: [DeletedStudyRecordMarker]
+    var studyRecordsClearedAt: Date?
+
+    private enum CodingKeys: String, CodingKey {
+        case schemaVersion
+        case updatedAt
+        case apiKey
+        case settings
+        case currentQuestion
+        case questionHistory
+        case lastAnswer
+        case gradingResult
+        case isRunning
+        case hasCompletedOnboarding
+        case studyRecords
+        case deletedStudyRecordMarkers
+        case studyRecordsClearedAt
+    }
 
     init(
-        schemaVersion: Int = 1,
+        schemaVersion: Int = 2,
         updatedAt: Date,
         apiKey: String? = nil,
         settings: StudySettings,
@@ -470,7 +694,9 @@ struct CloudSyncSnapshot: Codable, Equatable {
         gradingResult: GradingResult?,
         isRunning: Bool,
         hasCompletedOnboarding: Bool,
-        studyRecords: [StudyRecord]
+        studyRecords: [StudyRecord],
+        deletedStudyRecordMarkers: [DeletedStudyRecordMarker] = [],
+        studyRecordsClearedAt: Date? = nil
     ) {
         self.schemaVersion = schemaVersion
         self.updatedAt = updatedAt
@@ -483,6 +709,29 @@ struct CloudSyncSnapshot: Codable, Equatable {
         self.isRunning = isRunning
         self.hasCompletedOnboarding = hasCompletedOnboarding
         self.studyRecords = studyRecords
+        self.deletedStudyRecordMarkers = deletedStudyRecordMarkers
+        self.studyRecordsClearedAt = studyRecordsClearedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        schemaVersion = try container.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 1
+        updatedAt = try container.decode(Date.self, forKey: .updatedAt)
+        apiKey = try container.decodeIfPresent(String.self, forKey: .apiKey)
+        settings = try container.decode(StudySettings.self, forKey: .settings)
+        currentQuestion = try container.decodeIfPresent(QuestionItem.self, forKey: .currentQuestion)
+        questionHistory = try container.decodeIfPresent([QuestionItem].self, forKey: .questionHistory) ?? []
+        lastAnswer = try container.decodeIfPresent(String.self, forKey: .lastAnswer) ?? ""
+        gradingResult = try container.decodeIfPresent(GradingResult.self, forKey: .gradingResult)
+        isRunning = try container.decodeIfPresent(Bool.self, forKey: .isRunning) ?? false
+        hasCompletedOnboarding = try container.decodeIfPresent(Bool.self, forKey: .hasCompletedOnboarding) ?? true
+        studyRecords = try container.decodeIfPresent([StudyRecord].self, forKey: .studyRecords) ?? []
+        deletedStudyRecordMarkers = try container.decodeIfPresent(
+            [DeletedStudyRecordMarker].self,
+            forKey: .deletedStudyRecordMarkers
+        ) ?? []
+        studyRecordsClearedAt = try container.decodeIfPresent(Date.self, forKey: .studyRecordsClearedAt)
     }
 }
 
@@ -603,6 +852,9 @@ struct AppStrings {
 
     var invalidAPIKey: String { text("API 키가 잘못되었습니다", "Invalid API key") }
     var notificationTitle: String { "StudyMate" }
+    var cloudQuestionPushBody: String {
+        text("새 학습 질문이 도착했습니다. 탭해서 이어가세요.", "A new study question is ready. Tap to continue.")
+    }
     var reply: String { text("답장", "Reply") }
     var send: String { text("보내기", "Send") }
     var answerPlaceholder: String { text("답변 입력", "Enter answer") }
@@ -739,6 +991,7 @@ struct AppStrings {
     var syncing: String { text("동기화 중", "Syncing") }
     var syncAlreadyInProgress: String { text("이미 동기화 중입니다.", "Sync is already in progress.") }
     var syncUpdated: String { text("iCloud 동기화가 완료됐습니다.", "iCloud sync complete.") }
+    var syncAlreadyCurrent: String { text("iCloud 데이터가 최신입니다.", "iCloud data is up to date.") }
     var syncPulledRemote: String { text("iCloud의 최신 데이터를 불러왔습니다.", "Loaded the latest iCloud data.") }
     var syncMergedRemote: String {
         text(
@@ -898,6 +1151,9 @@ struct AppStrings {
 
     var newQuestion: String { text("새 질문", "New Question") }
     var studyOverview: String { text("학습 현황", "Study Overview") }
+    var studyTopicShort: String { text("주제", "Topic") }
+    var studyLevelShort: String { text("레벨", "Level") }
+    var studyIntervalShort: String { text("주기", "Interval") }
     var pendingShort: String { text("대기", "Pending") }
     var latestScoreShort: String { text("최근 점수", "Latest") }
     var averageScoreShort: String { text("평균", "Average") }
@@ -912,8 +1168,8 @@ struct AppStrings {
     var pendingQuestionLimitTitle: String { text("미채점 질문이 3개입니다.", "There are 3 ungraded questions.") }
     var pendingQuestionLimitMessage: String {
         text(
-            "미채점 질문을 답변하거나 넘기기/기록 삭제로 제거한 뒤 다시 새 질문 생성을 실행하세요.",
-            "Answer, skip, or delete an ungraded question, then run New Question again."
+            "미채점 질문을 답변하거나 기록 탭에서 삭제한 뒤 다시 새 질문 생성을 실행하세요.",
+            "Answer an ungraded question or delete one from Records, then run New Question again."
         )
     }
     var current: String { text("현재", "Current") }
@@ -921,6 +1177,26 @@ struct AppStrings {
     var question: String { text("질문", "Question") }
     var noQuestion: String { text("질문 없음", "No Question") }
     var noQuestionDescription: String { text("설정을 저장한 뒤 새 질문을 생성하세요.", "Save settings, then create a new question.") }
+    var duplicateQuestionSkipped: String {
+        text(
+            "기존 질문과 너무 비슷한 질문이 반복되어 생성하지 않았습니다.",
+            "StudyMate did not save a repeated question."
+        )
+    }
+    var notificationQuestionMissingTitle: String { text("열 수 없는 알림", "Unavailable Notification") }
+    var openingNotificationQuestion: String { text("알림에서 질문을 여는 중입니다.", "Opening the question from notification.") }
+    var notificationQuestionUnavailable: String {
+        text(
+            "이 질문은 이미 넘기기/삭제되어 열 수 없습니다.",
+            "This question was already skipped or deleted and cannot be opened."
+        )
+    }
+    var notificationQuestionUnavailableHelp: String {
+        text(
+            "남아있는 미제출 질문을 이어가거나 새 질문을 생성하세요.",
+            "Continue another pending question or create a new one."
+        )
+    }
     var answer: String { text("답변", "Answer") }
     var gradeAnswer: String { text("채점 받기", "Grade Answer") }
     var skipQuestion: String { text("넘기기", "Skip") }
@@ -975,7 +1251,6 @@ struct AppStrings {
     var topicCount: String { text("주제", "Topics") }
     var level: String { text("레벨", "Level") }
     var range: String { text("범위", "Range") }
-    var levelPerformance: String { text("레벨별 성과", "Performance by Level") }
     var sortTopics: String { text("정렬", "Sort") }
     var sortByLevel: String { text("레벨순", "Level") }
     var sortByRecent: String { text("최근순", "Recent") }
@@ -1020,7 +1295,7 @@ struct AppStrings {
             "Range: \(start)-\(end) · \(count)"
         )
     }
-    func topicDifficultySummary(_ summary: String) -> String { text("난이도: \(summary)", "Difficulty: \(summary)") }
+    func groupedTopics(_ topics: String) -> String { text("묶인 주제: \(topics)", "Grouped topics: \(topics)") }
     var notEnoughStats: String { text("통계를 만들려면 채점 기록이 더 필요합니다.", "Grade more answers to build insights.") }
     func itemCount(_ count: Int) -> String { text("\(count)개", "\(count)") }
     var correctRate: String { text("정답", "Correct") }

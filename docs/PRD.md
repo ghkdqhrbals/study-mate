@@ -1,38 +1,91 @@
-# StudyMate Product Notes
+# StudyMate PRD
 
-## Goal
+## Purpose
 
-StudyMate helps users keep their own knowledge sharp while using AI. The product should stay quiet, simple, and useful from the menu bar.
+StudyMate is a quiet AI tutor for people who use AI heavily but still want to keep their own knowledge sharp. The product asks short questions on a schedule, lets the user answer when convenient, grades the answer with OpenAI, and turns the accumulated record into topic-level learning statistics.
 
-## 10 Improvement Cycles
+## Product Principles
 
-1. Homepage message: lead with why the app exists, not a feature list.
-2. Download clarity: use explicit `.dmg` wording on download buttons.
-3. Study overview: show pending questions, latest score, and average score before the question.
-4. Draft confidence: show that answers are auto-saved while typing.
-5. Fast recovery: add a clear answer action when a draft is present.
-6. Pending workload: keep pending question count visible in the study flow.
-7. Record retrieval: add search across question, topic, difficulty, and answer.
-8. Empty states: distinguish no records from no search results.
-9. Mobile homepage: allow release metadata to wrap cleanly on narrow screens.
-10. Release discipline: every user-facing improvement must pass tests and ship through the patch release flow.
+- Keep the app useful from the first screen, not as a marketing surface.
+- Never steal the user's current answer draft when a new question arrives.
+- Prefer compact, predictable controls over decorative UI.
+- Treat statistics as the core feedback loop.
+- Make cross-device sync understandable and recoverable.
+- Keep settings simple enough to scan repeatedly.
 
-## Follow-up Cycles
+## Supported Platforms
 
-2. Add one-click continuation for the oldest pending question so users can clear backlog deliberately.
-3. Add clipboard actions for questions and answers to make external note-taking easier.
-4. Add record status filters so users can separate graded and ungraded work.
-5. Keep filtered record counts visible so search/filter state is understandable.
-6. Add statistics insights for strongest and weakest difficulty bands.
-7. Keep insight cards compact and aligned with the existing quiet UI.
-8. Keep homepage download wording explicit as `.dmg`.
-9. Preserve app language coverage for every new UI label.
-10. Ship the combined UX pass as a signed patch release after tests.
+- iOS app built with SwiftUI `TabView`.
+- macOS menu bar app built with SwiftUI `MenuBarExtra`, currently kept in the repository with public release paused.
+- Shared model, storage, OpenAI, notification, and CloudKit sync services.
 
-## UX Principles
+## Release Scope
 
-- Keep the menu bar app dense but calm.
-- Prefer visible state over hidden behavior.
-- Preserve user drafts automatically.
-- Make old learning history easy to find.
-- Avoid decorative UI that does not improve study speed.
+- Current public release target: iPhone app through App Store Connect.
+- macOS DMG/Sparkle release is on hold until the macOS sync/update experience is revisited.
+
+## Core User Flows
+
+### Onboarding
+
+1. User chooses app language.
+2. User optionally enters an OpenAI API key.
+3. User sets topic, difficulty, and interval.
+4. User can skip setup and finish later in Settings.
+
+### Study
+
+1. User receives or manually creates a study question.
+2. User writes an answer draft that is preserved automatically.
+3. User can reveal the hint on demand.
+4. User submits for grading.
+5. Grading result, feedback, and explanation are stored in records.
+6. Ungraded pending questions are capped at 3.
+
+### Records
+
+1. Ungraded records appear first.
+2. Records are searchable and paginated.
+3. Record detail shows question, answer, feedback, explanation, and grading state.
+4. Ungraded records can still be answered from detail.
+5. Individual records can be deleted.
+
+### Statistics
+
+1. Statistics are filtered by period.
+2. Topics are grouped by normalized topic key so case, spacing, hyphen, underscore, and simple camelCase variants are merged.
+3. Topic range estimates combine difficulty level and score into a 1-10 ability range.
+4. Topic browser supports search, sort, pagination, selected topic detail, and trend chart.
+5. Similar topic aliases are visible in the selected topic detail when multiple labels were merged.
+
+### Settings
+
+1. Study settings appear first.
+2. OpenAI API key and model are managed separately from study settings.
+3. Notification permission opens system settings; no in-app test notification button is shown.
+4. iCloud sync is shown as a single compact footer row at the bottom.
+5. Developer logs are hidden unless debugging mode is enabled.
+
+### Sync And Push
+
+1. CloudKit sync stores settings, current question, draft answer, records, history, and the regular OpenAI API key.
+2. Admin API keys are intentionally not synced.
+3. Question push records are used for iPhone delivery.
+4. iPhone subscribes to question push records and receives CloudKit/APNs notifications.
+5. Push arrival syncs data without opening a new answer page unless the user taps the notification.
+6. On iPhone, lock-screen delivery uses at most one pending scheduled local notification prepared before suspension; exact background network generation is not guaranteed by iOS.
+
+## Non-Goals
+
+- Running a custom backend server.
+- Guaranteeing real-time push delivery independent of iCloud/APNs behavior.
+- Storing OpenAI billing balance locally as an authoritative source.
+- Supporting more app languages than Korean and English in the current version.
+
+## Current UX Backlog
+
+- Add a clearer sync diagnostics panel for iCloud account, quota, schema, and permission failures.
+- Add optional topic merge review so users can rename or split automatically grouped topics.
+- Add a compact "next best question" recommendation based on topic range uncertainty.
+- Add export for records and topic stats.
+- Add explicit conflict UI when two devices edit the same answer draft.

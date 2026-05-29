@@ -190,7 +190,7 @@ final class OpenAIClient: OpenAIClientProtocol {
         let output = try await sendStructuredRequest(
             apiKey: apiKey,
             model: settings.sanitizedOpenAIModel,
-            instructions: "You are an AI teacher that creates varied study questions in \(Self.questionLanguage(for: settings).promptLabel). Never repeat recent questions.",
+            instructions: "You are an AI teacher that creates varied study questions in \(Self.questionLanguage(for: settings).promptLabel). Never repeat or closely paraphrase previous questions.",
             input: prompt,
             previousResponseID: previousResponseID,
             schemaName: "study_question",
@@ -212,7 +212,7 @@ final class OpenAIClient: OpenAIClientProtocol {
         let language = questionLanguage(for: settings)
         let languageInstruction = questionLanguageInstruction(for: settings)
         let recentQuestionText = recentQuestions
-            .suffix(20)
+            .suffix(80)
             .enumerated()
             .map { index, item in "\(index + 1). \(item.question)" }
             .joined(separator: "\n")
@@ -225,7 +225,7 @@ final class OpenAIClient: OpenAIClientProtocol {
         Language: \(language.promptLabel)
         Teacher instruction: \(settings.customPrompt)
         Question language instruction: \(languageInstruction)
-        Recent questions to avoid:
+        Previous questions to avoid:
         \(recentQuestionText.isEmpty ? "None" : recentQuestionText)
 
         Requirements:
@@ -234,8 +234,8 @@ final class OpenAIClient: OpenAIClientProtocol {
         - Write the question and expectedAnswerHint in \(language.promptLabel).
         - If Teacher instruction conflicts with Language, Language wins.
         - The question should be concise and practical.
-        - Do not repeat or closely paraphrase any recent question.
-        - Vary the concept, angle, example, or required reasoning from recent questions.
+        - Do not repeat or closely paraphrase any previous question.
+        - Vary the concept, angle, example, or required reasoning from previous questions.
         - If the topic is broad, rotate through different subtopics.
         """
     }

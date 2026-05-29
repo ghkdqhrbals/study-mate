@@ -1,4 +1,5 @@
 import Foundation
+import CloudKit
 #if os(macOS)
 import AppKit
 #elseif os(iOS)
@@ -17,8 +18,198 @@ enum StudyNotificationAction {
     static let questionCreatedAt = "questionCreatedAt"
 }
 
+enum StudyNotificationRouting {
+    static func isIgnored(_ actionIdentifier: String) -> Bool {
+        actionIdentifier == StudyNotificationAction.ignore ||
+            actionIdentifier == UNNotificationDismissActionIdentifier
+    }
+
+    static func shouldOpenStudyImmediately(actionIdentifier: String) -> Bool {
+        actionIdentifier == UNNotificationDefaultActionIdentifier
+    }
+}
+
+enum StudyNotificationPayload {
+    static func questionCreatedAt(from userInfo: [AnyHashable: Any]) -> TimeInterval? {
+        let candidateKeys = [
+            StudyNotificationAction.questionCreatedAt,
+            "createdAt",
+            "questionCreatedAt"
+        ]
+
+        for key in candidateKeys {
+            if let timeInterval = timeIntervalValue(userInfo[key]) {
+                return timeInterval
+            }
+        }
+
+        for dictionary in cloudKitDictionaries(from: userInfo) {
+            for key in candidateKeys where key != StudyNotificationAction.questionCreatedAt {
+                if let timeInterval = timeIntervalValue(dictionary[key]) {
+                    return timeInterval
+                }
+            }
+        }
+
+        return nil
+    }
+
+    static func cloudQuestionPushRecordName(from userInfo: [AnyHashable: Any]) -> String? {
+        guard hasCloudKitQuestionPushShape(userInfo) else {
+            return nil
+        }
+
+        if let notification = CKNotification(fromRemoteNotificationDictionary: userInfo) as? CKQueryNotification,
+           notification.subscriptionID == CloudSyncService.questionPushSubscriptionID,
+           let recordName = notification.recordID?.recordName {
+            return recordName
+        }
+
+        return rawCloudQuestionPushRecordName(from: userInfo)
+    }
+
+    static func isCloudQuestionPush(from userInfo: [AnyHashable: Any]) -> Bool {
+        guard hasCloudKitQuestionPushShape(userInfo) else {
+            return false
+        }
+
+        if cloudQuestionPushRecordName(from: userInfo) != nil {
+            return true
+        }
+
+        if let notification = CKNotification(fromRemoteNotificationDictionary: userInfo) as? CKQueryNotification {
+            return notification.subscriptionID == CloudSyncService.questionPushSubscriptionID
+        }
+
+        return cloudKitDictionaries(from: userInfo).contains { dictionary in
+            stringValue(dictionary["sid"]) == CloudSyncService.questionPushSubscriptionID ||
+                stringValue(dictionary["subscriptionID"]) == CloudSyncService.questionPushSubscriptionID ||
+                stringValue(dictionary["subscriptionId"]) == CloudSyncService.questionPushSubscriptionID
+        }
+    }
+
+    static func keySummary(from userInfo: [AnyHashable: Any]) -> String {
+        userInfo.keys
+            .map { String(describing: $0) }
+            .sorted()
+            .joined(separator: ",")
+    }
+
+    private static func rawCloudQuestionPushRecordName(from userInfo: [AnyHashable: Any]) -> String? {
+        for dictionary in cloudKitDictionaries(from: userInfo) {
+            let subscriptionID = stringValue(dictionary["sid"]) ??
+                stringValue(dictionary["subscriptionID"]) ??
+                stringValue(dictionary["subscriptionId"])
+            let recordName = stringValue(dictionary["rid"]) ??
+                stringValue(dictionary["recordName"]) ??
+                stringValue(dictionary["recordID"]) ??
+                stringValue(dictionary["recordId"])
+
+            if let recordName,
+               subscriptionID == nil || subscriptionID == CloudSyncService.questionPushSubscriptionID {
+                return recordName
+            }
+        }
+
+        return nil
+    }
+
+    private static func hasCloudKitQuestionPushShape(_ userInfo: [AnyHashable: Any]) -> Bool {
+        cloudKitDictionaries(from: userInfo).contains { dictionary in
+            stringValue(dictionary["sid"]) == CloudSyncService.questionPushSubscriptionID ||
+                stringValue(dictionary["subscriptionID"]) == CloudSyncService.questionPushSubscriptionID ||
+                stringValue(dictionary["subscriptionId"]) == CloudSyncService.questionPushSubscriptionID ||
+                dictionary["rid"] != nil ||
+                dictionary["recordName"] != nil ||
+                dictionary["recordID"] != nil ||
+                dictionary["recordId"] != nil
+        }
+    }
+
+    private static func cloudKitDictionaries(from userInfo: [AnyHashable: Any]) -> [[AnyHashable: Any]] {
+        var dictionaries: [[AnyHashable: Any]] = [userInfo]
+
+        if let cloudKitDictionary = dictionaryValue(userInfo["ck"]) {
+            dictionaries.append(cloudKitDictionary)
+
+            if let queryDictionary = dictionaryValue(cloudKitDictionary["qry"]) {
+                dictionaries.append(queryDictionary)
+            }
+        }
+
+        if let queryDictionary = dictionaryValue(userInfo["qry"]) {
+            dictionaries.append(queryDictionary)
+        }
+
+        return dictionaries
+    }
+
+    private static func dictionaryValue(_ value: Any?) -> [AnyHashable: Any]? {
+        if let dictionary = value as? [AnyHashable: Any] {
+            return dictionary
+        }
+
+        if let dictionary = value as? [String: Any] {
+            var converted: [AnyHashable: Any] = [:]
+            for (key, value) in dictionary {
+                converted[key] = value
+            }
+            return converted
+        }
+
+        return nil
+    }
+
+    private static func stringValue(_ value: Any?) -> String? {
+        if let string = value as? String, !string.isEmpty {
+            return string
+        }
+
+        return nil
+    }
+
+    private static func timeIntervalValue(_ value: Any?) -> TimeInterval? {
+        if let timeInterval = value as? TimeInterval {
+            return timeInterval
+        }
+
+        if let number = value as? NSNumber {
+            return number.doubleValue
+        }
+
+        if let string = value as? String,
+           let doubleValue = Double(string) {
+            return doubleValue
+        }
+
+        if let date = value as? Date {
+            return date.timeIntervalSince1970
+        }
+
+        return nil
+    }
+}
+
 @MainActor
-final class NotificationService {
+protocol NotificationServicing: AnyObject {
+    func requestAuthorizationIfNeeded(language: AppLanguage) async -> Bool
+    func openSystemNotificationSettings()
+    func playPreview(sound: NotificationSoundOption)
+    func showQuestionNotification(
+        question: QuestionItem,
+        title: String,
+        subtitle: String?,
+        sound: NotificationSoundOption,
+        language: AppLanguage,
+        deliveryDate: Date?
+    ) async -> Bool
+    func cancelQuestionNotification(for question: QuestionItem)
+    func cancelQuestionNotifications(for questions: [QuestionItem])
+    func pendingQuestionNotificationCount() async -> Int
+}
+
+@MainActor
+final class NotificationService: NotificationServicing {
     #if os(macOS)
     private var previewSound: NSSound?
     #elseif os(iOS)
@@ -32,20 +223,38 @@ final class NotificationService {
 
         switch settings.authorizationStatus {
         case .authorized, .provisional:
+            registerForRemoteNotificationsIfAvailable()
             return true
         case .denied:
             return false
         case .notDetermined:
             do {
-                return try await center.requestAuthorization(options: [.alert, .sound, .badge])
+                let isAuthorized = try await center.requestAuthorization(options: [.alert, .sound, .badge])
+                if isAuthorized {
+                    registerForRemoteNotificationsIfAvailable()
+                }
+                return isAuthorized
             } catch {
                 return false
             }
         case .ephemeral:
+            registerForRemoteNotificationsIfAvailable()
             return true
         @unknown default:
             return false
         }
+    }
+
+    private func registerForRemoteNotificationsIfAvailable() {
+        #if os(iOS)
+        if Thread.isMainThread {
+            UIApplication.shared.registerForRemoteNotifications()
+        } else {
+            DispatchQueue.main.async {
+                UIApplication.shared.registerForRemoteNotifications()
+            }
+        }
+        #endif
     }
 
     func openSystemNotificationSettings() {
@@ -60,7 +269,13 @@ final class NotificationService {
             return
         }
 
-        UIApplication.shared.open(url)
+        if Thread.isMainThread {
+            UIApplication.shared.open(url)
+        } else {
+            DispatchQueue.main.async {
+                UIApplication.shared.open(url)
+            }
+        }
         #endif
     }
 
@@ -127,7 +342,8 @@ final class NotificationService {
         title: String,
         subtitle: String?,
         sound: NotificationSoundOption,
-        language: AppLanguage
+        language: AppLanguage,
+        deliveryDate: Date? = nil
     ) async -> Bool {
         guard await requestAuthorizationIfNeeded(language: language) else {
             return false
@@ -147,10 +363,20 @@ final class NotificationService {
             StudyNotificationAction.questionCreatedAt: question.createdAt.timeIntervalSince1970
         ]
 
+        let trigger: UNNotificationTrigger?
+        if let deliveryDate {
+            let timeInterval = deliveryDate.timeIntervalSinceNow
+            trigger = timeInterval > 1
+                ? UNTimeIntervalNotificationTrigger(timeInterval: timeInterval, repeats: false)
+                : nil
+        } else {
+            trigger = nil
+        }
+
         let request = UNNotificationRequest(
-            identifier: "study-question-\(question.createdAt.timeIntervalSince1970)",
+            identifier: Self.questionNotificationIdentifier(for: question),
             content: content,
-            trigger: nil
+            trigger: trigger
         )
 
         do {
@@ -159,6 +385,38 @@ final class NotificationService {
         } catch {
             return false
         }
+    }
+
+    func cancelQuestionNotification(for question: QuestionItem) {
+        cancelQuestionNotifications(for: [question])
+    }
+
+    func cancelQuestionNotifications(for questions: [QuestionItem]) {
+        let identifiers = questions.map(Self.questionNotificationIdentifier(for:))
+        guard !identifiers.isEmpty else {
+            return
+        }
+
+        let center = UNUserNotificationCenter.current()
+        center.removePendingNotificationRequests(withIdentifiers: identifiers)
+        center.removeDeliveredNotifications(withIdentifiers: identifiers)
+    }
+
+    func pendingQuestionNotificationCount() async -> Int {
+        await withCheckedContinuation { continuation in
+            UNUserNotificationCenter.current().getPendingNotificationRequests { requests in
+                let count = requests.filter {
+                    $0.identifier.hasPrefix(Self.questionNotificationIdentifierPrefix)
+                }.count
+                continuation.resume(returning: count)
+            }
+        }
+    }
+
+    nonisolated private static let questionNotificationIdentifierPrefix = "study-question-"
+
+    private static func questionNotificationIdentifier(for question: QuestionItem) -> String {
+        "\(questionNotificationIdentifierPrefix)\(question.createdAt.timeIntervalSince1970)"
     }
 }
 
@@ -182,11 +440,71 @@ final class StudyNotificationDelegate: NSObject, UNUserNotificationCenterDelegat
 
     @MainActor
     private weak var appState: AppState?
+    @MainActor
+    private var pendingLocalResponses: [PendingLocalNotificationResponse] = []
+
+    private struct PendingLocalNotificationResponse {
+        var actionIdentifier: String
+        var questionCreatedAt: TimeInterval?
+        var replyText: String?
+        var openStudy: Bool
+    }
 
     @MainActor
     func configure(appState: AppState) {
         self.appState = appState
         register(language: appState.settings.appLanguage)
+        processPendingLocalResponsesIfActive()
+    }
+
+    @MainActor
+    func enqueueLocalResponse(
+        actionIdentifier: String,
+        questionCreatedAt: TimeInterval?,
+        replyText: String?,
+        openStudy: Bool
+    ) {
+        pendingLocalResponses.append(
+            PendingLocalNotificationResponse(
+                actionIdentifier: actionIdentifier,
+                questionCreatedAt: questionCreatedAt,
+                replyText: replyText,
+                openStudy: openStudy
+            )
+        )
+        processPendingLocalResponsesIfActive()
+    }
+
+    @MainActor
+    func processPendingLocalResponsesIfActive() {
+        #if os(iOS)
+        guard UIApplication.shared.applicationState == .active else {
+            return
+        }
+        #endif
+
+        processPendingLocalResponses()
+    }
+
+    @MainActor
+    private func processPendingLocalResponses() {
+        let pendingResponses = pendingLocalResponses
+        pendingLocalResponses.removeAll()
+        for response in pendingResponses {
+            if response.openStudy {
+                handle(
+                    actionIdentifier: response.actionIdentifier,
+                    questionCreatedAt: response.questionCreatedAt,
+                    replyText: response.replyText
+                )
+            } else {
+                handleQuietly(
+                    actionIdentifier: response.actionIdentifier,
+                    questionCreatedAt: response.questionCreatedAt,
+                    replyText: response.replyText
+                )
+            }
+        }
     }
 
     func register(language: AppLanguage = .korean) {
@@ -194,10 +512,16 @@ final class StudyNotificationDelegate: NSObject, UNUserNotificationCenterDelegat
         let center = UNUserNotificationCenter.current()
         center.delegate = self
 
+        #if os(iOS)
+        let replyActionOptions: UNNotificationActionOptions = []
+        #else
+        let replyActionOptions: UNNotificationActionOptions = [.foreground]
+        #endif
+
         let replyAction = UNTextInputNotificationAction(
             identifier: StudyNotificationAction.reply,
             title: strings.reply,
-            options: [.foreground],
+            options: replyActionOptions,
             textInputButtonTitle: strings.send,
             textInputPlaceholder: strings.answerPlaceholder
         )
@@ -205,7 +529,7 @@ final class StudyNotificationDelegate: NSObject, UNUserNotificationCenterDelegat
         let otherAnswerAction = UNNotificationAction(
             identifier: StudyNotificationAction.otherAnswer,
             title: strings.otherAnswer,
-            options: [.foreground]
+            options: replyActionOptions
         )
 
         let ignoreAction = UNNotificationAction(
@@ -228,75 +552,409 @@ final class StudyNotificationDelegate: NSObject, UNUserNotificationCenterDelegat
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification
     ) async -> UNNotificationPresentationOptions {
-        notification.request.content.sound == nil ? [.banner] : [.banner, .sound]
+        #if os(iOS)
+        if StudyNotificationPayload.isCloudQuestionPush(
+            from: notification.request.content.userInfo
+        ) {
+            let userInfo = notification.request.content.userInfo
+            Task { @MainActor in
+                await StudyRemoteNotificationBridge.shared.handleRemoteNotification(
+                    userInfo: userInfo,
+                    openStudy: false
+                )
+            }
+        }
+        #endif
+
+        let presentationOptions: UNNotificationPresentationOptions = notification.request.content.sound == nil
+            ? [.banner]
+            : [.banner, .sound]
+        return presentationOptions
     }
 
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
-        didReceive response: UNNotificationResponse
-    ) async {
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
         let actionIdentifier = response.actionIdentifier
         let replyText = (response as? UNTextInputNotificationResponse)?.userText
-        let questionCreatedAt = Self.questionCreatedAt(from: response.notification.request.content.userInfo)
+        let userInfo = response.notification.request.content.userInfo
+        let questionCreatedAt = StudyNotificationPayload.questionCreatedAt(from: userInfo)
 
-        await StudyNotificationDelegate.shared.handle(
-            actionIdentifier: actionIdentifier,
-            questionCreatedAt: questionCreatedAt,
-            replyText: replyText
+        #if os(iOS)
+        if StudyNotificationPayload.isCloudQuestionPush(from: userInfo) {
+            Task { @MainActor in
+                StudyRemoteNotificationBridge.shared.enqueueNotificationResponse(
+                    userInfo: userInfo,
+                    actionIdentifier: actionIdentifier,
+                    replyText: replyText
+                )
+            }
+            completionHandler()
+            return
+        }
+
+        let shouldOpenStudy = StudyNotificationRouting.shouldOpenStudyImmediately(
+            actionIdentifier: actionIdentifier
         )
+        Task { @MainActor in
+            StudyNotificationDelegate.shared.enqueueLocalResponse(
+                actionIdentifier: actionIdentifier,
+                questionCreatedAt: questionCreatedAt,
+                replyText: replyText,
+                openStudy: shouldOpenStudy
+            )
+        }
+        completionHandler()
+        #else
+        Task { @MainActor in
+            StudyNotificationDelegate.shared.handle(
+                actionIdentifier: actionIdentifier,
+                questionCreatedAt: questionCreatedAt,
+                replyText: replyText
+            )
+        }
+        completionHandler()
+        #endif
     }
 
     @MainActor
     func handle(actionIdentifier: String, questionCreatedAt: TimeInterval?, replyText: String?) {
         guard let appState else {
+            pendingLocalResponses.append(
+                PendingLocalNotificationResponse(
+                    actionIdentifier: actionIdentifier,
+                    questionCreatedAt: questionCreatedAt,
+                    replyText: replyText,
+                    openStudy: true
+                )
+            )
             return
         }
 
         switch actionIdentifier {
         case StudyNotificationAction.ignore, UNNotificationDismissActionIdentifier:
             appState.statusMessage = "질문을 무시했습니다."
+            appState.logRemoteNotificationEvent("알림 응답을 무시했습니다.")
 
         case StudyNotificationAction.reply:
-            appState.openRecordFromNotification(questionCreatedAt: questionCreatedAt, replyText: replyText)
+            let didOpen = appState.openRecordFromNotification(questionCreatedAt: questionCreatedAt, replyText: replyText)
+            appState.logRemoteNotificationEvent("알림 답장 랜딩 처리: didOpen=\(didOpen), createdAt=\(questionCreatedAt?.description ?? "-")")
             #if os(macOS)
             StudyWindowPresenter.shared.show(appState: appState)
             #endif
 
         case StudyNotificationAction.otherAnswer:
-            appState.openRecordFromNotification(questionCreatedAt: questionCreatedAt)
+            let didOpen = appState.openRecordFromNotification(questionCreatedAt: questionCreatedAt)
             appState.statusMessage = "다른 응답을 입력하세요."
+            appState.logRemoteNotificationEvent("알림 다른 응답 랜딩 처리: didOpen=\(didOpen), createdAt=\(questionCreatedAt?.description ?? "-")")
             #if os(macOS)
             StudyWindowPresenter.shared.show(appState: appState)
             #endif
 
         case UNNotificationDefaultActionIdentifier:
-            appState.openRecordFromNotification(questionCreatedAt: questionCreatedAt)
+            let didOpen = appState.openRecordFromNotification(questionCreatedAt: questionCreatedAt)
+            appState.logRemoteNotificationEvent("알림 기본 탭 랜딩 처리: didOpen=\(didOpen), createdAt=\(questionCreatedAt?.description ?? "-")")
             #if os(macOS)
             StudyWindowPresenter.shared.show(appState: appState)
             #endif
 
         default:
-            appState.openRecordFromNotification(questionCreatedAt: questionCreatedAt)
+            let didOpen = appState.openRecordFromNotification(questionCreatedAt: questionCreatedAt)
+            appState.logRemoteNotificationEvent("알림 action 랜딩 처리: action=\(actionIdentifier), didOpen=\(didOpen), createdAt=\(questionCreatedAt?.description ?? "-")")
             #if os(macOS)
             StudyWindowPresenter.shared.show(appState: appState)
             #endif
         }
     }
 
-    nonisolated private static func questionCreatedAt(from userInfo: [AnyHashable: Any]) -> TimeInterval? {
-        let value = userInfo[StudyNotificationAction.questionCreatedAt]
-
-        if let timeInterval = value as? TimeInterval {
-            return timeInterval
+    @MainActor
+    private func handleQuietly(actionIdentifier: String, questionCreatedAt: TimeInterval?, replyText: String?) {
+        guard let appState else {
+            pendingLocalResponses.append(
+                PendingLocalNotificationResponse(
+                    actionIdentifier: actionIdentifier,
+                    questionCreatedAt: questionCreatedAt,
+                    replyText: replyText,
+                    openStudy: false
+                )
+            )
+            return
         }
 
-        if let number = value as? NSNumber {
-            return number.doubleValue
+        switch actionIdentifier {
+        case StudyNotificationAction.ignore, UNNotificationDismissActionIdentifier:
+            appState.logRemoteNotificationEvent("알림 응답을 조용히 무시했습니다.")
+
+        case StudyNotificationAction.reply:
+            let didSave = appState.saveNotificationReplyFromNotification(
+                questionCreatedAt: questionCreatedAt,
+                replyText: replyText
+            )
+            appState.logRemoteNotificationEvent(
+                "알림 답장을 조용히 저장했습니다. didSave=\(didSave), createdAt=\(questionCreatedAt?.description ?? "-")"
+            )
+
+        default:
+            appState.logRemoteNotificationEvent(
+                "foreground가 아닌 알림 action을 조용히 처리했습니다. action=\(actionIdentifier), createdAt=\(questionCreatedAt?.description ?? "-")"
+            )
+        }
+    }
+
+}
+
+#if os(iOS)
+@MainActor
+final class StudyRemoteNotificationBridge {
+    static let shared = StudyRemoteNotificationBridge()
+
+    private weak var appState: AppState?
+    private var pendingNotifications: [PendingRemoteNotification] = []
+
+    private struct PendingRemoteNotification {
+        var userInfo: [AnyHashable: Any]
+        var openStudy: Bool
+        var actionIdentifier: String?
+        var replyText: String?
+    }
+
+    private init() {}
+
+    func configure(appState: AppState) {
+        self.appState = appState
+        processPendingNotificationsIfActive()
+    }
+
+    func enqueueNotificationResponse(
+        userInfo: [AnyHashable: Any],
+        actionIdentifier: String,
+        replyText: String?
+    ) {
+        guard !StudyNotificationRouting.isIgnored(actionIdentifier) else {
+            appState?.logRemoteNotificationEvent(
+                "CloudKit push 알림 응답을 무시했습니다. action=\(actionIdentifier)"
+            )
+            return
         }
 
-        return nil
+        let applicationState = UIApplication.shared.applicationState
+        let shouldOpenStudy = StudyNotificationRouting.shouldOpenStudyImmediately(
+            actionIdentifier: actionIdentifier
+        )
+
+        pendingNotifications.append(
+            PendingRemoteNotification(
+                userInfo: userInfo,
+                openStudy: shouldOpenStudy,
+                actionIdentifier: actionIdentifier,
+                replyText: replyText
+            )
+        )
+        appState?.logRemoteNotificationEvent(
+            "CloudKit push 알림 응답을 큐에 저장했습니다. action=\(actionIdentifier), openStudy=\(shouldOpenStudy), appState=\(Self.applicationStateName(applicationState))"
+        )
+        processPendingNotificationsIfActive()
+    }
+
+    func processPendingNotificationsIfActive() {
+        guard UIApplication.shared.applicationState == .active else {
+            return
+        }
+
+        Task { @MainActor in
+            await processPendingNotifications()
+        }
+    }
+
+    private func processPendingNotifications() async {
+        guard appState != nil else {
+            return
+        }
+
+        let pendingNotifications = pendingNotifications
+        self.pendingNotifications.removeAll()
+        for notification in pendingNotifications {
+            if let actionIdentifier = notification.actionIdentifier {
+                await handleNotificationResponse(
+                    userInfo: notification.userInfo,
+                    actionIdentifier: actionIdentifier,
+                    shouldOpenStudy: notification.openStudy,
+                    replyText: notification.replyText
+                )
+            } else if notification.openStudy {
+                await handleNotificationTap(
+                    userInfo: notification.userInfo,
+                    replyText: notification.replyText
+                )
+            } else {
+                await handleRemoteNotification(
+                    userInfo: notification.userInfo,
+                    openStudy: false,
+                    replyText: notification.replyText
+                )
+            }
+        }
+    }
+
+    func didRegisterForRemoteNotifications(deviceToken: Data) {
+        appState?.logRemoteNotificationEvent(
+            "iPhone push 등록 성공: tokenBytes=\(deviceToken.count)"
+        )
+    }
+
+    func didFailToRegisterForRemoteNotifications(error: Error) {
+        appState?.logRemoteNotificationEvent(
+            "iPhone push 등록 실패: \(error.localizedDescription)",
+            isWarning: true
+        )
+    }
+
+    @discardableResult
+    func handleNotificationResponse(
+        userInfo: [AnyHashable: Any],
+        actionIdentifier: String,
+        replyText: String?
+    ) async -> Bool {
+        guard !StudyNotificationRouting.isIgnored(actionIdentifier) else {
+            appState?.logRemoteNotificationEvent(
+                "CloudKit push 알림 응답을 무시했습니다. action=\(actionIdentifier)"
+            )
+            return false
+        }
+
+        let shouldOpenStudy = StudyNotificationRouting.shouldOpenStudyImmediately(
+            actionIdentifier: actionIdentifier
+        )
+
+        return await handleNotificationResponse(
+            userInfo: userInfo,
+            actionIdentifier: actionIdentifier,
+            shouldOpenStudy: shouldOpenStudy,
+            replyText: replyText
+        )
+    }
+
+    @discardableResult
+    private func handleNotificationResponse(
+        userInfo: [AnyHashable: Any],
+        actionIdentifier: String,
+        shouldOpenStudy: Bool,
+        replyText: String?
+    ) async -> Bool {
+        if shouldOpenStudy {
+            appState?.logRemoteNotificationEvent(
+                "CloudKit push 알림을 명시적으로 열었습니다. action=\(actionIdentifier)"
+            )
+            return await handleNotificationTap(
+                userInfo: userInfo,
+                replyText: replyText
+            )
+        }
+
+        let didHandle = await handleRemoteNotification(
+            userInfo: userInfo,
+            openStudy: false,
+            replyText: replyText
+        )
+        appState?.logRemoteNotificationEvent(
+            "CloudKit push 알림 action을 조용히 처리했습니다. action=\(actionIdentifier), didHandle=\(didHandle)"
+        )
+        return didHandle
+    }
+
+    @discardableResult
+    func handleNotificationTap(userInfo: [AnyHashable: Any], replyText: String?) async -> Bool {
+        guard let appState else {
+            pendingNotifications.append(
+                PendingRemoteNotification(
+                    userInfo: userInfo,
+                    openStudy: true,
+                    actionIdentifier: nil,
+                    replyText: replyText
+                )
+            )
+            return false
+        }
+
+        appState.prepareToOpenQuestionFromNotification()
+        let didHandle = await handleRemoteNotification(
+            userInfo: userInfo,
+            openStudy: true,
+            replyText: replyText
+        )
+
+        guard didHandle else {
+            if let questionCreatedAt = StudyNotificationPayload.questionCreatedAt(from: userInfo) {
+                return appState.openRecordFromNotification(questionCreatedAt: questionCreatedAt, replyText: replyText)
+            }
+
+            appState.openRecordFromNotification(questionCreatedAt: nil, replyText: replyText)
+            appState.logRemoteNotificationEvent(
+                "CloudKit push 알림 payload를 라우팅하지 못했습니다. keys=\(StudyNotificationPayload.keySummary(from: userInfo))",
+                isWarning: true
+            )
+            return false
+        }
+
+        return true
+    }
+
+    @discardableResult
+    func handleRemoteNotification(
+        userInfo: [AnyHashable: Any],
+        openStudy: Bool,
+        replyText: String? = nil
+    ) async -> Bool {
+        guard let appState else {
+            pendingNotifications.append(
+                PendingRemoteNotification(
+                    userInfo: userInfo,
+                    openStudy: openStudy,
+                    actionIdentifier: nil,
+                    replyText: replyText
+                )
+            )
+            return false
+        }
+
+        guard let recordName = Self.cloudQuestionPushRecordName(from: userInfo) else {
+            if openStudy {
+                appState.openRecordFromNotification(questionCreatedAt: nil, replyText: replyText)
+            }
+            appState.logRemoteNotificationEvent(
+                "CloudKit push recordName을 찾지 못했습니다. keys=\(StudyNotificationPayload.keySummary(from: userInfo))",
+                isWarning: openStudy
+            )
+            return false
+        }
+
+        return await appState.handleCloudQuestionPush(
+            recordName: recordName,
+            openStudy: openStudy,
+            replyText: replyText
+        )
+    }
+
+    nonisolated static func cloudQuestionPushRecordName(from userInfo: [AnyHashable: Any]) -> String? {
+        StudyNotificationPayload.cloudQuestionPushRecordName(from: userInfo)
+    }
+
+    private nonisolated static func applicationStateName(_ state: UIApplication.State) -> String {
+        switch state {
+        case .active:
+            return "active"
+        case .inactive:
+            return "inactive"
+        case .background:
+            return "background"
+        @unknown default:
+            return "unknown"
+        }
     }
 }
+#endif
 
 #if os(macOS)
 @MainActor

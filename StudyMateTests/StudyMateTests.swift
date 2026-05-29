@@ -1,5 +1,6 @@
 import XCTest
 import CloudKit
+import UserNotifications
 @testable import StudyMate
 
 final class StudyMateTests: XCTestCase {
@@ -110,6 +111,20 @@ final class StudyMateTests: XCTestCase {
         store.saveSettings(settings)
 
         XCTAssertEqual(store.loadSettings(), settings)
+    }
+
+    func testTopicGroupingNormalizesCaseSpacingAndSeparators() {
+        let topics = [
+            "Spring Boot",
+            "spring boot",
+            "spring-boot",
+            "SpringBoot",
+            "spring_boot"
+        ]
+
+        let keys = Set(topics.map { TopicGrouping.normalizedKey(for: $0, fallback: "Study") })
+
+        XCTAssertEqual(keys.count, 1)
     }
 
     func testCloudSyncSettingsRoundTripUsesUserDefaults() {
@@ -337,6 +352,842 @@ final class StudyMateTests: XCTestCase {
         XCTAssertEqual(syncService.savedSnapshot?.apiKey, "sk-remote")
         XCTAssertEqual(appState.apiKey, "sk-remote")
         XCTAssertEqual(store.loadAPIKey(), "sk-remote")
+    }
+
+    @MainActor
+    func testCloudSyncDoesNotRewriteSnapshotWhenContentAlreadyMatches() async {
+        let suiteName = "StudyMateTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = SettingsStore(defaults: defaults)
+        store.saveIsCloudSyncEnabled(true)
+        store.saveHasCompletedOnboarding(true)
+        store.saveCloudSyncSnapshotUpdatedAt(Date(timeIntervalSince1970: 200))
+
+        let remoteSnapshot = CloudSyncSnapshot(
+            updatedAt: Date(timeIntervalSince1970: 100),
+            settings: .default,
+            currentQuestion: nil,
+            questionHistory: [],
+            lastAnswer: "",
+            gradingResult: nil,
+            isRunning: true,
+            hasCompletedOnboarding: true,
+            studyRecords: []
+        )
+        let syncService = FakeCloudSyncService(remoteSnapshot: remoteSnapshot)
+        let appState = AppState(settingsStore: store, openAIClient: SpyOpenAIClient(), cloudSyncService: syncService)
+
+        await appState.syncCloudNow()
+
+        XCTAssertNil(syncService.savedSnapshot)
+        XCTAssertEqual(syncService.saveSnapshotCallCount, 0)
+        XCTAssertEqual(appState.cloudSyncMessage, appState.strings.syncAlreadyCurrent)
+    }
+
+    @MainActor
+    func testCloudSyncMergesRemoteRecordsWhenPushingNewerLocalSnapshot() async {
+        let suiteName = "StudyMateTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = SettingsStore(defaults: defaults)
+        store.saveIsCloudSyncEnabled(true)
+        store.saveCloudSyncSnapshotUpdatedAt(Date(timeIntervalSince1970: 200))
+        let localSettings = StudySettings(topic: "Local", difficulty: .level6, customPrompt: "로컬", intervalMinutes: 10)
+        store.saveSettings(localSettings)
+        let localQuestion = QuestionItem(question: "로컬 질문", expectedAnswerHint: nil, createdAt: Date(timeIntervalSince1970: 200))
+        store.saveQuestion(localQuestion)
+        store.appendStudyRecord(question: localQuestion, settings: localSettings)
+
+        let remoteQuestion = QuestionItem(question: "원격 질문", expectedAnswerHint: nil, createdAt: Date(timeIntervalSince1970: 150))
+        let remoteSnapshot = CloudSyncSnapshot(
+            updatedAt: Date(timeIntervalSince1970: 100),
+            settings: StudySettings(topic: "Remote", difficulty: .level4, customPrompt: "원격", intervalMinutes: 9),
+            currentQuestion: remoteQuestion,
+            questionHistory: [remoteQuestion],
+            lastAnswer: "",
+            gradingResult: nil,
+            isRunning: true,
+            hasCompletedOnboarding: true,
+            studyRecords: [
+                StudyRecord(question: remoteQuestion, topic: "Remote", difficulty: .level4)
+            ]
+        )
+        let syncService = FakeCloudSyncService(remoteSnapshot: remoteSnapshot)
+        let appState = AppState(settingsStore: store, openAIClient: SpyOpenAIClient(), cloudSyncService: syncService)
+
+        await appState.syncCloudNow()
+
+        let savedQuestions = syncService.savedSnapshot?.studyRecords.map(\.question.question) ?? []
+        XCTAssertTrue(savedQuestions.contains("로컬 질문"))
+        XCTAssertTrue(savedQuestions.contains("원격 질문"))
+        XCTAssertEqual(syncService.savedSnapshot?.currentQuestion?.question, "로컬 질문")
+    }
+
+    @MainActor
+    func testCloudSyncDoesNotResurrectDeletedRecordWhenPushingNewerLocalSnapshot() async throws {
+        let suiteName = "StudyMateTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = SettingsStore(defaults: defaults)
+        let settings = StudySettings(topic: "Sync", difficulty: .level5, customPrompt: "질문", intervalMinutes: 10)
+        store.saveIsCloudSyncEnabled(true)
+        store.saveCloudSyncSnapshotUpdatedAt(Date(timeIntervalSince1970: 200))
+        store.saveSettings(settings)
+
+        let deletedQuestion = QuestionItem(question: "삭제될 질문", expectedAnswerHint: nil, createdAt: Date(timeIntervalSince1970: 100))
+        let keptQuestion = QuestionItem(question: "남을 질문", expectedAnswerHint: nil, createdAt: Date(timeIntervalSince1970: 120))
+        store.appendStudyRecord(question: deletedQuestion, settings: settings)
+        store.appendStudyRecord(question: keptQuestion, settings: settings)
+        let remoteRecords = store.loadStudyRecords()
+        let deletedRecord = try XCTUnwrap(remoteRecords.first { $0.question.question == "삭제될 질문" })
+        let remoteSnapshot = CloudSyncSnapshot(
+            updatedAt: Date(timeIntervalSince1970: 150),
+            settings: settings,
+            currentQuestion: keptQuestion,
+            questionHistory: [deletedQuestion, keptQuestion],
+            lastAnswer: "",
+            gradingResult: nil,
+            isRunning: true,
+            hasCompletedOnboarding: true,
+            studyRecords: remoteRecords
+        )
+        let syncService = FakeCloudSyncService(remoteSnapshot: remoteSnapshot)
+        let appState = AppState(settingsStore: store, openAIClient: SpyOpenAIClient(), cloudSyncService: syncService)
+
+        appState.deleteStudyRecord(deletedRecord)
+        await appState.syncCloudNow()
+
+        let savedQuestions = syncService.savedSnapshot?.studyRecords.map(\.question.question) ?? []
+        XCTAssertFalse(savedQuestions.contains("삭제될 질문"))
+        XCTAssertTrue(savedQuestions.contains("남을 질문"))
+        XCTAssertFalse(appState.studyRecords.contains { $0.question.question == "삭제될 질문" })
+        XCTAssertEqual(syncService.savedSnapshot?.deletedStudyRecordMarkers.count, 1)
+    }
+
+    @MainActor
+    func testCloudSyncLocalTombstoneFiltersNewerRemoteSnapshot() async throws {
+        let suiteName = "StudyMateTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = SettingsStore(defaults: defaults)
+        let settings = StudySettings(topic: "Sync", difficulty: .level5, customPrompt: "질문", intervalMinutes: 10)
+        store.saveIsCloudSyncEnabled(true)
+        store.saveCloudSyncSnapshotUpdatedAt(Date(timeIntervalSince1970: 50))
+        store.saveSettings(settings)
+
+        let deletedQuestion = QuestionItem(question: "원격에서 살아나면 안 되는 질문", expectedAnswerHint: nil, createdAt: Date(timeIntervalSince1970: 100))
+        let keptQuestion = QuestionItem(question: "유지할 질문", expectedAnswerHint: nil, createdAt: Date(timeIntervalSince1970: 120))
+        let deletedRecord = StudyRecord(question: deletedQuestion, topic: settings.topic, difficulty: settings.difficulty)
+        let keptRecord = StudyRecord(question: keptQuestion, topic: settings.topic, difficulty: settings.difficulty)
+        store.replaceStudyRecords([deletedRecord, keptRecord])
+        store.deleteStudyRecord(deletedRecord)
+
+        let remoteSnapshot = CloudSyncSnapshot(
+            updatedAt: Date(timeIntervalSince1970: 100),
+            settings: settings,
+            currentQuestion: keptQuestion,
+            questionHistory: [deletedQuestion, keptQuestion],
+            lastAnswer: "",
+            gradingResult: nil,
+            isRunning: true,
+            hasCompletedOnboarding: true,
+            studyRecords: [deletedRecord, keptRecord]
+        )
+        let syncService = FakeCloudSyncService(remoteSnapshot: remoteSnapshot)
+        let appState = AppState(settingsStore: store, openAIClient: SpyOpenAIClient(), cloudSyncService: syncService)
+
+        await appState.syncCloudNow()
+
+        XCTAssertFalse(appState.studyRecords.contains { $0.question.question == "원격에서 살아나면 안 되는 질문" })
+        XCTAssertTrue(appState.studyRecords.contains { $0.question.question == "유지할 질문" })
+        XCTAssertEqual(store.loadDeletedStudyRecordMarkers().count, 1)
+        XCTAssertFalse(syncService.savedSnapshot?.studyRecords.contains { $0.question.question == "원격에서 살아나면 안 되는 질문" } ?? true)
+        XCTAssertEqual(syncService.savedSnapshot?.deletedStudyRecordMarkers.count, 1)
+    }
+
+    @MainActor
+    func testCloudSyncRemoteTombstoneDeletesLocalRecordOnOtherDevice() async throws {
+        let suiteName = "StudyMateTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = SettingsStore(defaults: defaults)
+        let settings = StudySettings(topic: "Sync", difficulty: .level5, customPrompt: "질문", intervalMinutes: 10)
+        store.saveIsCloudSyncEnabled(true)
+        store.saveCloudSyncSnapshotUpdatedAt(Date(timeIntervalSince1970: 50))
+        store.saveSettings(settings)
+
+        let deletedQuestion = QuestionItem(question: "아이폰에서 삭제한 질문", expectedAnswerHint: nil, createdAt: Date(timeIntervalSince1970: 100))
+        let keptQuestion = QuestionItem(question: "맥에 남아야 하는 질문", expectedAnswerHint: nil, createdAt: Date(timeIntervalSince1970: 120))
+        let deletedRecord = StudyRecord(question: deletedQuestion, topic: settings.topic, difficulty: settings.difficulty)
+        let keptRecord = StudyRecord(question: keptQuestion, topic: settings.topic, difficulty: settings.difficulty)
+        store.replaceStudyRecords([deletedRecord, keptRecord])
+
+        let remoteSnapshot = CloudSyncSnapshot(
+            updatedAt: Date(timeIntervalSince1970: 100),
+            settings: settings,
+            currentQuestion: keptQuestion,
+            questionHistory: [deletedQuestion, keptQuestion],
+            lastAnswer: "",
+            gradingResult: nil,
+            isRunning: true,
+            hasCompletedOnboarding: true,
+            studyRecords: [keptRecord],
+            deletedStudyRecordMarkers: [DeletedStudyRecordMarker(record: deletedRecord, deletedAt: Date(timeIntervalSince1970: 130))]
+        )
+        let appState = AppState(
+            settingsStore: store,
+            openAIClient: SpyOpenAIClient(),
+            cloudSyncService: FakeCloudSyncService(remoteSnapshot: remoteSnapshot)
+        )
+
+        await appState.syncCloudNow()
+
+        XCTAssertFalse(appState.studyRecords.contains { $0.question.question == "아이폰에서 삭제한 질문" })
+        XCTAssertTrue(appState.studyRecords.contains { $0.question.question == "맥에 남아야 하는 질문" })
+        XCTAssertFalse(store.loadStudyRecords().contains { $0.question.question == "아이폰에서 삭제한 질문" })
+    }
+
+    @MainActor
+    func testBackgroundRefreshGeneratesQuestionWhenOnlyPhoneIsRunningAndIntervalIsDue() async {
+        let suiteName = "StudyMateTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = SettingsStore(defaults: defaults)
+        store.saveHasCompletedOnboarding(true)
+        store.saveAPIKey("sk-local")
+        store.saveSettings(StudySettings(topic: "iPhone", difficulty: .level5, customPrompt: "짧게", intervalMinutes: 15))
+
+        let question = QuestionItem(
+            question: "iPhone 단독 실행 질문",
+            expectedAnswerHint: nil,
+            createdAt: Date(timeIntervalSinceNow: -1)
+        )
+        let client = SpyOpenAIClient()
+        client.generatedQuestionResult = GeneratedQuestionResult(question: question, responseID: "resp_phone")
+        let appState = AppState(settingsStore: store, openAIClient: client)
+
+        let didUpdate = await appState.handleBackgroundRefresh()
+
+        XCTAssertTrue(didUpdate)
+        XCTAssertEqual(client.generateCallCount, 1)
+        XCTAssertEqual(appState.currentQuestion?.question, "iPhone 단독 실행 질문")
+    }
+
+    @MainActor
+    func testBackgroundRefreshEarliestDateUsesConfiguredInterval() {
+        let suiteName = "StudyMateTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = SettingsStore(defaults: defaults)
+        let now = Date(timeIntervalSince1970: 1_000)
+        let settings = StudySettings(topic: "Timer", difficulty: .level5, customPrompt: "짧게", intervalMinutes: 1)
+        let latestQuestion = QuestionItem(
+            question: "백그라운드 예약 기준 질문",
+            expectedAnswerHint: nil,
+            createdAt: now.addingTimeInterval(-10)
+        )
+        store.saveSettings(settings)
+        store.appendStudyRecord(question: latestQuestion, settings: settings)
+
+        let appState = AppState(settingsStore: store, openAIClient: SpyOpenAIClient())
+
+        XCTAssertEqual(
+            appState.backgroundRefreshEarliestBeginDate(now: now).timeIntervalSince1970,
+            now.addingTimeInterval(50).timeIntervalSince1970,
+            accuracy: 0.001
+        )
+    }
+
+    @MainActor
+    func testScheduledQuestionDoesNotReplaceActiveUngradedDraft() async {
+        let suiteName = "StudyMateTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = SettingsStore(defaults: defaults)
+        let settings = StudySettings(topic: "Redis", difficulty: .level5, customPrompt: "짧게", intervalMinutes: 15)
+        let activeQuestion = QuestionItem(
+            question: "Redis Stream consumer group은 무엇인가요?",
+            expectedAnswerHint: nil,
+            createdAt: Date(timeIntervalSince1970: 100)
+        )
+        let scheduledQuestion = QuestionItem(
+            question: "Redis Stream trim은 언제 쓰나요?",
+            expectedAnswerHint: nil,
+            createdAt: Date(timeIntervalSince1970: 200)
+        )
+        store.saveAPIKey("sk-local")
+        store.saveSettings(settings)
+        store.saveIsRunning(true)
+        store.saveQuestion(activeQuestion)
+        store.appendStudyRecord(question: activeQuestion, settings: settings)
+        store.updateStudyRecordAnswer(question: activeQuestion, answer: "작성 중인 답변")
+        store.saveLastAnswer("작성 중인 답변")
+
+        let client = SpyOpenAIClient()
+        client.generatedQuestionResult = GeneratedQuestionResult(question: scheduledQuestion, responseID: "resp_scheduled")
+        let appState = AppState(settingsStore: store, openAIClient: client)
+
+        await appState.generateQuestion(manual: false)
+
+        let questions = appState.studyRecords.map(\.question.question)
+        XCTAssertEqual(appState.currentQuestion?.question, activeQuestion.question)
+        XCTAssertEqual(appState.lastAnswer, "작성 중인 답변")
+        XCTAssertEqual(store.loadQuestion()?.question, activeQuestion.question)
+        XCTAssertEqual(store.loadLastAnswer(), "작성 중인 답변")
+        XCTAssertTrue(questions.contains(activeQuestion.question))
+        XCTAssertTrue(questions.contains(scheduledQuestion.question))
+    }
+
+    @MainActor
+    func testGeneratedQuestionRetriesAndDoesNotSaveExistingQuestion() async {
+        let suiteName = "StudyMateTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = SettingsStore(defaults: defaults)
+        let settings = StudySettings(topic: "Redis", difficulty: .level5, customPrompt: "짧게", intervalMinutes: 15)
+        let existingQuestion = QuestionItem(
+            question: "Redis Stream ID는 어떤 의미인가요?",
+            expectedAnswerHint: nil,
+            createdAt: Date(timeIntervalSince1970: 100)
+        )
+        let newQuestion = QuestionItem(
+            question: "Redis Stream pending entries list는 언제 확인하나요?",
+            expectedAnswerHint: nil,
+            createdAt: Date(timeIntervalSince1970: 200)
+        )
+        store.saveAPIKey("sk-local")
+        store.saveSettings(settings)
+        store.appendStudyRecord(question: existingQuestion, settings: settings)
+
+        let client = SpyOpenAIClient()
+        client.generatedQuestionResults = [
+            GeneratedQuestionResult(question: existingQuestion, responseID: "resp_duplicate"),
+            GeneratedQuestionResult(question: newQuestion, responseID: "resp_new")
+        ]
+        let appState = AppState(settingsStore: store, openAIClient: client)
+
+        await appState.generateQuestion()
+
+        XCTAssertEqual(client.generateCallCount, 2)
+        XCTAssertEqual(appState.studyRecords.filter { $0.question.question == existingQuestion.question }.count, 1)
+        XCTAssertTrue(appState.studyRecords.contains { $0.question.question == newQuestion.question })
+        XCTAssertEqual(appState.currentQuestion?.question, newQuestion.question)
+    }
+
+    @MainActor
+    func testGeneratedQuestionDoesNotSaveWhenAllAttemptsRepeatExistingQuestion() async {
+        let suiteName = "StudyMateTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = SettingsStore(defaults: defaults)
+        let settings = StudySettings(topic: "Redis", difficulty: .level5, customPrompt: "짧게", intervalMinutes: 15)
+        let existingQuestion = QuestionItem(
+            question: "Redis Stream MAXLEN은 언제 쓰나요?",
+            expectedAnswerHint: nil,
+            createdAt: Date(timeIntervalSince1970: 100)
+        )
+        store.saveAPIKey("sk-local")
+        store.saveSettings(settings)
+        store.appendStudyRecord(question: existingQuestion, settings: settings)
+
+        let client = SpyOpenAIClient()
+        client.generatedQuestionResult = GeneratedQuestionResult(question: existingQuestion, responseID: "resp_duplicate")
+        let appState = AppState(settingsStore: store, openAIClient: client)
+
+        await appState.generateQuestion()
+
+        XCTAssertEqual(client.generateCallCount, 5)
+        XCTAssertEqual(appState.studyRecords.count, 1)
+        XCTAssertEqual(appState.statusMessage, appState.strings.duplicateQuestionSkipped)
+    }
+
+    @MainActor
+    func testCloudSyncDoesNotReplaceActiveUngradedDraftWithRemoteCurrentQuestion() async {
+        let suiteName = "StudyMateTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = SettingsStore(defaults: defaults)
+        let localSettings = StudySettings(topic: "Local", difficulty: .level5, customPrompt: "로컬", intervalMinutes: 15)
+        let localQuestion = QuestionItem(
+            question: "작성 중인 로컬 질문",
+            expectedAnswerHint: nil,
+            createdAt: Date(timeIntervalSince1970: 100)
+        )
+        let remoteQuestion = QuestionItem(
+            question: "원격에서 새로 온 질문",
+            expectedAnswerHint: nil,
+            createdAt: Date(timeIntervalSince1970: 200)
+        )
+        store.saveIsCloudSyncEnabled(true)
+        store.saveCloudSyncSnapshotUpdatedAt(Date(timeIntervalSince1970: 50))
+        store.saveSettings(localSettings)
+        store.saveQuestion(localQuestion)
+        store.appendStudyRecord(question: localQuestion, settings: localSettings)
+        store.updateStudyRecordAnswer(question: localQuestion, answer: "로컬 작성 중")
+        store.saveLastAnswer("로컬 작성 중")
+
+        let remoteSnapshot = CloudSyncSnapshot(
+            updatedAt: Date(timeIntervalSince1970: 100),
+            settings: StudySettings(topic: "Remote", difficulty: .level6, customPrompt: "원격", intervalMinutes: 15),
+            currentQuestion: remoteQuestion,
+            questionHistory: [remoteQuestion],
+            lastAnswer: "",
+            gradingResult: nil,
+            isRunning: true,
+            hasCompletedOnboarding: true,
+            studyRecords: [
+                StudyRecord(question: remoteQuestion, topic: "Remote", difficulty: .level6)
+            ]
+        )
+        let syncService = FakeCloudSyncService(remoteSnapshot: remoteSnapshot)
+        let appState = AppState(settingsStore: store, openAIClient: SpyOpenAIClient(), cloudSyncService: syncService)
+
+        await appState.syncCloudNow()
+
+        let questions = appState.studyRecords.map(\.question.question)
+        XCTAssertEqual(appState.currentQuestion?.question, localQuestion.question)
+        XCTAssertEqual(appState.lastAnswer, "로컬 작성 중")
+        XCTAssertEqual(store.loadQuestion()?.question, localQuestion.question)
+        XCTAssertEqual(store.loadLastAnswer(), "로컬 작성 중")
+        XCTAssertTrue(questions.contains(localQuestion.question))
+        XCTAssertTrue(questions.contains(remoteQuestion.question))
+    }
+
+    @MainActor
+    func testSilentCloudPushDoesNotActivatePushedQuestion() async {
+        let suiteName = "StudyMateTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = SettingsStore(defaults: defaults)
+        let settings = StudySettings(topic: "CloudKit", difficulty: .level5, customPrompt: "", intervalMinutes: 15)
+        let pushedQuestion = QuestionItem(
+            question: "조용히 도착한 push 질문입니다.",
+            expectedAnswerHint: nil,
+            createdAt: Date(timeIntervalSince1970: 300)
+        )
+        let snapshot = CloudSyncSnapshot(
+            updatedAt: Date(timeIntervalSince1970: 400),
+            settings: settings,
+            currentQuestion: pushedQuestion,
+            questionHistory: [pushedQuestion],
+            lastAnswer: "",
+            gradingResult: nil,
+            isRunning: true,
+            hasCompletedOnboarding: true,
+            studyRecords: [
+                StudyRecord(question: pushedQuestion, topic: "CloudKit", difficulty: .level5)
+            ]
+        )
+        store.saveIsCloudSyncEnabled(true)
+        store.saveCloudSyncSnapshotUpdatedAt(Date(timeIntervalSince1970: 100))
+        let syncService = FakeCloudSyncService(remoteSnapshot: snapshot)
+        syncService.questionPushesByRecordName["question-300000"] = CloudQuestionPush(
+            question: pushedQuestion,
+            topic: "CloudKit",
+            difficulty: .level5
+        )
+        let appState = AppState(settingsStore: store, openAIClient: SpyOpenAIClient(), cloudSyncService: syncService)
+
+        let didHandle = await appState.handleCloudQuestionPush(
+            recordName: "question-300000",
+            openStudy: false
+        )
+
+        XCTAssertTrue(didHandle)
+        XCTAssertNil(appState.currentQuestion)
+        XCTAssertNil(store.loadQuestion())
+        XCTAssertTrue(appState.studyRecords.contains { $0.question == pushedQuestion })
+    }
+
+    @MainActor
+    func testSilentCloudPushReplySavesAnswerWithoutOpeningStudy() async {
+        let suiteName = "StudyMateTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = SettingsStore(defaults: defaults)
+        let settings = StudySettings(topic: "CloudKit", difficulty: .level5, customPrompt: "", intervalMinutes: 15)
+        let pushedQuestion = QuestionItem(
+            question: "백그라운드 답장을 저장할 질문입니다.",
+            expectedAnswerHint: nil,
+            createdAt: Date(timeIntervalSince1970: 310)
+        )
+        store.saveSettings(settings)
+        store.saveIsCloudSyncEnabled(true)
+        store.saveCloudSyncSnapshotUpdatedAt(Date(timeIntervalSince1970: 100))
+        let syncService = FakeCloudSyncService(remoteSnapshot: nil)
+        syncService.questionPushesByRecordName["question-310000"] = CloudQuestionPush(
+            question: pushedQuestion,
+            topic: "CloudKit",
+            difficulty: .level5
+        )
+        let appState = AppState(settingsStore: store, openAIClient: SpyOpenAIClient(), cloudSyncService: syncService)
+        appState.selectedTab = .records
+
+        let didHandle = await appState.handleCloudQuestionPush(
+            recordName: "question-310000",
+            openStudy: false,
+            replyText: "알림에서 바로 답장했습니다."
+        )
+
+        XCTAssertTrue(didHandle)
+        XCTAssertEqual(appState.selectedTab, .records)
+        XCTAssertNil(appState.currentQuestion)
+        XCTAssertEqual(store.loadStudyRecords().first?.answer, "알림에서 바로 답장했습니다.")
+    }
+
+    @MainActor
+    func testGeneratedQuestionSavesCloudPushRecordWhenSyncIsEnabled() async {
+        let suiteName = "StudyMateTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = SettingsStore(defaults: defaults)
+        let settings = StudySettings(topic: "Swift", difficulty: .level6, customPrompt: "짧게", intervalMinutes: 15)
+        store.saveIsCloudSyncEnabled(true)
+        store.saveSettings(settings)
+
+        let question = QuestionItem(
+            question: "actor isolation은 왜 필요한가요?",
+            expectedAnswerHint: "데이터 경쟁",
+            createdAt: Date(timeIntervalSince1970: 200)
+        )
+        let client = SpyOpenAIClient()
+        client.generatedQuestionResult = GeneratedQuestionResult(question: question, responseID: "resp_1")
+        let syncService = FakeCloudSyncService(remoteSnapshot: nil)
+        let appState = AppState(settingsStore: store, openAIClient: client, cloudSyncService: syncService)
+
+        await appState.generateQuestion()
+
+        XCTAssertEqual(syncService.savedQuestionPushes.count, 1)
+        XCTAssertEqual(syncService.savedQuestionPushes.first?.question, question)
+        XCTAssertEqual(syncService.savedQuestionPushes.first?.settings.topic, "Swift")
+    }
+
+    @MainActor
+    func testCloudQuestionPushHandlerSyncsAndOpensPushedQuestion() async {
+        let suiteName = "StudyMateTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = SettingsStore(defaults: defaults)
+        store.saveIsCloudSyncEnabled(true)
+
+        let question = QuestionItem(
+            question: "CloudKit query subscription은 언제 쓰나요?",
+            expectedAnswerHint: "레코드 변경",
+            createdAt: Date(timeIntervalSince1970: 300)
+        )
+        let snapshot = CloudSyncSnapshot(
+            updatedAt: Date(timeIntervalSince1970: 400),
+            settings: StudySettings(topic: "CloudKit", difficulty: .level5, customPrompt: "", intervalMinutes: 15),
+            currentQuestion: question,
+            questionHistory: [question],
+            lastAnswer: "",
+            gradingResult: nil,
+            isRunning: true,
+            hasCompletedOnboarding: true,
+            studyRecords: [
+                StudyRecord(question: question, topic: "CloudKit", difficulty: .level5)
+            ]
+        )
+        let syncService = FakeCloudSyncService(remoteSnapshot: snapshot)
+        syncService.questionPushesByRecordName["question-300000"] = CloudQuestionPush(
+            question: question,
+            topic: "CloudKit",
+            difficulty: .level5
+        )
+        let appState = AppState(settingsStore: store, openAIClient: SpyOpenAIClient(), cloudSyncService: syncService)
+
+        let didHandle = await appState.handleCloudQuestionPush(
+            recordName: "question-300000",
+            openStudy: true
+        )
+
+        XCTAssertTrue(didHandle)
+        XCTAssertEqual(appState.currentQuestion, question)
+        XCTAssertEqual(appState.selectedTab, .study)
+        XCTAssertEqual(appState.studyRecords.first?.question, question)
+    }
+
+    func testNotificationPayloadParsesNestedCloudKitQuestionPush() throws {
+        let userInfo: [AnyHashable: Any] = [
+            "aps": [
+                "alert": "StudyMate"
+            ],
+            "ck": [
+                "qry": [
+                    "sid": CloudSyncService.questionPushSubscriptionID,
+                    "rid": "question-123000",
+                    "createdAt": "123.5"
+                ]
+            ]
+        ]
+
+        XCTAssertTrue(StudyNotificationPayload.isCloudQuestionPush(from: userInfo))
+        XCTAssertEqual(
+            StudyNotificationPayload.cloudQuestionPushRecordName(from: userInfo),
+            "question-123000"
+        )
+        let createdAt = try XCTUnwrap(StudyNotificationPayload.questionCreatedAt(from: userInfo))
+        XCTAssertEqual(createdAt, 123.5, accuracy: 0.001)
+    }
+
+    func testNotificationPayloadIgnoresDifferentCloudKitSubscription() {
+        let userInfo: [AnyHashable: Any] = [
+            "ck": [
+                "qry": [
+                    "sid": "unrelated-subscription",
+                    "rid": "question-123000"
+                ]
+            ]
+        ]
+
+        XCTAssertFalse(StudyNotificationPayload.isCloudQuestionPush(from: userInfo))
+        XCTAssertNil(StudyNotificationPayload.cloudQuestionPushRecordName(from: userInfo))
+    }
+
+    func testNotificationPayloadRecognizesCloudKitSubscriptionWithoutRecordName() {
+        let userInfo: [AnyHashable: Any] = [
+            "ck": [
+                "qry": [
+                    "sid": CloudSyncService.questionPushSubscriptionID
+                ]
+            ]
+        ]
+
+        XCTAssertTrue(StudyNotificationPayload.isCloudQuestionPush(from: userInfo))
+        XCTAssertNil(StudyNotificationPayload.cloudQuestionPushRecordName(from: userInfo))
+    }
+
+    func testNotificationPayloadParsesLocalQuestionCreatedAtVariants() throws {
+        let date = Date(timeIntervalSince1970: 300)
+
+        let numberValue = try XCTUnwrap(
+            StudyNotificationPayload.questionCreatedAt(from: [
+                StudyNotificationAction.questionCreatedAt: NSNumber(value: 100.25)
+            ])
+        )
+        XCTAssertEqual(numberValue, 100.25, accuracy: 0.001)
+
+        let stringValue = try XCTUnwrap(
+            StudyNotificationPayload.questionCreatedAt(from: [
+                "createdAt": "200.5"
+            ])
+        )
+        XCTAssertEqual(stringValue, 200.5, accuracy: 0.001)
+
+        let dateValue = try XCTUnwrap(
+            StudyNotificationPayload.questionCreatedAt(from: [
+                "createdAt": date
+            ])
+        )
+        XCTAssertEqual(dateValue, 300, accuracy: 0.001)
+    }
+
+    func testLocalQuestionNotificationPayloadIsNotCloudQuestionPush() {
+        let userInfo: [AnyHashable: Any] = [
+            StudyNotificationAction.questionCreatedAt: NSNumber(value: 100.25)
+        ]
+
+        XCTAssertFalse(StudyNotificationPayload.isCloudQuestionPush(from: userInfo))
+        XCTAssertNil(StudyNotificationPayload.cloudQuestionPushRecordName(from: userInfo))
+    }
+
+    func testNotificationRoutingOnlyOpensBackgroundDefaultTap() {
+        XCTAssertTrue(
+            StudyNotificationRouting.shouldOpenStudyImmediately(
+                actionIdentifier: UNNotificationDefaultActionIdentifier
+            )
+        )
+        XCTAssertFalse(
+            StudyNotificationRouting.shouldOpenStudyImmediately(
+                actionIdentifier: StudyNotificationAction.reply
+            )
+        )
+        XCTAssertFalse(
+            StudyNotificationRouting.shouldOpenStudyImmediately(
+                actionIdentifier: StudyNotificationAction.otherAnswer
+            )
+        )
+        XCTAssertTrue(StudyNotificationRouting.isIgnored(StudyNotificationAction.ignore))
+        XCTAssertTrue(StudyNotificationRouting.isIgnored(UNNotificationDismissActionIdentifier))
+    }
+
+    @MainActor
+    func testMissingCloudQuestionPushDoesNotOpenFallbackQuestion() async {
+        let suiteName = "StudyMateTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = SettingsStore(defaults: defaults)
+        store.saveIsCloudSyncEnabled(true)
+        let settings = StudySettings(topic: "CloudKit", difficulty: .level5, customPrompt: "", intervalMinutes: 15)
+        let existingQuestion = QuestionItem(
+            question: "기존 질문을 잘못 열면 안 됩니다.",
+            expectedAnswerHint: nil,
+            createdAt: Date(timeIntervalSince1970: 200)
+        )
+        store.appendStudyRecord(question: existingQuestion, settings: settings)
+        let syncService = FakeCloudSyncService(remoteSnapshot: nil)
+        let appState = AppState(settingsStore: store, openAIClient: SpyOpenAIClient(), cloudSyncService: syncService)
+
+        let didHandle = await appState.handleCloudQuestionPush(
+            recordName: "missing-question",
+            openStudy: true
+        )
+
+        XCTAssertFalse(didHandle)
+        XCTAssertEqual(appState.selectedTab, .study)
+        XCTAssertNil(appState.currentQuestion)
+        XCTAssertEqual(appState.statusMessage, appState.strings.notificationQuestionUnavailable)
+        XCTAssertEqual(appState.notificationLandingMessage, appState.strings.notificationQuestionUnavailable)
+        XCTAssertTrue(appState.studyRecords.contains { $0.question == existingQuestion })
+    }
+
+    @MainActor
+    func testDeletedCloudQuestionPushIsNotReaddedOrOpened() async {
+        let suiteName = "StudyMateTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = SettingsStore(defaults: defaults)
+        store.saveIsCloudSyncEnabled(true)
+        let settings = StudySettings(topic: "CloudKit", difficulty: .level5, customPrompt: "", intervalMinutes: 15)
+        let deletedQuestion = QuestionItem(
+            question: "삭제한 CloudKit push 질문입니다.",
+            expectedAnswerHint: nil,
+            createdAt: Date(timeIntervalSince1970: 300)
+        )
+        store.appendStudyRecord(question: deletedQuestion, settings: settings)
+        guard let deletedRecord = store.loadStudyRecords().first else {
+            XCTFail("Expected record to exist before deletion.")
+            return
+        }
+        store.deleteStudyRecord(deletedRecord)
+
+        let syncService = FakeCloudSyncService(remoteSnapshot: nil)
+        syncService.questionPushesByRecordName["question-300000"] = CloudQuestionPush(
+            question: deletedQuestion,
+            topic: "CloudKit",
+            difficulty: .level5
+        )
+        let appState = AppState(settingsStore: store, openAIClient: SpyOpenAIClient(), cloudSyncService: syncService)
+
+        let didHandle = await appState.handleCloudQuestionPush(
+            recordName: "question-300000",
+            openStudy: true
+        )
+
+        XCTAssertTrue(didHandle)
+        XCTAssertEqual(appState.selectedTab, .study)
+        XCTAssertNil(appState.currentQuestion)
+        XCTAssertEqual(appState.statusMessage, appState.strings.notificationQuestionUnavailable)
+        XCTAssertEqual(appState.notificationLandingMessage, appState.strings.notificationQuestionUnavailable)
+        XCTAssertFalse(appState.studyRecords.contains { $0.question == deletedQuestion })
+        XCTAssertFalse(store.loadStudyRecords().contains { $0.question == deletedQuestion })
+    }
+
+    @MainActor
+    func testDeletedCloudQuestionPushTapPreservesActiveDraft() async {
+        let suiteName = "StudyMateTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = SettingsStore(defaults: defaults)
+        store.saveIsCloudSyncEnabled(true)
+        let settings = StudySettings(topic: "CloudKit", difficulty: .level5, customPrompt: "", intervalMinutes: 15)
+        let deletedQuestion = QuestionItem(
+            question: "삭제한 CloudKit push 질문입니다.",
+            expectedAnswerHint: nil,
+            createdAt: Date(timeIntervalSince1970: 300)
+        )
+        let activeQuestion = QuestionItem(
+            question: "작성 중인 현재 질문입니다.",
+            expectedAnswerHint: nil,
+            createdAt: Date(timeIntervalSince1970: 400)
+        )
+        store.appendStudyRecord(question: deletedQuestion, settings: settings)
+        store.appendStudyRecord(question: activeQuestion, settings: settings)
+
+        guard let deletedRecord = store.loadStudyRecords().first(where: { $0.question == deletedQuestion }),
+              let activeRecord = store.loadStudyRecords().first(where: { $0.question == activeQuestion }) else {
+            XCTFail("Expected records to exist.")
+            return
+        }
+        store.deleteStudyRecord(deletedRecord)
+
+        let syncService = FakeCloudSyncService(remoteSnapshot: nil)
+        syncService.questionPushesByRecordName["question-300000"] = CloudQuestionPush(
+            question: deletedQuestion,
+            topic: "CloudKit",
+            difficulty: .level5
+        )
+        let appState = AppState(settingsStore: store, openAIClient: SpyOpenAIClient(), cloudSyncService: syncService)
+        appState.selectStudyRecord(activeRecord)
+        appState.updateAnswer("기존 답변 초안")
+
+        let didHandle = await appState.handleCloudQuestionPush(
+            recordName: "question-300000",
+            openStudy: true
+        )
+
+        XCTAssertTrue(didHandle)
+        XCTAssertEqual(appState.selectedTab, .study)
+        XCTAssertEqual(appState.currentQuestion?.question, activeQuestion.question)
+        XCTAssertEqual(appState.lastAnswer, "기존 답변 초안")
+        XCTAssertEqual(appState.statusMessage, appState.strings.notificationQuestionUnavailable)
+        XCTAssertEqual(appState.notificationLandingMessage, appState.strings.notificationQuestionUnavailable)
+        XCTAssertFalse(appState.studyRecords.contains { $0.question == deletedQuestion })
     }
 
     func testOpenAIBillingStatusParsesCostsAPIResponse() throws {
@@ -1193,6 +2044,63 @@ final class StudyMateTests: XCTestCase {
         XCTAssertEqual(overflowPage.page, 2)
     }
 
+    @MainActor
+    func testAppendingAppLogPreservesCurrentLogPage() {
+        let suiteName = "StudyMateTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = SettingsStore(defaults: defaults)
+        for index in 1...125 {
+            store.appendAppLog(AppLogEntry(level: .info, message: "Log \(index)"))
+        }
+
+        let appState = AppState(settingsStore: store, openAIClient: SpyOpenAIClient())
+        appState.loadAppLogPage(2)
+
+        XCTAssertEqual(appState.appLogPage, 2)
+        let totalCountBeforeAppending = appState.appLogTotalCount
+
+        appState.setDebuggingEnabled(true)
+
+        XCTAssertEqual(appState.appLogPage, 2)
+        XCTAssertEqual(appState.appLogTotalCount, totalCountBeforeAppending + 1)
+        XCTAssertFalse(appState.appLogs.contains { $0.message == "디버깅 모드를 켰습니다." })
+    }
+
+    @MainActor
+    func testAppLogPaginationMovesRepeatedly() {
+        let suiteName = "StudyMateTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = SettingsStore(defaults: defaults)
+        for index in 1...175 {
+            store.appendAppLog(AppLogEntry(level: .info, message: "Log \(index)"))
+        }
+
+        let appState = AppState(settingsStore: store, openAIClient: SpyOpenAIClient())
+
+        XCTAssertEqual(appState.appLogPage, 0)
+        XCTAssertEqual(appState.appLogPageCount, 4)
+
+        appState.loadNextAppLogPage()
+        XCTAssertEqual(appState.appLogPage, 1)
+
+        appState.loadNextAppLogPage()
+        XCTAssertEqual(appState.appLogPage, 2)
+
+        appState.loadPreviousAppLogPage()
+        XCTAssertEqual(appState.appLogPage, 1)
+
+        appState.loadPreviousAppLogPage()
+        XCTAssertEqual(appState.appLogPage, 0)
+    }
+
     func testDebuggingSettingRoundTripUsesUserDefaults() {
         let suiteName = "StudyMateTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
@@ -1269,6 +2177,180 @@ final class StudyMateTests: XCTestCase {
         XCTAssertEqual(appState.lastAnswer, "공유 상태 경쟁을 막습니다.")
         XCTAssertEqual(updatedRecord.answer, "공유 상태 경쟁을 막습니다.")
         XCTAssertNil(updatedRecord.gradingResult)
+    }
+
+    @MainActor
+    func testDeletedNotificationQuestionDoesNotOpenFallbackRecord() {
+        let suiteName = "StudyMateTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = SettingsStore(defaults: defaults)
+        let settings = StudySettings(
+            topic: "Swift",
+            difficulty: .beginner,
+            customPrompt: "짧게",
+            intervalMinutes: 15
+        )
+        let deletedQuestion = QuestionItem(
+            question: "삭제된 질문입니다.",
+            expectedAnswerHint: nil,
+            createdAt: Date(timeIntervalSince1970: 1_000)
+        )
+        let remainingQuestion = QuestionItem(
+            question: "남아있는 질문입니다.",
+            expectedAnswerHint: nil,
+            createdAt: Date(timeIntervalSince1970: 2_000)
+        )
+        store.appendStudyRecord(question: deletedQuestion, settings: settings)
+        store.appendStudyRecord(question: remainingQuestion, settings: settings)
+
+        let appState = AppState(settingsStore: store, openAIClient: SpyOpenAIClient())
+        let deletedRecord = store.loadStudyRecords().first {
+            $0.question.createdAt == deletedQuestion.createdAt
+        }
+        guard let deletedRecord else {
+            XCTFail("Expected deleted question record to exist before deleting it.")
+            return
+        }
+
+        appState.deleteStudyRecord(deletedRecord)
+
+        let didOpen = appState.openRecordFromNotification(
+            questionCreatedAt: deletedQuestion.createdAt.timeIntervalSince1970
+        )
+
+        XCTAssertFalse(didOpen)
+        XCTAssertEqual(appState.selectedTab, .study)
+        XCTAssertNil(appState.currentQuestion)
+        XCTAssertEqual(appState.notificationLandingMessage, appState.strings.notificationQuestionUnavailable)
+        XCTAssertEqual(appState.statusMessage, appState.strings.notificationQuestionUnavailable)
+        XCTAssertTrue(store.loadStudyRecords().contains { $0.question == remainingQuestion })
+    }
+
+    @MainActor
+    func testMissingNotificationQuestionPreservesActiveDraft() {
+        let suiteName = "StudyMateTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = SettingsStore(defaults: defaults)
+        let settings = StudySettings(
+            topic: "Swift",
+            difficulty: .level5,
+            customPrompt: "짧게",
+            intervalMinutes: 15
+        )
+        let deletedQuestion = QuestionItem(
+            question: "이미 넘긴 알림 질문입니다.",
+            expectedAnswerHint: nil,
+            createdAt: Date(timeIntervalSince1970: 1_000)
+        )
+        let activeQuestion = QuestionItem(
+            question: "작성 중인 답변은 유지되어야 합니다.",
+            expectedAnswerHint: nil,
+            createdAt: Date(timeIntervalSince1970: 2_000)
+        )
+        store.appendStudyRecord(question: deletedQuestion, settings: settings)
+        store.appendStudyRecord(question: activeQuestion, settings: settings)
+
+        let appState = AppState(settingsStore: store, openAIClient: SpyOpenAIClient())
+        guard let deletedRecord = store.loadStudyRecords().first(where: { $0.question == deletedQuestion }),
+              let activeRecord = store.loadStudyRecords().first(where: { $0.question == activeQuestion }) else {
+            XCTFail("Expected records to exist before deleting one.")
+            return
+        }
+
+        appState.selectStudyRecord(activeRecord)
+        appState.updateAnswer("작성 중인 답변")
+        appState.deleteStudyRecord(deletedRecord)
+
+        let didOpen = appState.openRecordFromNotification(
+            questionCreatedAt: deletedQuestion.createdAt.timeIntervalSince1970
+        )
+
+        XCTAssertFalse(didOpen)
+        XCTAssertEqual(appState.selectedTab, .study)
+        XCTAssertEqual(appState.currentQuestion?.question, activeQuestion.question)
+        XCTAssertEqual(appState.lastAnswer, "작성 중인 답변")
+        XCTAssertEqual(appState.notificationLandingMessage, appState.strings.notificationQuestionUnavailable)
+        XCTAssertEqual(appState.statusMessage, appState.strings.notificationQuestionUnavailable)
+    }
+
+    @MainActor
+    func testNotificationWithoutCreatedAtPreservesActiveDraft() {
+        let suiteName = "StudyMateTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = SettingsStore(defaults: defaults)
+        let settings = StudySettings(
+            topic: "Swift",
+            difficulty: .level5,
+            customPrompt: "짧게",
+            intervalMinutes: 15
+        )
+        let activeQuestion = QuestionItem(
+            question: "작성 중인 답변은 알림 오류 뒤에도 유지되어야 합니다.",
+            expectedAnswerHint: nil,
+            createdAt: Date(timeIntervalSince1970: 2_000)
+        )
+        store.appendStudyRecord(question: activeQuestion, settings: settings)
+
+        let appState = AppState(settingsStore: store, openAIClient: SpyOpenAIClient())
+        guard let activeRecord = store.loadStudyRecords().first(where: { $0.question == activeQuestion }) else {
+            XCTFail("Expected active record to exist.")
+            return
+        }
+
+        appState.selectStudyRecord(activeRecord)
+        appState.updateAnswer("작성 중인 답변")
+
+        let didOpen = appState.openRecordFromNotification(questionCreatedAt: nil)
+
+        XCTAssertFalse(didOpen)
+        XCTAssertEqual(appState.selectedTab, .study)
+        XCTAssertEqual(appState.currentQuestion?.question, activeQuestion.question)
+        XCTAssertEqual(appState.lastAnswer, "작성 중인 답변")
+        XCTAssertEqual(appState.notificationLandingMessage, appState.strings.notificationQuestionUnavailable)
+        XCTAssertEqual(appState.statusMessage, appState.strings.notificationQuestionUnavailable)
+    }
+
+    @MainActor
+    func testSkippedNotificationQuestionShowsUnavailableLanding() {
+        let suiteName = "StudyMateTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = SettingsStore(defaults: defaults)
+        let settings = StudySettings(topic: "Notifications", difficulty: .level5, customPrompt: "짧게", intervalMinutes: 15)
+        let skippedQuestion = QuestionItem(
+            question: "넘긴 질문 알림을 누르면 어떻게 되나요?",
+            expectedAnswerHint: nil,
+            createdAt: Date(timeIntervalSince1970: 1_000)
+        )
+        store.saveQuestion(skippedQuestion)
+        store.appendStudyRecord(question: skippedQuestion, settings: settings)
+        let appState = AppState(settingsStore: store, openAIClient: SpyOpenAIClient())
+
+        appState.skipCurrentQuestion()
+        let didOpen = appState.openRecordFromNotification(
+            questionCreatedAt: skippedQuestion.createdAt.timeIntervalSince1970
+        )
+
+        XCTAssertFalse(didOpen)
+        XCTAssertEqual(appState.selectedTab, .study)
+        XCTAssertNil(appState.currentQuestion)
+        XCTAssertEqual(appState.notificationLandingMessage, appState.strings.notificationQuestionUnavailable)
+        XCTAssertEqual(appState.statusMessage, appState.strings.notificationQuestionUnavailable)
     }
 
     @MainActor
@@ -1424,6 +2506,48 @@ final class StudyMateTests: XCTestCase {
     }
 
     @MainActor
+    func testSkippingNonCurrentPendingQuestionPreservesCurrentQuestion() {
+        let suiteName = "StudyMateTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = SettingsStore(defaults: defaults)
+        let settings = StudySettings(
+            topic: "Redis",
+            difficulty: .intermediate,
+            customPrompt: "짧게",
+            intervalMinutes: 15
+        )
+        let currentQuestion = QuestionItem(
+            question: "현재 답변 중인 질문",
+            expectedAnswerHint: nil,
+            createdAt: Date(timeIntervalSince1970: 300)
+        )
+        let skippedQuestion = QuestionItem(
+            question: "리스트에서 넘길 질문",
+            expectedAnswerHint: nil,
+            createdAt: Date(timeIntervalSince1970: 200)
+        )
+
+        store.appendStudyRecord(question: skippedQuestion, settings: settings)
+        store.appendStudyRecord(question: currentQuestion, settings: settings)
+        let records = store.loadStudyRecords()
+        let skippedRecord = records.first { $0.question == skippedQuestion }!
+        let currentRecord = records.first { $0.question == currentQuestion }!
+        let appState = AppState(settingsStore: store, openAIClient: SpyOpenAIClient())
+        appState.selectStudyRecord(currentRecord)
+
+        appState.skipPendingQuestion(skippedRecord)
+
+        XCTAssertEqual(appState.currentQuestion?.question, currentQuestion.question)
+        XCTAssertEqual(appState.studyRecords.count, 1)
+        XCTAssertFalse(appState.studyRecords.contains { $0.question == skippedQuestion })
+        XCTAssertEqual(appState.pendingStudyRecords.count, 1)
+    }
+
+    @MainActor
     func testPendingQuestionLimitPreventsNewQuestionGeneration() async {
         let suiteName = "StudyMateTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
@@ -1460,6 +2584,453 @@ final class StudyMateTests: XCTestCase {
         XCTAssertEqual(appState.pendingStudyRecords.count, 3)
     }
 
+    @MainActor
+    func testPendingQuestionLimitCountsCurrentQuestionWithoutRecord() async {
+        let suiteName = "StudyMateTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = SettingsStore(defaults: defaults)
+        let settings = StudySettings(
+            topic: "Swift",
+            difficulty: .level5,
+            customPrompt: "짧게",
+            intervalMinutes: 15
+        )
+        store.saveSettings(settings)
+
+        for index in 0..<2 {
+            let question = QuestionItem(
+                question: "기록된 미채점 질문 \(index)",
+                expectedAnswerHint: nil,
+                createdAt: Date(timeIntervalSince1970: Double(index))
+            )
+            store.appendStudyRecord(question: question, settings: settings)
+        }
+
+        let currentQuestion = QuestionItem(
+            question: "현재 화면의 미채점 질문",
+            expectedAnswerHint: nil,
+            createdAt: Date(timeIntervalSince1970: 3)
+        )
+        store.saveQuestion(currentQuestion)
+        store.saveGradingResult(nil)
+        store.saveLastAnswer("")
+
+        let client = SpyOpenAIClient()
+        let appState = AppState(settingsStore: store, openAIClient: client)
+
+        await appState.generateQuestion()
+
+        XCTAssertTrue(appState.hasReachedPendingQuestionLimit)
+        XCTAssertEqual(client.generateCallCount, 0)
+        XCTAssertEqual(appState.pendingStudyRecords.count, 3)
+        XCTAssertEqual(store.loadStudyRecords().count, 2)
+    }
+
+    @MainActor
+    func testCloudQuestionPushDoesNotAddRecordWhenPendingLimitReached() async {
+        let suiteName = "StudyMateTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = SettingsStore(defaults: defaults)
+        let settings = StudySettings(
+            topic: "CloudKit",
+            difficulty: .level5,
+            customPrompt: "짧게",
+            intervalMinutes: 15
+        )
+        store.saveSettings(settings)
+        store.saveIsCloudSyncEnabled(true)
+
+        for index in 0..<3 {
+            let question = QuestionItem(
+                question: "기존 미채점 질문 \(index)",
+                expectedAnswerHint: nil,
+                createdAt: Date(timeIntervalSince1970: Double(index))
+            )
+            store.appendStudyRecord(question: question, settings: settings)
+        }
+
+        let pushedQuestion = QuestionItem(
+            question: "초과 CloudKit push 질문",
+            expectedAnswerHint: nil,
+            createdAt: Date(timeIntervalSince1970: 100)
+        )
+        let syncService = FakeCloudSyncService(remoteSnapshot: nil)
+        syncService.questionPushesByRecordName["question-100000"] = CloudQuestionPush(
+            question: pushedQuestion,
+            topic: "CloudKit",
+            difficulty: .level5
+        )
+        let appState = AppState(settingsStore: store, openAIClient: SpyOpenAIClient(), cloudSyncService: syncService)
+
+        let didHandle = await appState.handleCloudQuestionPush(
+            recordName: "question-100000",
+            openStudy: false
+        )
+
+        XCTAssertTrue(didHandle)
+        XCTAssertEqual(appState.pendingStudyRecords.count, 3)
+        XCTAssertFalse(appState.studyRecords.contains { $0.question == pushedQuestion })
+    }
+
+    @MainActor
+    func testCloudSyncPreservesRemoteUngradedOverflow() async {
+        let suiteName = "StudyMateTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = SettingsStore(defaults: defaults)
+        store.saveIsCloudSyncEnabled(true)
+
+        let settings = StudySettings(
+            topic: "CloudKit",
+            difficulty: .level5,
+            customPrompt: "짧게",
+            intervalMinutes: 15
+        )
+        let questions = (0..<4).map { index in
+            QuestionItem(
+                question: "원격 미채점 질문 \(index)",
+                expectedAnswerHint: nil,
+                createdAt: Date(timeIntervalSince1970: Double(index))
+            )
+        }
+        let snapshot = CloudSyncSnapshot(
+            updatedAt: Date(timeIntervalSince1970: 100),
+            settings: settings,
+            currentQuestion: questions[3],
+            questionHistory: questions,
+            lastAnswer: "",
+            gradingResult: nil,
+            isRunning: true,
+            hasCompletedOnboarding: true,
+            studyRecords: questions.map {
+                StudyRecord(question: $0, topic: "CloudKit", difficulty: .level5)
+            }
+        )
+        let syncService = FakeCloudSyncService(remoteSnapshot: snapshot)
+        let appState = AppState(settingsStore: store, openAIClient: SpyOpenAIClient(), cloudSyncService: syncService)
+
+        await appState.syncCloudNow()
+
+        XCTAssertEqual(appState.pendingStudyRecords.count, 4)
+        XCTAssertEqual(store.loadStudyRecords().filter { $0.gradingResult == nil }.count, 4)
+        XCTAssertTrue(appState.studyRecords.contains { $0.question == questions[3] })
+    }
+
+    @MainActor
+    func testGenerateQuestionSyncsCloudBeforeCreatingWhenRemotePendingLimitReached() async {
+        let suiteName = "StudyMateTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = SettingsStore(defaults: defaults)
+        let settings = StudySettings(
+            topic: "CloudKit",
+            difficulty: .level5,
+            customPrompt: "짧게",
+            intervalMinutes: 15
+        )
+        store.saveSettings(settings)
+        store.saveIsCloudSyncEnabled(true)
+        store.saveCloudSyncSnapshotUpdatedAt(Date(timeIntervalSince1970: 50))
+
+        for index in 0..<2 {
+            store.appendStudyRecord(
+                question: QuestionItem(
+                    question: "로컬 미채점 질문 \(index)",
+                    expectedAnswerHint: nil,
+                    createdAt: Date(timeIntervalSince1970: Double(index))
+                ),
+                settings: settings
+            )
+        }
+
+        let remoteQuestions = (0..<3).map { index in
+            QuestionItem(
+                question: "원격 미채점 질문 \(index)",
+                expectedAnswerHint: nil,
+                createdAt: Date(timeIntervalSince1970: Double(100 + index))
+            )
+        }
+        let remoteSnapshot = CloudSyncSnapshot(
+            updatedAt: Date(timeIntervalSince1970: 100),
+            settings: settings,
+            currentQuestion: remoteQuestions[2],
+            questionHistory: remoteQuestions,
+            lastAnswer: "",
+            gradingResult: nil,
+            isRunning: true,
+            hasCompletedOnboarding: true,
+            studyRecords: remoteQuestions.map {
+                StudyRecord(question: $0, topic: "CloudKit", difficulty: .level5)
+            }
+        )
+        let client = SpyOpenAIClient()
+        let appState = AppState(
+            settingsStore: store,
+            openAIClient: client,
+            cloudSyncService: FakeCloudSyncService(remoteSnapshot: remoteSnapshot)
+        )
+
+        await appState.generateQuestion()
+
+        XCTAssertEqual(client.generateCallCount, 0)
+        XCTAssertEqual(appState.pendingStudyRecords.count, 5)
+        XCTAssertEqual(appState.statusMessage, appState.strings.pendingQuestionLimitTitle)
+    }
+
+    @MainActor
+    func testGeneratedQuestionDoesNotSendPushWhenPostSyncPendingLimitIsExceeded() async {
+        let suiteName = "StudyMateTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = SettingsStore(defaults: defaults)
+        let settings = StudySettings(
+            topic: "CloudKit",
+            difficulty: .level5,
+            customPrompt: "짧게",
+            intervalMinutes: 15
+        )
+        store.saveSettings(settings)
+        store.saveAPIKey("sk-test")
+        store.saveIsCloudSyncEnabled(true)
+        store.saveIsRunning(true)
+
+        for index in 0..<2 {
+            store.appendStudyRecord(
+                question: QuestionItem(
+                    question: "로컬 미채점 질문 \(index)",
+                    expectedAnswerHint: nil,
+                    createdAt: Date(timeIntervalSince1970: Double(index))
+                ),
+                settings: settings
+            )
+        }
+
+        let remoteQuestions = (0..<2).map { index in
+            QuestionItem(
+                question: "생성 후 도착한 원격 질문 \(index)",
+                expectedAnswerHint: nil,
+                createdAt: Date(timeIntervalSince1970: Double(100 + index))
+            )
+        }
+        let remoteSnapshot = CloudSyncSnapshot(
+            updatedAt: Date(timeIntervalSince1970: 100),
+            settings: settings,
+            currentQuestion: remoteQuestions[1],
+            questionHistory: remoteQuestions,
+            lastAnswer: "",
+            gradingResult: nil,
+            isRunning: true,
+            hasCompletedOnboarding: true,
+            studyRecords: remoteQuestions.map {
+                StudyRecord(question: $0, topic: "CloudKit", difficulty: .level5)
+            }
+        )
+        let generatedQuestion = QuestionItem(
+            question: "방금 생성한 질문",
+            expectedAnswerHint: nil,
+            createdAt: Date(timeIntervalSince1970: 200)
+        )
+        let client = SpyOpenAIClient()
+        client.generatedQuestionResult = GeneratedQuestionResult(question: generatedQuestion, responseID: "resp_new")
+        let syncService = FakeCloudSyncService(remoteSnapshot: nil)
+        syncService.fetchSnapshots = [nil, nil, remoteSnapshot]
+        let appState = AppState(settingsStore: store, openAIClient: client, cloudSyncService: syncService)
+
+        await appState.generateQuestion(manual: false)
+
+        XCTAssertEqual(client.generateCallCount, 1)
+        XCTAssertGreaterThan(appState.pendingStudyRecords.count, AppState.maxPendingQuestionCount)
+        XCTAssertEqual(syncService.savedQuestionPushes.count, 0)
+        XCTAssertEqual(appState.statusMessage, appState.strings.pendingQuestionLimitTitle)
+    }
+
+    @MainActor
+    func testCloudQuestionPushSyncsBeforeAddingWhenRemotePendingLimitReached() async {
+        let suiteName = "StudyMateTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = SettingsStore(defaults: defaults)
+        let settings = StudySettings(
+            topic: "CloudKit",
+            difficulty: .level5,
+            customPrompt: "짧게",
+            intervalMinutes: 15
+        )
+        store.saveSettings(settings)
+        store.saveIsCloudSyncEnabled(true)
+        store.saveCloudSyncSnapshotUpdatedAt(Date(timeIntervalSince1970: 50))
+
+        for index in 0..<2 {
+            store.appendStudyRecord(
+                question: QuestionItem(
+                    question: "로컬 push 전 질문 \(index)",
+                    expectedAnswerHint: nil,
+                    createdAt: Date(timeIntervalSince1970: Double(index))
+                ),
+                settings: settings
+            )
+        }
+
+        let remoteQuestions = (0..<3).map { index in
+            QuestionItem(
+                question: "원격 push 전 질문 \(index)",
+                expectedAnswerHint: nil,
+                createdAt: Date(timeIntervalSince1970: Double(200 + index))
+            )
+        }
+        let pushedQuestion = QuestionItem(
+            question: "초과 push 질문",
+            expectedAnswerHint: nil,
+            createdAt: Date(timeIntervalSince1970: 300)
+        )
+        let remoteSnapshot = CloudSyncSnapshot(
+            updatedAt: Date(timeIntervalSince1970: 100),
+            settings: settings,
+            currentQuestion: remoteQuestions[2],
+            questionHistory: remoteQuestions,
+            lastAnswer: "",
+            gradingResult: nil,
+            isRunning: true,
+            hasCompletedOnboarding: true,
+            studyRecords: remoteQuestions.map {
+                StudyRecord(question: $0, topic: "CloudKit", difficulty: .level5)
+            }
+        )
+        let syncService = FakeCloudSyncService(remoteSnapshot: remoteSnapshot)
+        syncService.questionPushesByRecordName["question-300000"] = CloudQuestionPush(
+            question: pushedQuestion,
+            topic: "CloudKit",
+            difficulty: .level5
+        )
+        let appState = AppState(settingsStore: store, openAIClient: SpyOpenAIClient(), cloudSyncService: syncService)
+
+        let didHandle = await appState.handleCloudQuestionPush(
+            recordName: "question-300000",
+            openStudy: false
+        )
+
+        XCTAssertTrue(didHandle)
+        XCTAssertEqual(appState.pendingStudyRecords.count, 5)
+        XCTAssertFalse(appState.studyRecords.contains { $0.question == pushedQuestion })
+    }
+
+    @MainActor
+    func testCloudSyncPreservesLocalUngradedOverflowAfterPushingSnapshot() async {
+        let suiteName = "StudyMateTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = SettingsStore(defaults: defaults)
+        let settings = StudySettings(
+            topic: "Redis",
+            difficulty: .level5,
+            customPrompt: "짧게",
+            intervalMinutes: 15
+        )
+        store.saveSettings(settings)
+        store.saveIsCloudSyncEnabled(true)
+        store.saveCloudSyncSnapshotUpdatedAt(Date(timeIntervalSince1970: 200))
+
+        for index in 0..<5 {
+            store.appendStudyRecord(
+                question: QuestionItem(
+                    question: "초과 로컬 미채점 질문 \(index)",
+                    expectedAnswerHint: nil,
+                    createdAt: Date(timeIntervalSince1970: Double(index))
+                ),
+                settings: settings
+            )
+        }
+
+        let remoteSnapshot = CloudSyncSnapshot(
+            updatedAt: Date(timeIntervalSince1970: 100),
+            settings: settings,
+            currentQuestion: nil,
+            questionHistory: [],
+            lastAnswer: "",
+            gradingResult: nil,
+            isRunning: true,
+            hasCompletedOnboarding: true,
+            studyRecords: []
+        )
+        let syncService = FakeCloudSyncService(remoteSnapshot: remoteSnapshot)
+        let appState = AppState(settingsStore: store, openAIClient: SpyOpenAIClient(), cloudSyncService: syncService)
+
+        await appState.syncCloudNow()
+
+        XCTAssertEqual(appState.pendingStudyRecords.count, 5)
+        XCTAssertEqual(store.loadStudyRecords().filter { $0.gradingResult == nil }.count, 5)
+        XCTAssertEqual(syncService.savedSnapshot?.studyRecords.filter { $0.gradingResult == nil }.count, 5)
+    }
+
+    @MainActor
+    func testFirstCloudSyncPreservesRemoteUngradedOverflowWithoutOverwritingRemoteSnapshot() async {
+        let suiteName = "StudyMateTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = SettingsStore(defaults: defaults)
+        let settings = StudySettings(
+            topic: "Redis",
+            difficulty: .level5,
+            customPrompt: "짧게",
+            intervalMinutes: 15
+        )
+        store.saveIsCloudSyncEnabled(true)
+
+        let remoteQuestions = (0..<5).map { index in
+            QuestionItem(
+                question: "초과 원격 미채점 질문 \(index)",
+                expectedAnswerHint: nil,
+                createdAt: Date(timeIntervalSince1970: Double(index))
+            )
+        }
+        let remoteSnapshot = CloudSyncSnapshot(
+            updatedAt: Date(timeIntervalSince1970: 100),
+            settings: settings,
+            currentQuestion: remoteQuestions[4],
+            questionHistory: remoteQuestions,
+            lastAnswer: "",
+            gradingResult: nil,
+            isRunning: true,
+            hasCompletedOnboarding: true,
+            studyRecords: remoteQuestions.map {
+                StudyRecord(question: $0, topic: "Redis", difficulty: .level5)
+            }
+        )
+        let syncService = FakeCloudSyncService(remoteSnapshot: remoteSnapshot)
+        let appState = AppState(settingsStore: store, openAIClient: SpyOpenAIClient(), cloudSyncService: syncService)
+
+        await appState.syncCloudNow()
+
+        XCTAssertEqual(appState.pendingStudyRecords.count, 5)
+        XCTAssertNil(syncService.savedSnapshot)
+    }
+
     func testQuestionPromptIncludesRecentQuestionsToAvoid() {
         let settings = StudySettings(
             topic: "Swift Concurrency",
@@ -1476,13 +3047,13 @@ final class StudyMateTests: XCTestCase {
 
         let prompt = OpenAIClient.questionPrompt(settings: settings, recentQuestions: recentQuestions)
 
-        XCTAssertTrue(prompt.contains("Recent questions to avoid:"))
+        XCTAssertTrue(prompt.contains("Previous questions to avoid:"))
         XCTAssertTrue(prompt.contains("Language: English"))
         XCTAssertTrue(prompt.contains("Question language instruction: Ask the question in English."))
         XCTAssertTrue(prompt.contains("- Ask the question in English."))
         XCTAssertTrue(prompt.contains("Write the question and expectedAnswerHint in English."))
         XCTAssertTrue(prompt.contains("actor는 어떤 문제를 해결하나요?"))
-        XCTAssertTrue(prompt.contains("Do not repeat or closely paraphrase any recent question."))
+        XCTAssertTrue(prompt.contains("Do not repeat or closely paraphrase any previous question."))
     }
 
     func testQuestionPromptUsesAppLanguageOverLegacyStudyLanguage() {
@@ -1856,6 +3427,7 @@ private final class SpyOpenAIClient: OpenAIClientProtocol {
     var billingStatusesByProjectID: [String: OpenAIBillingStatus] = [:]
     var generateCallCount = 0
     var generatedQuestionResult: GeneratedQuestionResult?
+    var generatedQuestionResults: [GeneratedQuestionResult] = []
     var gradingResult: GradingResult?
     var gradedAnswers: [String] = []
 
@@ -1903,6 +3475,9 @@ private final class SpyOpenAIClient: OpenAIClientProtocol {
         apiKey: String
     ) async throws -> GeneratedQuestionResult {
         generateCallCount += 1
+        if !generatedQuestionResults.isEmpty {
+            return generatedQuestionResults.removeFirst()
+        }
         if let generatedQuestionResult {
             return generatedQuestionResult
         }
@@ -1940,7 +3515,12 @@ private final class URLRequestRecorder: @unchecked Sendable {
 @MainActor
 private final class FakeCloudSyncService: CloudSyncServiceProtocol {
     var remoteSnapshot: CloudSyncSnapshot?
+    var fetchSnapshots: [CloudSyncSnapshot?] = []
     var savedSnapshot: CloudSyncSnapshot?
+    var saveSnapshotCallCount = 0
+    var savedQuestionPushes: [(question: QuestionItem, settings: StudySettings)] = []
+    var questionPushesByRecordName: [String: CloudQuestionPush] = [:]
+    var didEnsureQuestionPushSubscription = false
     var fetchError: Error?
     var saveError: Error?
 
@@ -1955,6 +3535,10 @@ private final class FakeCloudSyncService: CloudSyncServiceProtocol {
             throw fetchError
         }
 
+        if !fetchSnapshots.isEmpty {
+            return fetchSnapshots.removeFirst()
+        }
+
         return remoteSnapshot
     }
 
@@ -1963,7 +3547,20 @@ private final class FakeCloudSyncService: CloudSyncServiceProtocol {
             throw saveError
         }
 
+        saveSnapshotCallCount += 1
         savedSnapshot = snapshot
         remoteSnapshot = snapshot
+    }
+
+    func ensureQuestionPushSubscription(language: AppLanguage, sound: NotificationSoundOption) async throws {
+        didEnsureQuestionPushSubscription = true
+    }
+
+    func saveQuestionPush(question: QuestionItem, settings: StudySettings) async throws {
+        savedQuestionPushes.append((question, settings))
+    }
+
+    func fetchQuestionPush(recordName: String) async throws -> CloudQuestionPush? {
+        questionPushesByRecordName[recordName]
     }
 }

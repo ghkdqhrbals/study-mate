@@ -8,11 +8,17 @@ import Security
 protocol CloudSyncServiceProtocol {
     func fetchSnapshot() async throws -> CloudSyncSnapshot?
     func saveSnapshot(_ snapshot: CloudSyncSnapshot) async throws
+    func ensureQuestionPushSubscription(language: AppLanguage, sound: NotificationSoundOption) async throws
+    func saveQuestionPush(question: QuestionItem, settings: StudySettings) async throws
+    func fetchQuestionPush(recordName: String) async throws -> CloudQuestionPush?
 }
 
 @MainActor
 final class CloudSyncService: CloudSyncServiceProtocol {
     nonisolated static let defaultContainerIdentifier = "iCloud.io.github.ghkdqhrbals.StudyMate"
+    nonisolated static let snapshotRecordType = "StudyMateSnapshot"
+    nonisolated static let questionPushRecordType = "StudyMateQuestionPush"
+    nonisolated static let questionPushSubscriptionID = "studymate-question-push-v1"
 
     private let container: CKContainer
     private let database: CKDatabase
@@ -63,7 +69,7 @@ final class CloudSyncService: CloudSyncServiceProtocol {
         do {
             record = try await database.record(for: recordID)
         } catch let error as CKError where error.code == .unknownItem {
-            record = CKRecord(recordType: "StudyMateSnapshot", recordID: recordID)
+            record = CKRecord(recordType: Self.snapshotRecordType, recordID: recordID)
         }
 
         let data = try encoder.encode(snapshot)
@@ -72,6 +78,61 @@ final class CloudSyncService: CloudSyncServiceProtocol {
         record["payload"] = try makeAsset(data: data)
 
         _ = try await database.save(record)
+    }
+
+    func ensureQuestionPushSubscription(language: AppLanguage, sound: NotificationSoundOption) async throws {
+        let subscription: CKQuerySubscription
+
+        do {
+            if let existingSubscription = try await database.subscription(
+                for: Self.questionPushSubscriptionID
+            ) as? CKQuerySubscription {
+                subscription = existingSubscription
+            } else {
+                subscription = Self.makeQuestionPushSubscription()
+            }
+        } catch let error as CKError where error.code == .unknownItem {
+            subscription = Self.makeQuestionPushSubscription()
+        }
+
+        subscription.notificationInfo = Self.makeQuestionPushNotificationInfo(
+            language: language,
+            sound: sound
+        )
+
+        _ = try await database.save(subscription)
+    }
+
+    func saveQuestionPush(question: QuestionItem, settings: StudySettings) async throws {
+        let recordName = Self.questionPushRecordName(for: question)
+        let recordID = CKRecord.ID(recordName: recordName)
+
+        do {
+            _ = try await database.record(for: recordID)
+            return
+        } catch let error as CKError where error.code == .unknownItem {
+            let record = CKRecord(recordType: Self.questionPushRecordType, recordID: recordID)
+            record["createdAt"] = question.createdAt as NSDate
+            record["question"] = question.question as NSString
+            record["topic"] = settings.topic as NSString
+            record["difficultyLevel"] = settings.difficulty.level as NSNumber
+            record["language"] = settings.appLanguage.rawValue as NSString
+            if let hint = question.expectedAnswerHint {
+                record["expectedAnswerHint"] = hint as NSString
+            }
+
+            _ = try await database.save(record)
+        }
+    }
+
+    func fetchQuestionPush(recordName: String) async throws -> CloudQuestionPush? {
+        let record = try await database.record(for: CKRecord.ID(recordName: recordName))
+        return Self.questionPush(from: record)
+    }
+
+    nonisolated static func questionPushRecordName(for question: QuestionItem) -> String {
+        let milliseconds = Int64((question.createdAt.timeIntervalSince1970 * 1000).rounded())
+        return "question-\(milliseconds)"
     }
 
     private func snapshot(from record: CKRecord) throws -> CloudSyncSnapshot? {
@@ -96,6 +157,79 @@ final class CloudSyncService: CloudSyncServiceProtocol {
         let fileURL = directory.appendingPathComponent("snapshot-\(UUID().uuidString).json")
         try data.write(to: fileURL, options: .atomic)
         return CKAsset(fileURL: fileURL)
+    }
+
+    private static func makeQuestionPushSubscription() -> CKQuerySubscription {
+        CKQuerySubscription(
+            recordType: questionPushRecordType,
+            predicate: NSPredicate(format: "TRUEPREDICATE"),
+            subscriptionID: questionPushSubscriptionID,
+            options: [.firesOnRecordCreation]
+        )
+    }
+
+    private static func makeQuestionPushNotificationInfo(
+        language: AppLanguage,
+        sound: NotificationSoundOption
+    ) -> CKSubscription.NotificationInfo {
+        let strings = AppStrings(language: language)
+        let info = CKSubscription.NotificationInfo()
+        info.title = strings.notificationTitle
+        info.alertBody = strings.cloudQuestionPushBody
+        info.category = StudyNotificationAction.category
+        info.shouldSendContentAvailable = true
+        info.desiredKeys = [
+            "createdAt",
+            "question",
+            "topic",
+            "difficultyLevel"
+        ]
+
+        if let soundName = sound.cloudKitSoundName {
+            info.soundName = soundName
+        }
+
+        return info
+    }
+
+    private static func questionPush(from record: CKRecord) -> CloudQuestionPush? {
+        guard let questionText = record["question"] as? String else {
+            return nil
+        }
+
+        let createdAt = (record["createdAt"] as? Date) ?? record.creationDate ?? Date()
+        let topic = (record["topic"] as? String) ?? ""
+        let difficultyLevel = (record["difficultyLevel"] as? NSNumber)?.intValue ?? Difficulty.level5.level
+        let hint = record["expectedAnswerHint"] as? String
+
+        return CloudQuestionPush(
+            question: QuestionItem(
+                question: questionText,
+                expectedAnswerHint: hint,
+                createdAt: createdAt
+            ),
+            topic: topic,
+            difficulty: Difficulty(level: difficultyLevel)
+        )
+    }
+}
+
+struct CloudQuestionPush: Equatable {
+    var question: QuestionItem
+    var topic: String
+    var difficulty: Difficulty
+}
+
+private extension NotificationSoundOption {
+    var cloudKitSoundName: String? {
+        switch self {
+        case .defaultSound:
+            "default"
+        case .none:
+            nil
+        case .softPing, .chime, .pop, .bell, .tap:
+            bundledFileName ?? "default"
+        }
     }
 }
 

@@ -2,7 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject private var appState: AppState
-    @State private var selection: SettingsCategory = .general
+    @State private var selection: SettingsCategory = .study
 
     private var visibleCategories: [SettingsCategory] {
         SettingsCategory.visible(isDebuggingEnabled: appState.isDebuggingEnabled)
@@ -71,7 +71,9 @@ struct SettingsView: View {
 
                 Divider()
 
-                HStack {
+                HStack(spacing: 12) {
+                    CompactCloudSyncFooter()
+
                     Spacer()
 
                     Button {
@@ -103,7 +105,7 @@ struct SettingsView: View {
         }
         .onChange(of: appState.isDebuggingEnabled) {
             if !appState.isDebuggingEnabled && selection == .developer {
-                selection = .general
+                selection = .study
             }
         }
         .onAppear {
@@ -125,7 +127,7 @@ private enum SettingsCategory: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 
     static func visible(isDebuggingEnabled: Bool) -> [SettingsCategory] {
-        allCases.filter { category in
+        [.study, .general, .secrets, .records, .developer].filter { category in
             category != .developer || isDebuggingEnabled
         }
     }
@@ -161,6 +163,62 @@ private struct SettingsPanel<Content: View>: View {
     }
 }
 
+private struct CompactCloudSyncFooter: View {
+    @EnvironmentObject private var appState: AppState
+
+    var body: some View {
+        let strings = appState.settingsEditorStrings
+
+        HStack(spacing: 8) {
+            Toggle(
+                strings.iCloudSync,
+                isOn: Binding(
+                    get: { appState.isCloudSyncEnabled },
+                    set: { appState.setCloudSyncEnabled($0) }
+                )
+            )
+            .toggleStyle(.switch)
+            .fixedSize()
+
+            Text(statusText(strings: strings))
+                .font(.caption)
+                .foregroundStyle(appState.hasCloudSyncError ? .orange : .secondary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+
+            Button {
+                Task {
+                    await appState.syncCloudNow()
+                }
+            } label: {
+                if appState.isCloudSyncing {
+                    ProgressView()
+                        .controlSize(.small)
+                } else {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                }
+            }
+            .buttonStyle(.borderless)
+            .disabled(!appState.isCloudSyncEnabled || appState.isCloudSyncing)
+            .help(strings.syncNow)
+        }
+        .frame(minWidth: 260, maxWidth: 430, alignment: .leading)
+    }
+
+    private func statusText(strings: AppStrings) -> String {
+        if let message = appState.cloudSyncMessage,
+           !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return message
+        }
+
+        if let cloudLastSyncedAt = appState.cloudLastSyncedAt {
+            return strings.lastSyncedAt(cloudLastSyncedAt)
+        }
+
+        return appState.isCloudSyncEnabled ? strings.iCloudSyncOn : strings.iCloudSyncOff
+    }
+}
+
 private struct GeneralSettingsSection: View {
     @EnvironmentObject private var appState: AppState
     @ObservedObject private var updateService = UpdateService.shared
@@ -188,58 +246,6 @@ private struct GeneralSettingsSection: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            Divider()
-
-            Text(strings.iCloudSync)
-                .font(.subheadline)
-                .fontWeight(.semibold)
-
-            Toggle(
-                strings.iCloudSync,
-                isOn: Binding(
-                    get: { appState.isCloudSyncEnabled },
-                    set: { appState.setCloudSyncEnabled($0) }
-                )
-            )
-
-            HStack(spacing: 8) {
-                Button {
-                    Task {
-                        await appState.syncCloudNow()
-                    }
-                } label: {
-                    if appState.isCloudSyncing {
-                        HStack(spacing: 6) {
-                            ProgressView()
-                                .controlSize(.small)
-                            Text(strings.syncing)
-                        }
-                    } else {
-                        Label(strings.syncNow, systemImage: "arrow.triangle.2.circlepath")
-                    }
-                }
-                .disabled(!appState.isCloudSyncEnabled || appState.isCloudSyncing)
-
-                if let cloudLastSyncedAt = appState.cloudLastSyncedAt {
-                    Text(strings.lastSyncedAt(cloudLastSyncedAt))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            if let cloudSyncMessage = appState.cloudSyncMessage {
-                Text(cloudSyncMessage)
-                    .font(.caption)
-                    .foregroundColor(appState.hasCloudSyncError ? .orange : .secondary)
-            }
-
-            Text(strings.iCloudSyncHelp)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Divider()
-
             Text(strings.notifications)
                 .font(.subheadline)
                 .fontWeight(.semibold)
@@ -248,14 +254,6 @@ private struct GeneralSettingsSection: View {
                 appState.openSystemNotificationSettings()
             } label: {
                 Label(strings.openNotificationSettings, systemImage: "bell.badge")
-            }
-
-            Button {
-                Task {
-                    await appState.sendTestNotification()
-                }
-            } label: {
-                Label(strings.testNotification, systemImage: "paperplane")
             }
 
             Text(strings.notificationPermissionHelp)
@@ -756,6 +754,7 @@ private struct RecordsSettingsSection: View {
 
 private struct DeveloperSettingsSection: View {
     @EnvironmentObject private var appState: AppState
+    @State private var didLoadInitialLogPage = false
 
     var body: some View {
         let strings = appState.settingsEditorStrings
@@ -782,9 +781,7 @@ private struct DeveloperSettingsSection: View {
 
                 if appState.appLogPageCount > 1 {
                     HStack(spacing: 6) {
-                        Button {
-                            appState.loadAppLogPage(appState.appLogPage - 1)
-                        } label: {
+                        Button(action: appState.loadPreviousAppLogPage) {
                             Image(systemName: "chevron.left")
                         }
                         .buttonStyle(.borderless)
@@ -797,9 +794,7 @@ private struct DeveloperSettingsSection: View {
                             .monospacedDigit()
                             .lineLimit(1)
 
-                        Button {
-                            appState.loadAppLogPage(appState.appLogPage + 1)
-                        } label: {
+                        Button(action: appState.loadNextAppLogPage) {
                             Image(systemName: "chevron.right")
                         }
                         .buttonStyle(.borderless)
@@ -829,19 +824,26 @@ private struct DeveloperSettingsSection: View {
                 .frame(height: 180)
             } else {
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 8) {
+                    LazyVStack(alignment: .leading, spacing: 0) {
                         ForEach(visibleLogs) { entry in
                             LogRow(entry: entry)
                         }
                     }
-                    .padding(.trailing, 8)
-                    .padding(.bottom, 12)
+                    .padding(.vertical, 5)
+                    .padding(.horizontal, 7)
                 }
+                .background(Color.secondary.opacity(0.045))
+                .clipShape(RoundedRectangle(cornerRadius: 6))
                 .frame(height: 320)
             }
         }
         .onAppear {
-            appState.loadAppLogPage(0)
+            guard !didLoadInitialLogPage else {
+                return
+            }
+
+            didLoadInitialLogPage = true
+            appState.loadAppLogPage(appState.appLogPage)
         }
     }
 
@@ -862,39 +864,26 @@ private struct LogRow: View {
     var entry: AppLogEntry
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(color)
-                    .frame(width: 7, height: 7)
-
-                Text(entry.level.displayName)
-                    .font(.caption)
-                    .fontWeight(.semibold)
-
-                Text(entry.createdAt, formatter: Self.dateFormatter)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-
-                Spacer()
-            }
-
-            Text(entry.message)
-                .font(.caption)
-                .lineLimit(3)
-                .truncationMode(.tail)
-                .help(entry.message)
-        }
-        .padding(8)
+        Text(lineText)
+            .font(.system(size: 10.5, weight: .regular, design: .monospaced))
+            .foregroundStyle(color)
+            .lineSpacing(0)
+            .lineLimit(1)
+            .truncationMode(.middle)
+            .textSelection(.enabled)
+            .help(entry.message)
+            .padding(.vertical, 1)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.secondary.opacity(0.07))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var lineText: String {
+        "\(Self.dateFormatter.string(from: entry.createdAt)) \(entry.level.displayName.uppercased()) \(entry.message)"
     }
 
     private var color: Color {
         switch entry.level {
         case .info:
-            .blue
+            .primary
         case .warning:
             .orange
         case .error:
@@ -908,67 +897,4 @@ private struct LogRow: View {
         formatter.timeStyle = .medium
         return formatter
     }()
-}
-
-private enum RecommendedPrompt: String, CaseIterable, Identifiable {
-    case concept
-    case interview
-    case practical
-    case review
-
-    var id: String { rawValue }
-
-    func title(language: AppLanguage) -> String {
-        switch language {
-        case .korean:
-            switch self {
-            case .concept:
-                return "개념 확인형"
-            case .interview:
-                return "면접 질문형"
-            case .practical:
-                return "실전 예제형"
-            case .review:
-                return "복습 강화형"
-            }
-        case .english:
-            switch self {
-            case .concept:
-                return "Concept Check"
-            case .interview:
-                return "Interview Style"
-            case .practical:
-                return "Practical Example"
-            case .review:
-                return "Review Focus"
-            }
-        }
-    }
-
-    func text(language: AppLanguage) -> String {
-        switch language {
-        case .korean:
-            switch self {
-            case .concept:
-                return "핵심 개념을 정확히 이해했는지 확인하는 짧은 질문을 내세요. 한 번에 하나의 개념만 다루세요."
-            case .interview:
-                return "기술 면접처럼 질문하세요. 단순 정의보다 이유, trade-off, 실제 적용 상황을 설명하게 만드세요."
-            case .practical:
-                return "실무 상황이나 작은 예제를 기반으로 질문하세요. 사용자가 개념을 적용해서 답하도록 만드세요."
-            case .review:
-                return "이전 질문과 겹치지 않게 복습 질문을 내세요. 자주 틀릴 만한 부분과 헷갈리는 차이를 확인하세요."
-            }
-        case .english:
-            switch self {
-            case .concept:
-                return "Ask a short question that checks whether the core concept is understood. Cover only one concept at a time."
-            case .interview:
-                return "Ask like a technical interview. Make the user explain reasons, trade-offs, and practical usage, not just definitions."
-            case .practical:
-                return "Ask from a real work scenario or a small example. Make the user apply the concept in the answer."
-            case .review:
-                return "Ask a review question that does not overlap with previous questions. Check common mistakes and confusing differences."
-            }
-        }
-    }
 }

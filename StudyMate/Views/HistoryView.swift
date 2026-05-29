@@ -3,6 +3,7 @@ import SwiftUI
 struct HistoryView: View {
     @EnvironmentObject private var appState: AppState
     @State private var selectedRecordID: String?
+    @State private var openSwipeRecordID: String?
     @State private var searchText = ""
     @State private var page = 0
 
@@ -63,29 +64,23 @@ struct HistoryView: View {
         )
 
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text(strings.records)
-                    .font(.headline)
-
-                Spacer()
-
-                if !appState.studyRecords.isEmpty {
-                    Text(strings.filteredRecordCount(displayedRecords.count, total: appState.studyRecords.count))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
             if appState.studyRecords.isEmpty {
                 ContentUnavailableView(
                     strings.noRecords,
                     systemImage: "clock.arrow.circlepath",
                     description: Text(strings.noRecordsDescription)
                 )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                TextField(strings.searchRecords, text: $searchText)
-                    .textFieldStyle(.roundedBorder)
+                HStack(spacing: 8) {
+                    TextField(strings.searchRecords, text: $searchText)
+                        .textFieldStyle(.roundedBorder)
+
+                    Text(strings.filteredRecordCount(displayedRecords.count, total: appState.studyRecords.count))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
 
                 if displayedRecords.isEmpty {
                     ContentUnavailableView(
@@ -95,13 +90,65 @@ struct HistoryView: View {
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
+                    #if os(iOS)
+                    ScrollView {
+                        LazyVStack(spacing: 8) {
+                            ForEach(displayedVisibleRecords) { record in
+                                VStack(alignment: .leading, spacing: 8) {
+                                    let deleteAction: () -> Void = {
+                                        openSwipeRecordID = nil
+                                        delete(record)
+                                    }
+
+                                    SwipeRevealRow(
+                                        isOpen: Binding(
+                                            get: { openSwipeRecordID == record.id },
+                                            set: { openSwipeRecordID = $0 ? record.id : nil }
+                                        ),
+                                        onTap: {
+                                            if let openSwipeRecordID, openSwipeRecordID != record.id {
+                                                closeOpenSwipe(animated: true)
+                                                return
+                                            }
+
+                                            selectedRecordID = selectedRecordID == record.id ? nil : record.id
+                                        },
+                                        onFullSwipe: deleteAction
+                                    ) {
+                                        HistoryRow(record: record, strings: strings, isSelected: selectedRecordID == record.id)
+                                    } action: {
+                                        SwipeActionButton(title: strings.clear, systemImage: "trash", tint: .red)
+                                    }
+
+                                    if selectedRecordID == record.id {
+                                        InlineStudyRecordDetail(record: record) {
+                                            selectedRecordID = nil
+                                        }
+                                        .transition(.opacity.combined(with: .move(edge: .top)))
+                                    }
+                                }
+                                .transition(
+                                    .asymmetric(
+                                        insertion: .opacity,
+                                        removal: .opacity.combined(with: .move(edge: .leading))
+                                    )
+                                )
+                            }
+                        }
+                        .padding(.trailing, 2)
+                    }
+                    .frame(maxHeight: .infinity)
+                    .refreshable {
+                        await appState.refreshVisibleData()
+                    }
+                    #else
                     List {
                         ForEach(displayedVisibleRecords) { record in
                             VStack(alignment: .leading, spacing: 8) {
                                 Button {
                                     selectedRecordID = selectedRecordID == record.id ? nil : record.id
                                 } label: {
-                                        HistoryRow(record: record, strings: strings, isSelected: selectedRecordID == record.id)
+                                    HistoryRow(record: record, strings: strings, isSelected: selectedRecordID == record.id)
                                 }
                                 .buttonStyle(.plain)
 
@@ -130,6 +177,7 @@ struct HistoryView: View {
                     .refreshable {
                         await appState.refreshVisibleData()
                     }
+                    #endif
 
                     Divider()
 
@@ -179,10 +227,15 @@ struct HistoryView: View {
         .frame(maxHeight: .infinity, alignment: .top)
         .onChange(of: appState.studyRecords.count) {
             clampPage()
+            if let openSwipeRecordID,
+               !appState.studyRecords.contains(where: { $0.id == openSwipeRecordID }) {
+                self.openSwipeRecordID = nil
+            }
         }
         .onChange(of: searchText) {
             page = 0
             selectedRecordID = nil
+            openSwipeRecordID = nil
         }
         .onChange(of: appState.focusedRecordRequest) {
             showFocusedRecord()
@@ -211,11 +264,32 @@ struct HistoryView: View {
         selectedRecordID = request.recordID
     }
 
+    private func closeOpenSwipe(animated: Bool) {
+        guard openSwipeRecordID != nil else {
+            return
+        }
+
+        if animated {
+            withAnimation(.interactiveSpring(response: 0.24, dampingFraction: 0.9)) {
+                openSwipeRecordID = nil
+            }
+        } else {
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                openSwipeRecordID = nil
+            }
+        }
+    }
+
     private func delete(_ record: StudyRecord) {
-        appState.deleteStudyRecord(record)
-        clampPage()
-        if selectedRecordID == record.id {
-            selectedRecordID = nil
+        withAnimation(.easeOut(duration: 0.22)) {
+            appState.deleteStudyRecord(record)
+            clampPage()
+            openSwipeRecordID = nil
+            if selectedRecordID == record.id {
+                selectedRecordID = nil
+            }
         }
     }
 }
