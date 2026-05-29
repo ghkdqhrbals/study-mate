@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Privacy Policy for StudyMate.">
+  <link rel="icon" href="../assets/studymate-icon.svg" type="image/svg+xml">
+  <title>Privacy Policy - StudyMate</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #fafafa;
+      --fg: #1f2328;
+      --muted: #6b7280;
+      --line: rgba(31, 35, 40, 0.14);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #141414;
+        --fg: #f5f5f5;
+        --muted: #a1a1aa;
+        --line: rgba(255, 255, 255, 0.14);
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
+      line-height: 1.6;
+    }
+
+    a {
+      color: inherit;
+      text-underline-offset: 3px;
+    }
+
+    main {
+      width: min(760px, calc(100vw - 40px));
+      margin: 0 auto;
+      padding: 48px 0 44px;
+    }
+
+    nav {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    header {
+      padding: 64px 0 34px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 28px;
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .brand img {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(38px, 7vw, 64px);
+      line-height: 1.04;
+      letter-spacing: 0;
+    }
+
+    .updated {
+      margin-top: 14px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    section {
+      padding: 24px 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    h2 {
+      margin: 0 0 10px;
+      font-size: 18px;
+    }
+
+    p {
+      margin: 0 0 12px;
+      color: var(--muted);
+    }
+
+    p:last-child {
+      margin-bottom: 0;
+    }
+
+    ul {
+      display: grid;
+      gap: 8px;
+      margin: 0;
+      padding: 0;
+      color: var(--muted);
+      list-style: none;
+    }
+
+    li::before {
+      content: "- ";
+    }
+
+    footer {
+      padding-top: 20px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <nav aria-label="Navigation">
+      <a href="./">StudyMate</a>
+      <a href="https://github.com/ghkdqhrbals/study-mate">GitHub</a>
+    </nav>
+
+    <header>
+      <div class="brand">
+        <img src="../assets/studymate-icon.svg" alt="StudyMate icon" width="40" height="40">
+        <span>StudyMate</span>
+      </div>
+      <h1>Privacy Policy</h1>
+      <p class="updated">Last updated: May 29, 2026</p>
+    </header>
+
+    <section>
+      <h2>Overview</h2>
+      <p>StudyMate is a free study app that uses your own OpenAI API key to generate study questions and grade answers. The app is designed to be local-first. We do not run a separate backend server for StudyMate and we do not sell personal data.</p>
+    </section>
+
+    <section>
+      <h2>Information Stored By The App</h2>
+      <p>StudyMate may store the following information on your device:</p>
+      <ul>
+        <li>Study topic, level, prompt, interval, language, notification, and app settings.</li>
+        <li>Your OpenAI API key, if you enter one.</li>
+        <li>Study questions, answer drafts, graded answers, scores, feedback, explanations, and topic statistics.</li>
+        <li>Local diagnostic logs when debugging mode is enabled.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>OpenAI API</h2>
+      <p>When you generate a question or grade an answer, StudyMate sends the required study text to OpenAI using the API key you provide. OpenAI processes that information under OpenAI's own terms and privacy practices. Your OpenAI API usage and billing are managed through your own OpenAI account.</p>
+      <p>StudyMate does not provide an OpenAI account or API key for normal use.</p>
+    </section>
+
+    <section>
+      <h2>iCloud Sync</h2>
+      <p>If you enable iCloud sync, StudyMate uses Apple's CloudKit service to sync app settings, the regular OpenAI API key, current study state, answer drafts, records, and related study data across your Apple devices signed in to the same iCloud account.</p>
+      <p>OpenAI Admin API keys are not synced. If iCloud sync is disabled or unavailable, your data remains local to the device.</p>
+    </section>
+
+    <section>
+      <h2>Notifications</h2>
+      <p>If you allow notifications, StudyMate may schedule local notifications or receive CloudKit-related notifications to remind you about study questions. You can manage notification permission in iOS Settings.</p>
+    </section>
+
+    <section>
+      <h2>Data Sharing</h2>
+      <p>StudyMate does not sell your personal data. The app may send data to OpenAI when you use AI question generation or grading, and may store/sync data through Apple's iCloud/CloudKit if you enable iCloud sync.</p>
+    </section>
+
+    <section>
+      <h2>Data Deletion</h2>
+      <p>You can delete study records in the app. You can also disable iCloud sync in the app settings. Deleting the app removes local app data from the device according to iOS behavior. Data synced through iCloud may also be managed through your Apple ID and iCloud settings.</p>
+    </section>
+
+    <section>
+      <h2>Children</h2>
+      <p>StudyMate is not directed to children under 13. If you believe a child has provided personal information through the app, please contact us.</p>
+    </section>
+
+    <section>
+      <h2>Changes</h2>
+      <p>We may update this Privacy Policy from time to time. The latest version will be posted on this page.</p>
+    </section>
+
+    <section>
+      <h2>Contact</h2>
+      <p>For privacy questions, contact the developer through the GitHub repository: <a href="https://github.com/ghkdqhrbals/study-mate">ghkdqhrbals/study-mate</a>.</p>
+    </section>
+
+    <footer>
+      StudyMate is free software. API usage is billed through your own OpenAI account.
+    </footer>
+  </main>
+</body>
+</html>
