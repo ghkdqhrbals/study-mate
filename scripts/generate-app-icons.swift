@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import UniformTypeIdentifiers
 
 let outputDirectory = URL(fileURLWithPath: "StudyMate/Resources/Assets.xcassets/AppIcon.appiconset")
 
@@ -133,13 +134,58 @@ func drawIcon(size: Int) -> NSImage {
     return image
 }
 
+func flattenedPNGData(from image: NSImage, size: Int) -> Data? {
+    let dimension = CGFloat(size)
+    let colorSpace = CGColorSpaceCreateDeviceRGB()
+    guard let context = CGContext(
+        data: nil,
+        width: size,
+        height: size,
+        bitsPerComponent: 8,
+        bytesPerRow: 0,
+        space: colorSpace,
+        bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
+    ) else {
+        return nil
+    }
+
+    let background = NSColor(calibratedRed: 0.126, green: 0.192, blue: 0.400, alpha: 1)
+    context.setFillColor(background.cgColor)
+    context.fill(CGRect(x: 0, y: 0, width: dimension, height: dimension))
+
+    guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+        return nil
+    }
+
+    context.draw(cgImage, in: CGRect(x: 0, y: 0, width: dimension, height: dimension))
+
+    guard let flattenedImage = context.makeImage() else {
+        return nil
+    }
+
+    let data = NSMutableData()
+    guard let destination = CGImageDestinationCreateWithData(
+        data,
+        UTType.png.identifier as CFString,
+        1,
+        nil
+    ) else {
+        return nil
+    }
+
+    CGImageDestinationAddImage(destination, flattenedImage, nil)
+    guard CGImageDestinationFinalize(destination) else {
+        return nil
+    }
+
+    return data as Data
+}
+
 try FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
 
 for icon in images {
     let image = drawIcon(size: icon.pixels)
-    guard let tiff = image.tiffRepresentation,
-          let bitmap = NSBitmapImageRep(data: tiff),
-          let png = bitmap.representation(using: .png, properties: [:]) else {
+    guard let png = flattenedPNGData(from: image, size: icon.pixels) else {
         fatalError("Failed to render \(icon.filename)")
     }
 
