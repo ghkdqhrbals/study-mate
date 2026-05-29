@@ -1190,308 +1190,6 @@ final class StudyMateTests: XCTestCase {
         XCTAssertFalse(appState.studyRecords.contains { $0.question == deletedQuestion })
     }
 
-    func testOpenAIBillingStatusParsesCostsAPIResponse() throws {
-        let data = try XCTUnwrap("""
-        {
-          "object": "page",
-          "data": [
-            {
-              "object": "bucket",
-              "start_time": 1704067200,
-              "end_time": 1704153600,
-              "results": [
-                {
-                  "object": "organization.costs.result",
-                  "amount": {
-                    "value": 1.25,
-                    "currency": "usd"
-                  }
-                }
-              ]
-            },
-            {
-              "object": "bucket",
-              "start_time": 1704153600,
-              "end_time": 1704240000,
-              "results": [
-                {
-                  "object": "organization.costs.result",
-                  "amount": {
-                    "value": 0.75,
-                    "currency": "usd"
-                  }
-                }
-              ]
-            }
-          ]
-        }
-        """.data(using: .utf8))
-
-        let status = try OpenAIClient.parseBillingStatus(
-            from: data,
-            periodStart: Date(timeIntervalSince1970: 1_704_067_200),
-            periodEnd: Date(timeIntervalSince1970: 1_704_240_000),
-            checkedAt: Date(timeIntervalSince1970: 1_704_240_000)
-        )
-
-        XCTAssertEqual(status.spentAmount, 2.0, accuracy: 0.000001)
-        XCTAssertEqual(status.currency, "usd")
-        XCTAssertEqual(status.formattedSpentAmount, "$2.00")
-    }
-
-    func testOpenAIBillingStatusFiltersGroupedCostsAPIResponseByScope() throws {
-        let data = try XCTUnwrap("""
-        {
-          "object": "page",
-          "data": [
-            {
-              "object": "bucket",
-              "start_time": 1704067200,
-              "end_time": 1704153600,
-              "results": [
-                {
-                  "object": "organization.costs.result",
-                  "project_id": "proj_studymate",
-                  "api_key_id": "key_studymate",
-                  "amount": {
-                    "value": 0.40,
-                    "currency": "usd"
-                  }
-                },
-                {
-                  "object": "organization.costs.result",
-                  "project_id": "proj_other",
-                  "api_key_id": "key_other",
-                  "amount": {
-                    "value": 9.99,
-                    "currency": "usd"
-                  }
-                }
-              ]
-            },
-            {
-              "object": "bucket",
-              "start_time": 1704153600,
-              "end_time": 1704240000,
-              "results": [
-                {
-                  "object": "organization.costs.result",
-                  "project_id": "proj_studymate",
-                  "api_key_id": "key_studymate",
-                  "amount": {
-                    "value": 0.60,
-                    "currency": "usd"
-                  }
-                }
-              ]
-            }
-          ]
-        }
-        """.data(using: .utf8))
-
-        let status = try OpenAIClient.parseBillingStatus(
-            from: data,
-            periodStart: Date(timeIntervalSince1970: 1_704_067_200),
-            periodEnd: Date(timeIntervalSince1970: 1_704_240_000),
-            checkedAt: Date(timeIntervalSince1970: 1_704_240_000),
-            projectID: "proj_studymate",
-            apiKeyID: "key_studymate"
-        )
-
-        XCTAssertEqual(status.spentAmount, 1.0, accuracy: 0.000001)
-    }
-
-    func testOpenAIUsageStatusParsesCompletionsUsageAPIResponse() throws {
-        let data = try XCTUnwrap("""
-        {
-          "object": "page",
-          "data": [
-            {
-              "object": "bucket",
-              "start_time": 1704067200,
-              "end_time": 1704153600,
-              "results": [
-                {
-                  "object": "organization.usage.completions.result",
-                  "input_tokens": 1200,
-                  "input_cached_tokens": 300,
-                  "output_tokens": 450,
-                  "num_model_requests": 7
-                }
-              ]
-            },
-            {
-              "object": "bucket",
-              "start_time": 1704153600,
-              "end_time": 1704240000,
-              "results": [
-                {
-                  "object": "organization.usage.completions.result",
-                  "input_tokens": 800,
-                  "input_cached_tokens": 100,
-                  "output_tokens": 250,
-                  "num_model_requests": 3
-                }
-              ]
-            }
-          ]
-        }
-        """.data(using: .utf8))
-
-        let status = try OpenAIClient.parseUsageStatus(
-            from: data,
-            periodStart: Date(timeIntervalSince1970: 1_704_067_200),
-            periodEnd: Date(timeIntervalSince1970: 1_704_240_000),
-            checkedAt: Date(timeIntervalSince1970: 1_704_240_000)
-        )
-
-        XCTAssertEqual(status.inputTokens, 2_000)
-        XCTAssertEqual(status.cachedInputTokens, 400)
-        XCTAssertEqual(status.outputTokens, 700)
-        XCTAssertEqual(status.totalTokens, 2_700)
-        XCTAssertEqual(status.requestCount, 10)
-    }
-
-    func testOpenAIUsageStatusFiltersGroupedCompletionsUsageAPIResponseByScope() throws {
-        let data = try XCTUnwrap("""
-        {
-          "object": "page",
-          "data": [
-            {
-              "object": "bucket",
-              "start_time": 1704067200,
-              "end_time": 1704153600,
-              "results": [
-                {
-                  "object": "organization.usage.completions.result",
-                  "project_id": "proj_studymate",
-                  "api_key_id": "key_studymate",
-                  "input_tokens": 100,
-                  "input_cached_tokens": 20,
-                  "output_tokens": 50,
-                  "num_model_requests": 2
-                },
-                {
-                  "object": "organization.usage.completions.result",
-                  "project_id": "proj_other",
-                  "api_key_id": "key_other",
-                  "input_tokens": 900,
-                  "input_cached_tokens": 0,
-                  "output_tokens": 900,
-                  "num_model_requests": 9
-                }
-              ]
-            },
-            {
-              "object": "bucket",
-              "start_time": 1704153600,
-              "end_time": 1704240000,
-              "results": [
-                {
-                  "object": "organization.usage.completions.result",
-                  "project_id": "proj_studymate",
-                  "api_key_id": "key_studymate",
-                  "input_tokens": 300,
-                  "input_cached_tokens": 30,
-                  "output_tokens": 70,
-                  "num_model_requests": 3
-                }
-              ]
-            }
-          ]
-        }
-        """.data(using: .utf8))
-
-        let status = try OpenAIClient.parseUsageStatus(
-            from: data,
-            periodStart: Date(timeIntervalSince1970: 1_704_067_200),
-            periodEnd: Date(timeIntervalSince1970: 1_704_240_000),
-            checkedAt: Date(timeIntervalSince1970: 1_704_240_000),
-            projectID: "proj_studymate",
-            apiKeyID: "key_studymate"
-        )
-
-        XCTAssertEqual(status.inputTokens, 400)
-        XCTAssertEqual(status.cachedInputTokens, 50)
-        XCTAssertEqual(status.outputTokens, 120)
-        XCTAssertEqual(status.totalTokens, 520)
-        XCTAssertEqual(status.requestCount, 5)
-    }
-
-    @MainActor
-    func testOpenAIBillingStatusFollowsNextPageCursor() async throws {
-        let recorder = URLRequestRecorder()
-        let client = OpenAIClient { request in
-            let pageValue = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?
-                .queryItems?
-                .first { $0.name == "page" }?
-                .value
-            recorder.append(pageValue)
-
-            let body: Data
-            if pageValue == nil {
-                body = """
-                {
-                  "object": "page",
-                  "has_more": true,
-                  "next_page": "page_next",
-                  "data": [
-                    {
-                      "object": "bucket",
-                      "start_time": 1730419200,
-                      "end_time": 1730505600,
-                      "results": []
-                    }
-                  ]
-                }
-                """.data(using: .utf8)!
-            } else {
-                body = """
-                {
-                  "object": "page",
-                  "has_more": false,
-                  "data": [
-                    {
-                      "object": "bucket",
-                      "start_time": 1730505600,
-                      "end_time": 1730592000,
-                      "results": [
-                        {
-                          "object": "organization.costs.result",
-                          "amount": {
-                            "value": 10.8,
-                            "currency": "usd"
-                          }
-                        }
-                      ]
-                    }
-                  ]
-                }
-                """.data(using: .utf8)!
-            }
-
-            let response = HTTPURLResponse(
-                url: request.url!,
-                statusCode: 200,
-                httpVersion: nil,
-                headerFields: nil
-            )!
-            return (body, response)
-        }
-
-        let status = try await client.fetchBillingStatus(
-            adminAPIKey: "sk-admin",
-            projectID: nil as String?,
-            apiKeyID: nil as String?
-        )
-
-        XCTAssertEqual(recorder.pageValues, [nil, "page_next"])
-        XCTAssertEqual(status.spentAmount, 10.8, accuracy: 0.000001)
-        XCTAssertEqual(status.sourcePageCount, 2)
-        XCTAssertEqual(status.sourceBucketCount, 2)
-        XCTAssertEqual(status.sourceResultCount, 1)
-    }
-
     func testSettingsWithoutLanguageDefaultsToKorean() throws {
         let suiteName = "StudyMateTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
@@ -1730,51 +1428,6 @@ final class StudyMateTests: XCTestCase {
         XCTAssertEqual(store.loadAPIKey(), "")
     }
 
-    func testAdminAPIKeyRoundTripUsesUserDefaults() {
-        let suiteName = "StudyMateTests-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defer {
-            defaults.removePersistentDomain(forName: suiteName)
-        }
-
-        let store = SettingsStore(defaults: defaults)
-
-        store.saveAdminAPIKey("  sk-admin-test  ")
-
-        XCTAssertEqual(store.loadAdminAPIKey(), "sk-admin-test")
-    }
-
-    func testEmptyAdminAPIKeyClearsStoredValue() {
-        let suiteName = "StudyMateTests-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defer {
-            defaults.removePersistentDomain(forName: suiteName)
-        }
-
-        let store = SettingsStore(defaults: defaults)
-        store.saveAdminAPIKey("sk-admin-test")
-
-        store.saveAdminAPIKey("   ")
-
-        XCTAssertEqual(store.loadAdminAPIKey(), "")
-    }
-
-    func testOpenAIUsageScopeFiltersRoundTripUsesUserDefaults() {
-        let suiteName = "StudyMateTests-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defer {
-            defaults.removePersistentDomain(forName: suiteName)
-        }
-
-        let store = SettingsStore(defaults: defaults)
-
-        store.saveOpenAIUsageProjectID("  proj_studymate  ")
-        store.saveOpenAIUsageAPIKeyID("  key_studymate  ")
-
-        XCTAssertEqual(store.loadOpenAIUsageProjectID(), "proj_studymate")
-        XCTAssertEqual(store.loadOpenAIUsageAPIKeyID(), "key_studymate")
-    }
-
     @MainActor
     func testSaveSettingsWithoutAPIKeyChangeSkipsValidation() async {
         let suiteName = "StudyMateTests-\(UUID().uuidString)"
@@ -1807,27 +1460,18 @@ final class StudyMateTests: XCTestCase {
 
         let store = SettingsStore(defaults: defaults)
         store.saveAPIKey("sk-existing")
-        store.saveAdminAPIKey("sk-admin-existing")
-        store.saveOpenAIUsageProjectID("proj_existing")
-        store.saveOpenAIUsageAPIKeyID("key_existing")
         let appState = AppState(settingsStore: store, openAIClient: SpyOpenAIClient())
         let savedTopic = appState.settings.topic
 
         appState.beginSettingsEditing()
         appState.draftSettings.topic = "Unsaved topic"
         appState.draftAPIKey = "sk-unsaved"
-        appState.draftAdminAPIKey = "sk-admin-unsaved"
-        appState.draftOpenAIUsageProjectID = "proj_unsaved"
-        appState.draftOpenAIUsageAPIKeyID = "key_unsaved"
         appState.cancelSettingsEditing()
 
         XCTAssertEqual(appState.settings.topic, savedTopic)
         XCTAssertEqual(appState.draftSettings.topic, savedTopic)
         XCTAssertEqual(store.loadSettings().topic, savedTopic)
         XCTAssertEqual(store.loadAPIKey(), "sk-existing")
-        XCTAssertEqual(store.loadAdminAPIKey(), "sk-admin-existing")
-        XCTAssertEqual(store.loadOpenAIUsageProjectID(), "proj_existing")
-        XCTAssertEqual(store.loadOpenAIUsageAPIKeyID(), "key_existing")
         XCTAssertFalse(appState.hasUnsavedSettingsChanges)
     }
 
@@ -1841,94 +1485,19 @@ final class StudyMateTests: XCTestCase {
 
         let store = SettingsStore(defaults: defaults)
         store.saveAPIKey("sk-existing")
-        store.saveAdminAPIKey("sk-admin-existing")
-        store.saveOpenAIUsageProjectID("proj_existing")
-        store.saveOpenAIUsageAPIKeyID("key_existing")
         let client = SpyOpenAIClient()
         let appState = AppState(settingsStore: store, openAIClient: client)
 
         appState.beginSettingsEditing()
         appState.draftSettings.topic = "Saved draft topic"
         appState.draftAPIKey = "sk-existing"
-        appState.draftAdminAPIKey = "sk-admin-updated"
-        appState.draftOpenAIUsageProjectID = "proj_updated"
-        appState.draftOpenAIUsageAPIKeyID = "key_updated"
 
         await appState.saveSettingsAndValidateAPIKey()
 
         XCTAssertEqual(appState.settings.topic, "Saved draft topic")
         XCTAssertEqual(store.loadSettings().topic, "Saved draft topic")
-        XCTAssertEqual(store.loadAdminAPIKey(), "sk-admin-updated")
-        XCTAssertEqual(store.loadOpenAIUsageProjectID(), "proj_updated")
-        XCTAssertEqual(store.loadOpenAIUsageAPIKeyID(), "key_updated")
         XCTAssertEqual(client.validateCallCount, 0)
         XCTAssertFalse(appState.hasUnsavedSettingsChanges)
-    }
-
-    @MainActor
-    func testRefreshOpenAIBillingStatusUsesAdminAPIKey() async {
-        let suiteName = "StudyMateTests-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defer {
-            defaults.removePersistentDomain(forName: suiteName)
-        }
-
-        let store = SettingsStore(defaults: defaults)
-        store.saveAPIKey("sk-project")
-        store.saveAdminAPIKey("sk-admin")
-        store.saveOpenAIUsageProjectID("proj_studymate")
-        store.saveOpenAIUsageAPIKeyID("key_studymate")
-        let client = SpyOpenAIClient()
-        let appState = AppState(settingsStore: store, openAIClient: client)
-
-        await appState.refreshOpenAIBillingStatus()
-
-        XCTAssertEqual(client.billingStatusAdminAPIKeys, ["sk-admin"])
-        XCTAssertEqual(client.usageStatusAdminAPIKeys, ["sk-admin"])
-        XCTAssertEqual(client.billingStatusProjectIDs, ["proj_studymate"])
-        XCTAssertEqual(client.billingStatusAPIKeyIDs, ["key_studymate"])
-        XCTAssertEqual(client.usageStatusProjectIDs, ["proj_studymate"])
-        XCTAssertEqual(client.usageStatusAPIKeyIDs, ["key_studymate"])
-        XCTAssertFalse(appState.hasAPIKeyError)
-    }
-
-    @MainActor
-    func testRefreshOpenAIBillingStatusWarnsWhenProjectCostIsZeroButOrganizationHasCost() async {
-        let suiteName = "StudyMateTests-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defer {
-            defaults.removePersistentDomain(forName: suiteName)
-        }
-
-        let store = SettingsStore(defaults: defaults)
-        store.saveAPIKey("sk-project")
-        store.saveAdminAPIKey("sk-admin")
-        store.saveOpenAIUsageProjectID("proj_empty")
-        let client = SpyOpenAIClient()
-        client.billingStatusesByProjectID = [
-            "proj_empty": OpenAIBillingStatus(
-                spentAmount: 0,
-                currency: "usd",
-                periodStart: Date(timeIntervalSince1970: 0),
-                periodEnd: Date(timeIntervalSince1970: 1),
-                checkedAt: Date(timeIntervalSince1970: 1)
-            ),
-            "": OpenAIBillingStatus(
-                spentAmount: 10.8,
-                currency: "usd",
-                periodStart: Date(timeIntervalSince1970: 0),
-                periodEnd: Date(timeIntervalSince1970: 1),
-                checkedAt: Date(timeIntervalSince1970: 1)
-            )
-        ]
-        let appState = AppState(settingsStore: store, openAIClient: client)
-
-        await appState.refreshOpenAIBillingStatus()
-
-        XCTAssertEqual(client.billingStatusProjectIDs, ["proj_empty", nil])
-        XCTAssertEqual(client.billingStatusAPIKeyIDs, [nil, nil])
-        XCTAssertEqual(appState.openAIBillingStatus?.spentAmount, 0)
-        XCTAssertTrue(appState.openAIBillingMessage?.contains("$10.80") == true)
     }
 
     @MainActor
@@ -3418,13 +2987,6 @@ private final class SpyOpenAIClient: OpenAIClientProtocol {
     var lastUsage: OpenAIUsage?
     var validateCallCount = 0
     var validatedAPIKeys: [String] = []
-    var billingStatusAdminAPIKeys: [String] = []
-    var billingStatusProjectIDs: [String?] = []
-    var billingStatusAPIKeyIDs: [String?] = []
-    var usageStatusAdminAPIKeys: [String] = []
-    var usageStatusProjectIDs: [String?] = []
-    var usageStatusAPIKeyIDs: [String?] = []
-    var billingStatusesByProjectID: [String: OpenAIBillingStatus] = [:]
     var generateCallCount = 0
     var generatedQuestionResult: GeneratedQuestionResult?
     var generatedQuestionResults: [GeneratedQuestionResult] = []
@@ -3434,38 +2996,6 @@ private final class SpyOpenAIClient: OpenAIClientProtocol {
     func validateAPIKey(_ apiKey: String) async throws {
         validateCallCount += 1
         validatedAPIKeys.append(apiKey)
-    }
-
-    func fetchBillingStatus(adminAPIKey: String, projectID: String?, apiKeyID: String?) async throws -> OpenAIBillingStatus {
-        billingStatusAdminAPIKeys.append(adminAPIKey)
-        billingStatusProjectIDs.append(projectID)
-        billingStatusAPIKeyIDs.append(apiKeyID)
-        if let status = billingStatusesByProjectID[projectID ?? ""] {
-            return status
-        }
-
-        return OpenAIBillingStatus(
-            spentAmount: 1.23,
-            currency: "usd",
-            periodStart: Date(timeIntervalSince1970: 0),
-            periodEnd: Date(timeIntervalSince1970: 1),
-            checkedAt: Date(timeIntervalSince1970: 1)
-        )
-    }
-
-    func fetchUsageStatus(adminAPIKey: String, projectID: String?, apiKeyID: String?) async throws -> OpenAIUsageStatus {
-        usageStatusAdminAPIKeys.append(adminAPIKey)
-        usageStatusProjectIDs.append(projectID)
-        usageStatusAPIKeyIDs.append(apiKeyID)
-        return OpenAIUsageStatus(
-            inputTokens: 100,
-            cachedInputTokens: 20,
-            outputTokens: 30,
-            requestCount: 2,
-            periodStart: Date(timeIntervalSince1970: 0),
-            periodEnd: Date(timeIntervalSince1970: 1),
-            checkedAt: Date(timeIntervalSince1970: 1)
-        )
     }
 
     func generateQuestion(

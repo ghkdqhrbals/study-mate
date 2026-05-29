@@ -69,7 +69,7 @@ StudyMate is a quiet AI tutor for people who use AI heavily but still want to ke
 ### Sync And Push
 
 1. CloudKit sync stores settings, current question, draft answer, records, history, and the regular OpenAI API key.
-2. Admin API keys are intentionally not synced.
+2. Only the regular OpenAI API key is supported for sync.
 3. Question push records are used for iPhone delivery.
 4. iPhone subscribes to question push records and receives CloudKit/APNs notifications.
 5. Push arrival syncs data without opening a new answer page unless the user taps the notification.

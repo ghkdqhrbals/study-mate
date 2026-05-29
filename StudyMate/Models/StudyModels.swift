@@ -433,59 +433,6 @@ struct OpenAIUsage: Codable, Equatable {
     var totalTokens: Int
 }
 
-struct OpenAIUsageStatus: Codable, Equatable {
-    var inputTokens: Int
-    var cachedInputTokens: Int
-    var outputTokens: Int
-    var requestCount: Int
-    var periodStart: Date
-    var periodEnd: Date
-    var checkedAt: Date
-    var sourcePageCount: Int? = nil
-    var sourceBucketCount: Int? = nil
-    var sourceResultCount: Int? = nil
-
-    var totalTokens: Int {
-        inputTokens + outputTokens
-    }
-
-    var formattedRequestCount: String {
-        Self.formatNumber(requestCount)
-    }
-
-    var formattedTotalTokens: String {
-        Self.formatNumber(totalTokens)
-    }
-
-    private static func formatNumber(_ value: Int) -> String {
-        NumberFormatter.localizedString(from: NSNumber(value: value), number: .decimal)
-    }
-}
-
-struct OpenAIBillingStatus: Codable, Equatable {
-    var spentAmount: Double
-    var currency: String
-    var periodStart: Date
-    var periodEnd: Date
-    var checkedAt: Date
-    var sourcePageCount: Int? = nil
-    var sourceBucketCount: Int? = nil
-    var sourceResultCount: Int? = nil
-
-    var formattedSpentAmount: String {
-        let normalizedCurrency = currency.uppercased()
-        if normalizedCurrency == "USD" {
-            if spentAmount > 0 && spentAmount < 0.01 {
-                return "< $0.01"
-            }
-
-            return String(format: "$%.2f", max(spentAmount, 0))
-        }
-
-        return "\(String(format: "%.2f", max(spentAmount, 0))) \(normalizedCurrency)"
-    }
-}
-
 struct QuestionItem: Codable, Equatable {
     var question: String
     var expectedAnswerHint: String?
@@ -882,7 +829,6 @@ struct AppStrings {
     var refreshed: String { text("새로고침했습니다.", "Refreshed.") }
     var apiKey: String { text("API 키", "API key") }
     var openAIAPIKey: String { text("OpenAI API 키", "OpenAI API key") }
-    var openAIAdminKey: String { text("OpenAI Admin 키", "OpenAI Admin key") }
     var hide: String { text("숨기기", "Hide") }
     var show: String { text("보기", "Show") }
     var apiKeyEmpty: String { text("API 키를 입력하세요.", "Enter an API key.") }
@@ -895,83 +841,13 @@ struct AppStrings {
             "Used for question generation and grading. Enter a normal project API key."
         )
     }
-    var openAIAdminKeyHelp: String {
-        text(
-            "사용량/비용 조회에만 사용합니다. api.usage.read 권한이 있는 조직 Admin API 키를 입력하세요.",
-            "Used only for usage/cost checks. Enter an organization Admin API key with api.usage.read."
-        )
-    }
-    var openAIUsageScope: String { text("조회 범위", "Usage scope") }
-    var openAIProjectID: String { text("프로젝트 ID", "Project ID") }
-    var openAIUsageAPIKeyID: String { text("API Key ID", "API key ID") }
-    var openAIUsageScopeHelp: String {
-        text(
-            "비워두면 조직 전체를 조회합니다. 비용과 토큰 사용량 모두 프로젝트 ID와 API Key ID 기준으로 좁혀 봅니다.",
-            "Leave blank for organization-wide totals. Costs and token usage can both be narrowed by project ID and API key ID."
-        )
-    }
-    var openAIAdminKeyEmptyDetailed: String {
-        text(
-            "OpenAI Admin 키가 비어 있습니다. 사용량/비용 조회는 Admin 키가 필요합니다.",
-            "OpenAI Admin key is empty. Usage/cost checks require an Admin key."
-        )
-    }
     var openAIModel: String { text("모델", "Model") }
     var openAIModelHelp: String {
         text("질문 생성과 채점에 사용할 OpenAI 모델입니다.", "OpenAI model for question generation and grading.")
     }
     var openAIBilling: String { text("OpenAI 사용량/결제", "OpenAI Usage / Billing") }
-    var openAIMonthlyCost: String { text("이번 달 API 비용", "API cost this month") }
-    var openAIMonthlyUsage: String { text("이번 달 API 사용량", "API usage this month") }
-    var openAIBillingNotChecked: String { text("아직 확인하지 않았습니다.", "Not checked yet.") }
-    var openAIUsageNotChecked: String { text("사용량을 아직 확인하지 않았습니다.", "Usage not checked yet.") }
-    var openAIBillingChecking: String { text("사용량/비용 확인 중", "Checking usage and costs") }
-    var refreshOpenAIBilling: String { text("사용량/비용 새로고침", "Refresh Usage / Costs") }
     var openAIUsageAndCostsPage: String { text("사용량/비용 보기", "View Usage / Costs") }
     var openAIBillingPage: String { text("빌링 추가", "Add Billing") }
-    var openAICreditGrantsPage: String { text("크레딧 잔액 보기", "View Credit Balance") }
-    var openAIAdminKeysPage: String { text("Admin Keys 열기", "Open Admin Keys") }
-    var openAIBillingUpdated: String { text("OpenAI 사용량/비용 정보를 업데이트했습니다.", "OpenAI usage and costs updated.") }
-    func openAIBillingProjectZeroButOrganizationHasCost(_ organizationCost: String) -> String {
-        text(
-            "현재 조회 범위 비용은 $0.00입니다. 조직 전체 비용은 \(organizationCost)입니다. 대시보드와 비교하려면 Project ID/API Key ID 또는 대시보드 필터를 확인하세요.",
-            "This scope shows $0.00, while the organization total is \(organizationCost). Check the Project ID/API key ID or dashboard filters when comparing."
-        )
-    }
-    var openAIUsageScopeChanged: String {
-        text(
-            "조회 범위가 바뀌었습니다. 새로고침하면 새 범위로 다시 조회합니다.",
-            "Usage scope changed. Refresh to check the new scope."
-        )
-    }
-    var openAIUsageScopeOrganization: String { text("범위: 조직 전체", "Scope: organization-wide") }
-    var openAIUsageScopeProject: String { text("범위: 프로젝트", "Scope: project") }
-    var openAIUsageScopeAPIKey: String { text("범위: API 키", "Scope: API key") }
-    var openAIUsageScopeProjectAndAPIKey: String { text("범위: 프로젝트 + API 키", "Scope: project + API key") }
-    var openAIBillingNeedsPermission: String {
-        text(
-            "Usage/Costs API는 api.usage.read 범위가 있는 조직 Admin API 키가 필요할 수 있습니다.",
-            "The Usage/Costs API may require an organization Admin API key with api.usage.read."
-        )
-    }
-    var openAIUsageScopeMissing: String {
-        text(
-            "OpenAI 응답: api.usage.read 범위가 없습니다. Usage/Costs 조회가 가능한 조직 Admin 키를 입력하세요.",
-            "OpenAI response: missing api.usage.read. Enter an organization Admin key that can read Usage/Costs."
-        )
-    }
-    func openAIBillingFetchFailed(_ reason: String) -> String {
-        text("OpenAI 사용량/비용 조회 실패: \(reason)", "OpenAI usage/cost fetch failed: \(reason)")
-    }
-    func openAIUsageSummary(requests: String, tokens: String) -> String {
-        text("\(requests) 요청 · \(tokens) 토큰", "\(requests) requests · \(tokens) tokens")
-    }
-    func openAIUsagePaginationSummary(pages: Int, buckets: Int, results: Int) -> String {
-        text(
-            "API 페이지 \(pages)개 · bucket \(buckets)개 · 결과 \(results)개",
-            "\(pages) API pages · \(buckets) buckets · \(results) results"
-        )
-    }
     var openAIBillingHelp: String {
         text(
             "사용량, 비용, 빌링은 OpenAI Platform에서 직접 확인하세요.",
@@ -981,8 +857,8 @@ struct AppStrings {
     var iCloudSync: String { text("iCloud 동기화", "iCloud Sync") }
     var iCloudSyncHelp: String {
         text(
-            "학습 설정, 현재 질문, 답변 초안, 기록, OpenAI API 키를 iPhone과 Mac 사이에 동기화합니다. Admin 키는 각 기기에 따로 저장됩니다.",
-            "Syncs study settings, the current question, answer drafts, records, and the OpenAI API key between iPhone and Mac. Admin keys stay on each device."
+            "학습 설정, 현재 질문, 답변 초안, 기록, OpenAI API 키를 iPhone과 Mac 사이에 동기화합니다.",
+            "Syncs study settings, the current question, answer drafts, records, and the OpenAI API key between iPhone and Mac."
         )
     }
     var iCloudSyncOn: String { text("동기화 켜짐", "Sync On") }

@@ -15,7 +15,7 @@ Read these first:
 - Keep settings compact. Study settings should stay first; iCloud sync should stay a one-line bottom control.
 - Keep statistics topic-first. Avoid global average score interpretations that ignore topic and difficulty.
 - Keep logs paginated and dense. Do not render all persisted logs at once.
-- Do not sync OpenAI Admin API keys. Only the regular OpenAI API key is synced.
+- Only the regular OpenAI API key is supported and synced.
 - Keep Korean and English strings in `AppStrings` for new UI labels.
 - Do not add macOS release/update work unless explicitly requested; iOS App Store Connect release is the active distribution path.
 

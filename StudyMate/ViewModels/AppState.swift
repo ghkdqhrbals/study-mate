@@ -44,12 +44,6 @@ final class AppState: ObservableObject {
     @Published var gradingResult: GradingResult?
     @Published var apiKey: String = ""
     @Published var draftAPIKey: String = ""
-    @Published var adminAPIKey: String = ""
-    @Published var draftAdminAPIKey: String = ""
-    @Published var openAIUsageProjectID: String = ""
-    @Published var draftOpenAIUsageProjectID: String = ""
-    @Published var openAIUsageAPIKeyID: String = ""
-    @Published var draftOpenAIUsageAPIKeyID: String = ""
     @Published var isGeneratingQuestion = false
     @Published var isGradingAnswer = false
     @Published var isRunning: Bool
@@ -66,11 +60,7 @@ final class AppState: ObservableObject {
     @Published var selectedTab: AppTab = .study
     @Published var focusedRecordRequest: FocusedRecordRequest?
     @Published var hasCompletedOnboarding: Bool
-    @Published var openAIBillingStatus: OpenAIBillingStatus?
-    @Published var openAIUsageStatus: OpenAIUsageStatus?
-    @Published var isRefreshingBillingStatus = false
     @Published var isRefreshingVisibleData = false
-    @Published var openAIBillingMessage: String?
     @Published var isCloudSyncEnabled: Bool
     @Published var isCloudSyncing = false
     @Published var cloudSyncMessage: String?
@@ -87,9 +77,6 @@ final class AppState: ObservableObject {
     private var didStart = false
     private var savedSettings: StudySettings
     private var savedAPIKey: String
-    private var savedAdminAPIKey: String
-    private var savedOpenAIUsageProjectID: String
-    private var savedOpenAIUsageAPIKeyID: String
     private var isEditingSettings = false
 
     var strings: AppStrings {
@@ -106,10 +93,7 @@ final class AppState: ObservableObject {
 
     var hasUnsavedSettingsChanges: Bool {
         normalizedSettings(activeSettingsForEditing) != savedSettings ||
-            activeAPIKeyForEditing.trimmingCharacters(in: .whitespacesAndNewlines) != savedAPIKey ||
-            activeAdminAPIKeyForEditing.trimmingCharacters(in: .whitespacesAndNewlines) != savedAdminAPIKey ||
-            activeOpenAIUsageProjectIDForEditing.trimmingCharacters(in: .whitespacesAndNewlines) != savedOpenAIUsageProjectID ||
-            activeOpenAIUsageAPIKeyIDForEditing.trimmingCharacters(in: .whitespacesAndNewlines) != savedOpenAIUsageAPIKeyID
+            activeAPIKeyForEditing.trimmingCharacters(in: .whitespacesAndNewlines) != savedAPIKey
     }
 
     var apiKeyValidationMessage: String? {
@@ -131,18 +115,6 @@ final class AppState: ObservableObject {
 
     private var activeAPIKeyForEditing: String {
         isEditingSettings ? draftAPIKey : apiKey
-    }
-
-    private var activeAdminAPIKeyForEditing: String {
-        isEditingSettings ? draftAdminAPIKey : adminAPIKey
-    }
-
-    private var activeOpenAIUsageProjectIDForEditing: String {
-        isEditingSettings ? draftOpenAIUsageProjectID : openAIUsageProjectID
-    }
-
-    private var activeOpenAIUsageAPIKeyIDForEditing: String {
-        isEditingSettings ? draftOpenAIUsageAPIKeyID : openAIUsageAPIKeyID
     }
 
     var pendingQuestionCount: Int {
@@ -213,13 +185,8 @@ final class AppState: ObservableObject {
     ) {
         let loadedSettings = settingsStore.loadSettings()
         let loadedAPIKey = settingsStore.loadAPIKey()
-        let loadedAdminAPIKey = settingsStore.loadAdminAPIKey()
-        let loadedOpenAIUsageProjectID = settingsStore.loadOpenAIUsageProjectID()
-        let loadedOpenAIUsageAPIKeyID = settingsStore.loadOpenAIUsageAPIKeyID()
         let loadedLogPage = settingsStore.loadAppLogs(page: 0, pageSize: Self.developerLogPageSize)
         let loadedHasCompletedOnboarding = settingsStore.loadHasCompletedOnboarding()
-        let loadedOpenAIBillingStatus = settingsStore.loadOpenAIBillingStatus()
-        let loadedOpenAIUsageStatus = settingsStore.loadOpenAIUsageStatus()
         let loadedCloudLastSyncedAt = settingsStore.loadCloudSyncSnapshotUpdatedAt()
 
         self.settingsStore = settingsStore
@@ -232,24 +199,13 @@ final class AppState: ObservableObject {
         self.studyRecords = settingsStore.loadStudyRecords()
         self.apiKey = loadedAPIKey
         self.draftAPIKey = loadedAPIKey
-        self.adminAPIKey = loadedAdminAPIKey
-        self.draftAdminAPIKey = loadedAdminAPIKey
-        self.openAIUsageProjectID = loadedOpenAIUsageProjectID
-        self.draftOpenAIUsageProjectID = loadedOpenAIUsageProjectID
-        self.openAIUsageAPIKeyID = loadedOpenAIUsageAPIKeyID
-        self.draftOpenAIUsageAPIKeyID = loadedOpenAIUsageAPIKeyID
         self.savedSettings = loadedSettings
         self.savedAPIKey = loadedAPIKey
-        self.savedAdminAPIKey = loadedAdminAPIKey
-        self.savedOpenAIUsageProjectID = loadedOpenAIUsageProjectID
-        self.savedOpenAIUsageAPIKeyID = loadedOpenAIUsageAPIKeyID
         self.appLogs = loadedLogPage.entries
         self.appLogTotalCount = loadedLogPage.totalCount
         self.appLogPage = loadedLogPage.page
         self.isDebuggingEnabled = settingsStore.loadIsDebuggingEnabled()
         self.hasCompletedOnboarding = loadedHasCompletedOnboarding
-        self.openAIBillingStatus = loadedOpenAIBillingStatus
-        self.openAIUsageStatus = loadedOpenAIUsageStatus
         self.isCloudSyncEnabled = settingsStore.loadIsCloudSyncEnabled()
         self.cloudLastSyncedAt = loadedCloudLastSyncedAt
         self.notificationService = notificationService
@@ -373,9 +329,6 @@ final class AppState: ObservableObject {
     private func reloadPersistedState(restartTimerAfterReload: Bool = true) {
         let loadedSettings = settingsStore.loadSettings()
         let loadedAPIKey = settingsStore.loadAPIKey()
-        let loadedAdminAPIKey = settingsStore.loadAdminAPIKey()
-        let loadedOpenAIUsageProjectID = settingsStore.loadOpenAIUsageProjectID()
-        let loadedOpenAIUsageAPIKeyID = settingsStore.loadOpenAIUsageAPIKeyID()
 
         settings = loadedSettings
         currentQuestion = settingsStore.loadQuestion()
@@ -384,17 +337,9 @@ final class AppState: ObservableObject {
         isRunning = settingsStore.loadIsRunning()
         studyRecords = settingsStore.loadStudyRecords()
         apiKey = loadedAPIKey
-        adminAPIKey = loadedAdminAPIKey
-        openAIUsageProjectID = loadedOpenAIUsageProjectID
-        openAIUsageAPIKeyID = loadedOpenAIUsageAPIKeyID
         savedSettings = loadedSettings
         savedAPIKey = loadedAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        savedAdminAPIKey = loadedAdminAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        savedOpenAIUsageProjectID = loadedOpenAIUsageProjectID
-        savedOpenAIUsageAPIKeyID = loadedOpenAIUsageAPIKeyID
         hasCompletedOnboarding = settingsStore.loadHasCompletedOnboarding()
-        openAIBillingStatus = settingsStore.loadOpenAIBillingStatus()
-        openAIUsageStatus = settingsStore.loadOpenAIUsageStatus()
         isCloudSyncEnabled = settingsStore.loadIsCloudSyncEnabled()
         cloudLastSyncedAt = settingsStore.loadCloudSyncSnapshotUpdatedAt()
         loadAppLogPage(appLogPage)
@@ -402,9 +347,6 @@ final class AppState: ObservableObject {
         if !isEditingSettings {
             draftSettings = loadedSettings
             draftAPIKey = loadedAPIKey
-            draftAdminAPIKey = loadedAdminAPIKey
-            draftOpenAIUsageProjectID = loadedOpenAIUsageProjectID
-            draftOpenAIUsageAPIKeyID = loadedOpenAIUsageAPIKeyID
         }
 
         hasAPIKeyError = loadedAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -455,9 +397,6 @@ final class AppState: ObservableObject {
     func beginSettingsEditing() {
         draftSettings = settings
         draftAPIKey = apiKey
-        draftAdminAPIKey = adminAPIKey
-        draftOpenAIUsageProjectID = openAIUsageProjectID
-        draftOpenAIUsageAPIKeyID = openAIUsageAPIKeyID
         isEditingSettings = true
     }
 
@@ -468,9 +407,6 @@ final class AppState: ObservableObject {
 
         draftSettings = settings
         draftAPIKey = apiKey
-        draftAdminAPIKey = adminAPIKey
-        draftOpenAIUsageProjectID = openAIUsageProjectID
-        draftOpenAIUsageAPIKeyID = openAIUsageAPIKeyID
         isEditingSettings = false
     }
 
@@ -495,20 +431,14 @@ final class AppState: ObservableObject {
     func saveSettings() {
         persistSettings(
             activeSettingsForEditing,
-            apiKey: activeAPIKeyForEditing,
-            adminAPIKey: activeAdminAPIKeyForEditing,
-            openAIUsageProjectID: activeOpenAIUsageProjectIDForEditing,
-            openAIUsageAPIKeyID: activeOpenAIUsageAPIKeyIDForEditing
+            apiKey: activeAPIKeyForEditing
         )
     }
 
     func completeOnboarding(settings pendingSettings: StudySettings, apiKey pendingAPIKey: String) async {
         persistSettings(
             pendingSettings,
-            apiKey: pendingAPIKey,
-            adminAPIKey: adminAPIKey,
-            openAIUsageProjectID: openAIUsageProjectID,
-            openAIUsageAPIKeyID: openAIUsageAPIKeyID
+            apiKey: pendingAPIKey
         )
         settingsStore.saveHasCompletedOnboarding(true)
         hasCompletedOnboarding = true
@@ -566,53 +496,23 @@ final class AppState: ObservableObject {
 
     private func persistSettings(
         _ pendingSettings: StudySettings,
-        apiKey pendingAPIKey: String,
-        adminAPIKey pendingAdminAPIKey: String,
-        openAIUsageProjectID pendingOpenAIUsageProjectID: String,
-        openAIUsageAPIKeyID pendingOpenAIUsageAPIKeyID: String
+        apiKey pendingAPIKey: String
     ) {
         let sanitizedSettings = normalizedSettings(pendingSettings)
         let trimmedAPIKey = pendingAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedAdminAPIKey = pendingAdminAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedOpenAIUsageProjectID = pendingOpenAIUsageProjectID.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedOpenAIUsageAPIKeyID = pendingOpenAIUsageAPIKeyID.trimmingCharacters(in: .whitespacesAndNewlines)
         let didAPIKeyChange = trimmedAPIKey != savedAPIKey
-        let didAdminAPIKeyChange = trimmedAdminAPIKey != savedAdminAPIKey
-        let didOpenAIUsageScopeChange = trimmedOpenAIUsageProjectID != savedOpenAIUsageProjectID ||
-            trimmedOpenAIUsageAPIKeyID != savedOpenAIUsageAPIKeyID
 
         settings = sanitizedSettings
         apiKey = pendingAPIKey
-        adminAPIKey = pendingAdminAPIKey
-        openAIUsageProjectID = trimmedOpenAIUsageProjectID
-        openAIUsageAPIKeyID = trimmedOpenAIUsageAPIKeyID
         draftSettings = sanitizedSettings
         draftAPIKey = pendingAPIKey
-        draftAdminAPIKey = pendingAdminAPIKey
-        draftOpenAIUsageProjectID = trimmedOpenAIUsageProjectID
-        draftOpenAIUsageAPIKeyID = trimmedOpenAIUsageAPIKeyID
 
         settingsStore.saveSettings(sanitizedSettings)
         if didAPIKeyChange {
             settingsStore.saveAPIKey(pendingAPIKey)
         }
-        if didAdminAPIKeyChange {
-            settingsStore.saveAdminAPIKey(pendingAdminAPIKey)
-        }
-        if didOpenAIUsageScopeChange {
-            settingsStore.saveOpenAIUsageProjectID(trimmedOpenAIUsageProjectID)
-            settingsStore.saveOpenAIUsageAPIKeyID(trimmedOpenAIUsageAPIKeyID)
-            openAIBillingStatus = nil
-            openAIUsageStatus = nil
-            settingsStore.saveOpenAIBillingStatus(nil)
-            settingsStore.saveOpenAIUsageStatus(nil)
-            openAIBillingMessage = strings.openAIUsageScopeChanged
-        }
         savedSettings = sanitizedSettings
         savedAPIKey = trimmedAPIKey
-        savedAdminAPIKey = trimmedAdminAPIKey
-        savedOpenAIUsageProjectID = trimmedOpenAIUsageProjectID
-        savedOpenAIUsageAPIKeyID = trimmedOpenAIUsageAPIKeyID
         studyRecords = settingsStore.loadStudyRecords()
         if trimmedAPIKey.isEmpty {
             hasAPIKeyError = true
@@ -635,18 +535,12 @@ final class AppState: ObservableObject {
     func saveSettingsAndValidateAPIKey() async {
         let pendingSettings = activeSettingsForEditing
         let pendingAPIKey = activeAPIKeyForEditing
-        let pendingAdminAPIKey = activeAdminAPIKeyForEditing
-        let pendingOpenAIUsageProjectID = activeOpenAIUsageProjectIDForEditing
-        let pendingOpenAIUsageAPIKeyID = activeOpenAIUsageAPIKeyIDForEditing
         let trimmedAPIKey = pendingAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
         let didAPIKeyChange = trimmedAPIKey != savedAPIKey
 
         persistSettings(
             pendingSettings,
-            apiKey: pendingAPIKey,
-            adminAPIKey: pendingAdminAPIKey,
-            openAIUsageProjectID: pendingOpenAIUsageProjectID,
-            openAIUsageAPIKeyID: pendingOpenAIUsageAPIKeyID
+            apiKey: pendingAPIKey
         )
 
         guard didAPIKeyChange else {
@@ -1798,100 +1692,6 @@ final class AppState: ObservableObject {
         }
     }
 
-    func refreshOpenAIBillingStatus() async {
-        let trimmedAdminAPIKey = adminAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedAdminAPIKey.isEmpty else {
-            openAIBillingMessage = strings.openAIAdminKeyEmptyDetailed
-            return
-        }
-
-        let projectID = Self.trimmedOptional(openAIUsageProjectID)
-        let apiKeyID = Self.trimmedOptional(openAIUsageAPIKeyID)
-        isRefreshingBillingStatus = true
-        openAIBillingMessage = nil
-
-        do {
-            let status = try await openAIClient.fetchBillingStatus(
-                adminAPIKey: trimmedAdminAPIKey,
-                projectID: projectID,
-                apiKeyID: apiKeyID
-            )
-            let organizationWideStatus = try await organizationWideBillingStatusIfUseful(
-                adminAPIKey: trimmedAdminAPIKey,
-                filteredStatus: status,
-                projectID: projectID,
-                apiKeyID: apiKeyID
-            )
-            let usageStatus = try await openAIClient.fetchUsageStatus(
-                adminAPIKey: trimmedAdminAPIKey,
-                projectID: projectID,
-                apiKeyID: apiKeyID
-            )
-            openAIBillingStatus = status
-            openAIUsageStatus = usageStatus
-            settingsStore.saveOpenAIBillingStatus(status)
-            settingsStore.saveOpenAIUsageStatus(usageStatus)
-            if let organizationWideStatus {
-                openAIBillingMessage = strings.openAIBillingProjectZeroButOrganizationHasCost(
-                    organizationWideStatus.formattedSpentAmount
-                )
-            } else {
-                openAIBillingMessage = strings.openAIBillingUpdated
-            }
-            log(
-                .info,
-                "OpenAI 사용량/비용 정보를 업데이트했습니다. scope=\(openAIUsageScopeDescription(strings: strings)), amount=\(status.spentAmount), currency=\(status.currency), organizationAmount=\(organizationWideStatus?.spentAmount.description ?? "n/a"), billingPages=\(status.sourcePageCount ?? 1), billingBuckets=\(status.sourceBucketCount ?? 0), billingResults=\(status.sourceResultCount ?? 0), usagePages=\(usageStatus.sourcePageCount ?? 1), usageBuckets=\(usageStatus.sourceBucketCount ?? 0), usageResults=\(usageStatus.sourceResultCount ?? 0), requests=\(usageStatus.requestCount), tokens=\(usageStatus.totalTokens)"
-            )
-        } catch {
-            let message: String
-            if case OpenAIClientError.httpError(let status, _) = error,
-               status == 401 || status == 403 {
-                message = billingPermissionMessage(for: error)
-            } else {
-                message = strings.openAIBillingFetchFailed(error.localizedDescription)
-            }
-            openAIBillingMessage = message
-            log(.warning, message)
-        }
-
-        isRefreshingBillingStatus = false
-    }
-
-    private func organizationWideBillingStatusIfUseful(
-        adminAPIKey: String,
-        filteredStatus: OpenAIBillingStatus,
-        projectID: String?,
-        apiKeyID: String?
-    ) async throws -> OpenAIBillingStatus? {
-        guard (projectID != nil || apiKeyID != nil), filteredStatus.spentAmount <= 0 else {
-            return nil
-        }
-
-        let organizationWideStatus = try await openAIClient.fetchBillingStatus(
-            adminAPIKey: adminAPIKey,
-            projectID: nil,
-            apiKeyID: nil
-        )
-
-        return organizationWideStatus.spentAmount > 0 ? organizationWideStatus : nil
-    }
-
-    func openAIUsageScopeDescription(strings: AppStrings) -> String {
-        let projectID = Self.trimmedOptional(openAIUsageProjectID)
-        let apiKeyID = Self.trimmedOptional(openAIUsageAPIKeyID)
-
-        switch (projectID, apiKeyID) {
-        case (.some, .some):
-            return strings.openAIUsageScopeProjectAndAPIKey
-        case (.some, .none):
-            return strings.openAIUsageScopeProject
-        case (.none, .some):
-            return strings.openAIUsageScopeAPIKey
-        case (.none, .none):
-            return strings.openAIUsageScopeOrganization
-        }
-    }
-
     func openOpenAIBillingPage() {
         openURLString("https://platform.openai.com/settings/organization/billing/overview")
     }
@@ -1902,10 +1702,6 @@ final class AppState: ObservableObject {
 
     func openOpenAICreditGrantsPage() {
         openURLString("https://platform.openai.com/settings/organization/billing/credit-grants")
-    }
-
-    func openOpenAIAdminKeysPage() {
-        openURLString("https://platform.openai.com/settings/organization/admin-keys")
     }
 
     func uninstallApplication() {
@@ -2780,19 +2576,6 @@ final class AppState: ObservableObject {
         #elseif os(iOS)
         UIApplication.shared.open(url)
         #endif
-    }
-
-    private func billingPermissionMessage(for error: Error) -> String {
-        guard case OpenAIClientError.httpError(_, let body) = error else {
-            return strings.openAIBillingNeedsPermission
-        }
-
-        let lowercasedBody = body.lowercased()
-        if lowercasedBody.contains("api.usage.read") {
-            return strings.openAIUsageScopeMissing
-        }
-
-        return strings.openAIBillingNeedsPermission
     }
 
     private func normalizedSettings(_ settings: StudySettings) -> StudySettings {

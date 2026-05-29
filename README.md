@@ -73,5 +73,5 @@ GitHub Pages files live in `docs/`.
 ## Notes
 
 - The app is free software, but OpenAI API usage is billed through the user's own OpenAI account.
-- Admin API keys are not synced.
+- Only the user's regular OpenAI API key is supported for question generation and grading.
 - iCloud sync is snapshot based and uses the user's private iCloud database.

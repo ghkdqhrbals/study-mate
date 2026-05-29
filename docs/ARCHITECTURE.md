@@ -30,7 +30,7 @@ StudyMate is a SwiftUI app with shared domain logic across macOS and iOS. The ap
 - `Services/OpenAIClient.swift`
   - Uses OpenAI Responses API for question generation and grading.
   - Uses the configured supported model list from `OpenAIModelOption`.
-  - Fetches OpenAI usage/cost links and admin-key usage data where available.
+  - Keeps OpenAI usage, cost, and billing management as external OpenAI Platform links.
 
 - `Services/CloudSyncService.swift`
   - Uses the private iCloud database.
@@ -75,7 +75,7 @@ User answer
 - Sync is snapshot based, not event sourced.
 - The newest CloudKit snapshot usually wins, but local records are merged to avoid losing device-specific history.
 - API key sync is supported for the regular OpenAI key.
-- Admin API keys stay local per device.
+- Only the regular OpenAI API key is supported by the app.
 - If a local ungraded current question has an answer draft, remote current questions do not replace the active answer page.
 
 ## Push Model

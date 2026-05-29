@@ -14,15 +14,10 @@ final class SettingsStore {
         static let lastAnswer = "lastAnswer"
         static let isRunning = "isRunning"
         static let apiKey = "openAIAPIKey"
-        static let adminAPIKey = "openAIAdminAPIKey"
-        static let openAIUsageProjectID = "openAIUsageProjectID"
-        static let openAIUsageAPIKeyID = "openAIUsageAPIKeyID"
         static let questionResponseID = "questionResponseID"
         static let appLogs = "appLogs"
         static let isDebuggingEnabled = "isDebuggingEnabled"
         static let hasCompletedOnboarding = "hasCompletedOnboarding"
-        static let openAIBillingStatus = "openAIBillingStatus"
-        static let openAIUsageStatus = "openAIUsageStatus"
         static let isCloudSyncEnabled = "isCloudSyncEnabled"
         static let cloudSyncSnapshotUpdatedAt = "cloudSyncSnapshotUpdatedAt"
         static let deletedStudyRecordMarkers = "deletedStudyRecordMarkers"
@@ -338,45 +333,6 @@ final class SettingsStore {
         }
     }
 
-    func loadAdminAPIKey() -> String {
-        defaults.string(forKey: Keys.adminAPIKey) ?? ""
-    }
-
-    func saveAdminAPIKey(_ apiKey: String) {
-        let trimmedKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmedKey.isEmpty {
-            defaults.removeObject(forKey: Keys.adminAPIKey)
-        } else {
-            defaults.set(trimmedKey, forKey: Keys.adminAPIKey)
-        }
-    }
-
-    func loadOpenAIUsageProjectID() -> String {
-        defaults.string(forKey: Keys.openAIUsageProjectID) ?? ""
-    }
-
-    func saveOpenAIUsageProjectID(_ projectID: String) {
-        let trimmedProjectID = projectID.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmedProjectID.isEmpty {
-            defaults.removeObject(forKey: Keys.openAIUsageProjectID)
-        } else {
-            defaults.set(trimmedProjectID, forKey: Keys.openAIUsageProjectID)
-        }
-    }
-
-    func loadOpenAIUsageAPIKeyID() -> String {
-        defaults.string(forKey: Keys.openAIUsageAPIKeyID) ?? ""
-    }
-
-    func saveOpenAIUsageAPIKeyID(_ apiKeyID: String) {
-        let trimmedAPIKeyID = apiKeyID.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmedAPIKeyID.isEmpty {
-            defaults.removeObject(forKey: Keys.openAIUsageAPIKeyID)
-        } else {
-            defaults.set(trimmedAPIKeyID, forKey: Keys.openAIUsageAPIKeyID)
-        }
-    }
-
     func loadIsDebuggingEnabled() -> Bool {
         defaults.bool(forKey: Keys.isDebuggingEnabled)
     }
@@ -397,30 +353,6 @@ final class SettingsStore {
 
     func saveHasCompletedOnboarding(_ hasCompleted: Bool) {
         defaults.set(hasCompleted, forKey: Keys.hasCompletedOnboarding)
-    }
-
-    func loadOpenAIBillingStatus() -> OpenAIBillingStatus? {
-        guard let data = defaults.data(forKey: Keys.openAIBillingStatus) else {
-            return nil
-        }
-
-        return try? decoder.decode(OpenAIBillingStatus.self, from: data)
-    }
-
-    func saveOpenAIBillingStatus(_ status: OpenAIBillingStatus?) {
-        saveOptional(status, forKey: Keys.openAIBillingStatus)
-    }
-
-    func loadOpenAIUsageStatus() -> OpenAIUsageStatus? {
-        guard let data = defaults.data(forKey: Keys.openAIUsageStatus) else {
-            return nil
-        }
-
-        return try? decoder.decode(OpenAIUsageStatus.self, from: data)
-    }
-
-    func saveOpenAIUsageStatus(_ status: OpenAIUsageStatus?) {
-        saveOptional(status, forKey: Keys.openAIUsageStatus)
     }
 
     func loadIsCloudSyncEnabled() -> Bool {
