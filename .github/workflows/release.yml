@@ -116,7 +116,7 @@ jobs:
             MARKETING_VERSION="${RELEASE_VERSION}" \
             CURRENT_PROJECT_VERSION="${RELEASE_BUILD_NUMBER}"
 
-      - name: Verify release entitlements
+      - name: Verify archive entitlements
         run: |
           set -euo pipefail
 
@@ -124,12 +124,11 @@ jobs:
           test -d "${APP_PATH}"
 
           codesign --verify --deep --strict --verbose=2 "${APP_PATH}"
-          codesign -d --entitlements - "${APP_PATH}" | tee "${RUNNER_TEMP}/ios-entitlements.plist"
+          codesign -d --entitlements - "${APP_PATH}" > "${RUNNER_TEMP}/ios-archive-entitlements.plist"
 
-          grep -q "aps-environment" "${RUNNER_TEMP}/ios-entitlements.plist"
-          grep -q "production" "${RUNNER_TEMP}/ios-entitlements.plist"
-          grep -q "iCloud.io.github.ghkdqhrbals.StudyMate" "${RUNNER_TEMP}/ios-entitlements.plist"
-          grep -q "com.apple.developer.icloud-services" "${RUNNER_TEMP}/ios-entitlements.plist"
+          grep -q "aps-environment" "${RUNNER_TEMP}/ios-archive-entitlements.plist"
+          grep -q "iCloud.io.github.ghkdqhrbals.StudyMate" "${RUNNER_TEMP}/ios-archive-entitlements.plist"
+          grep -q "com.apple.developer.icloud-services" "${RUNNER_TEMP}/ios-archive-entitlements.plist"
 
       - name: Export IPA
         run: |
@@ -175,6 +174,27 @@ jobs:
           fi
 
           echo "IPA_PATH=${IPA_PATH}" >> "${GITHUB_ENV}"
+
+      - name: Verify exported IPA entitlements
+        run: |
+          set -euo pipefail
+
+          mkdir -p build/ipa-check
+          unzip -q "${IPA_PATH}" -d build/ipa-check
+
+          APP_PATH="$(find build/ipa-check/Payload -maxdepth 1 -name '*.app' -print -quit)"
+          if [ -z "${APP_PATH}" ]; then
+            echo "Exported IPA does not contain an app bundle." >&2
+            exit 1
+          fi
+
+          codesign --verify --deep --strict --verbose=2 "${APP_PATH}"
+          codesign -d --entitlements - "${APP_PATH}" > "${RUNNER_TEMP}/ios-export-entitlements.plist"
+
+          grep -q "aps-environment" "${RUNNER_TEMP}/ios-export-entitlements.plist"
+          grep -q "production" "${RUNNER_TEMP}/ios-export-entitlements.plist"
+          grep -q "iCloud.io.github.ghkdqhrbals.StudyMate" "${RUNNER_TEMP}/ios-export-entitlements.plist"
+          grep -q "com.apple.developer.icloud-services" "${RUNNER_TEMP}/ios-export-entitlements.plist"
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
